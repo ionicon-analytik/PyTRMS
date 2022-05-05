@@ -35,6 +35,7 @@ class IoniClient:
     def __init__(self, host='localhost', port=8002):
         self.host = host
         self.port = port
+        self.measuring = False  # TODO :: measuring status abfragen (property)!
 
     @property
     def baseurl(self):
@@ -64,12 +65,14 @@ class IoniClient:
         return self.set('ACQ_SRV_SetFullStorageFile', os.path.normpath(filename))
 
     def start_measurement(self, filename=''):
+        self.measuring = True  # TODO :: measuring status abfragen!
         if filename:
             return self.set('ACQ_SRV_Start_Meas_Auto', os.path.normpath(filename))
 
         return self.set('ACQ_SRV_Start_Meas_Quick', 1)
 
     def stop_measurement(self):
+        self.measuring = False  # TODO :: measuring status abfragen!
         return self.set('ACQ_SRV_Stop_Meas', 1)
 
 

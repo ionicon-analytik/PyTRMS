@@ -35,7 +35,7 @@ batch = pytrms.h5client(r'D:\Data\my_experiment')
 ## Getting started
 
 Download and install the latest Python version if you have not done so. **Ionicon**
-recommends to [download Python 3.9 for Windows](https://www.python.org/ftp/python/3.9.12/python-3.9.12-amd64.exe)
+recommends to [download Python 3.9 for Windows](https://www.python.org/ftp/python/3.9.12/python-3.9.12-amd64.exe).
 This will install the Python executable along with the package manager *pip*. 
 Using *pip* is the preferred way to get the latest version of *PyTRMS*, but other
 solutions like *Anaconda* should also work. In a terminal type
@@ -57,5 +57,7 @@ Download and extract the examples folder (by clicking on `Code` and selecting
 `Download ZIP` from the dropdown menu).
 The Python scripts can be run by simply double-clicking them.
 If something is not working correctly, the setup may be broken. 
-Repeat the steps from the `Getting started` section and stick to the defaults.
+Repeat the steps from the [Getting started](https://github.com/ionicon-analytik/PyTRMS#getting-started)
+section and make sure to use the default options.
+
 
