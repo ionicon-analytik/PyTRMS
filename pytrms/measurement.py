@@ -1,8 +1,11 @@
 import os
 import time
 
+from .sources.h5source import H5Source
+from .sources.webapisource import WebAPISource
 
-class BaseProcess:
+
+class Measurement:
     '''
     Base class for PTRMS measurements or batch processing.
 
@@ -20,7 +23,14 @@ class BaseProcess:
         '''
         return time.strftime(fmt, time.localtime())
 
-    def __init__(self, path):
+    @staticmethod
+    def make_with_client(host='localhost', port=8002):
+        '''Factory function.
+        '''
+        client = IoniClient(host, port)
+        return self.__init__('', client)
+
+    def __init__(self, path, client=None):
         '''Get a file path or directory.
         '''
         if not len(path):
@@ -31,6 +41,12 @@ class BaseProcess:
         self._dfiles = []
         os.makedirs(self._dir, exist_ok=True)
 
+        self._client = client
+
+    def add_file(path):
+        self.sources = sorted(self.sources + [H5Source(path)], key=attrgetter('timezero'))
+
+
     @property
     def filename(self):
         basename = self._name_convention(self.filename_format, self._filecount)
@@ -38,5 +54,5 @@ class BaseProcess:
         return os.path.join(self._dir, basename)
 
     def __iter__(self):
-        raise NotImplementedError
+        return iter(self._dfiles)
 
