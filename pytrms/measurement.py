@@ -4,6 +4,8 @@ import time
 from .sources.h5source import H5Source
 from .sources.webapisource import WebAPISource
 
+from .abstract.traceable import Traceable
+
 
 class Measurement:
     '''
@@ -55,4 +57,26 @@ class Measurement:
 
     def __iter__(self):
         return iter(self._dfiles)
+
+    def find(self, needle):
+        self.client.get_traces()
+
+    def iterrows(self):
+        return PollingIterator(self._client)
+
+
+class PollingIterator:
+
+    def __init__(self, client):
+        self.client = client
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if not self.client.measuring:
+            raise StopIteration
+
+        time.sleep(1)
+        return self.client
 

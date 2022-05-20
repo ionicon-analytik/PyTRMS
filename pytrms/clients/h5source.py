@@ -1,7 +1,7 @@
 
-from .datasource import DataSource
+from .abstract.traceable import Traceable
 
-class H5Source(DataSource):
+class H5Source(Traceable):
 
     @property
     def timezero(self):
