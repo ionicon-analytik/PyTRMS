@@ -21,15 +21,45 @@ for i in range(10):
     measurement.repeat_for(60)
 ```
 
-## Postprocessing
+## Postprocessing and Pandas compatibility
 
 For simple analysis tasks, use the Python package to read and analyse the *hdf5*
 files:
 
 ```python
+import glob
+import pandas as pd
 import pytrms
 
-batch = pytrms.h5client(r'D:\Data\my_experiment')
+batch = pytrms.PostProcessor()
+for filename in glob.rec('D:/Data/my_experiment/*.h5'):
+	batch.add(filename)  # or later maybe batch.gather_datafiles()
+
+print(batch)  # the datafiles are sorted by their time of measurement
+
+average = pd.DataFrame()
+
+for file in batch:
+	dataframe = file.traces  # traces are available as Pandas dataframe
+	dataframe.write_csv(file.basename + '_avg.tsv', sep='\t')
+
+	average.append(dataframe.avg())
+
+average.write_csv('grand_average.tsv', sep='\t')
+```
+
+## Iteration and trace lookup
+
+```python
+import pytrms
+
+file = pytrms.DataFile('/home/ionicon/data/foo.h5')
+
+print(file.find('H2o_max'))  # find traces by name..
+print(file.find(42.1234))  # ..or by closest exact mass
+
+for row in file.iterrows():  # the DataFile behaves similar to a Pandas dataframe
+	print(row.keys)
 ```
 
 ## Getting started
