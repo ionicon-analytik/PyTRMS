@@ -13,11 +13,10 @@ def open(path):
     '''
     return Measurement(path)
 
-def connect(host='localhost', port=8002, home=''):
+def connect(host='localhost', port=8002):
     '''Factory function.
     '''
     from .ioniclient import IoniClient
-    client = IoniClient(host, port)
 
-    return Measurement(home, client)
+    return IoniClient(host, port)
 

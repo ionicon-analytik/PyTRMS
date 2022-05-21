@@ -12,20 +12,17 @@ class Measurement:
     the common behaviour for online and offline processing with one or multiple
     datafiles.
     '''
-    filename_format = "Cal_%Y-%m-%d_%H-%M-%S"
+    time_format = "%Y-%m-%d_%H-%M-%S"
 
     @staticmethod
-    def _name_convention(fmt):
-        '''Factory for the next filename.
+    def _name_convention(fmt, prefix):
+        '''Factory for the next filename.'''
+        return prefix + '_' + time.strftime(fmt, time.localtime())
 
-        Gets the `filename_format` string and the current `filecount` as parameters.
-        '''
-        return time.strftime(fmt, time.localtime())
-
-    @property
-    def next_filename(self):
-        basename = self._name_convention(self.filename_format)
+    def _make_filename(self):
+        basename = self.basename if self.basename else self._name_convention(self.time_format, self.prefix)
         basename += '.h5'
+
         return os.path.join(self.home, basename)
 
     @property
@@ -36,17 +33,19 @@ class Measurement:
         return True  # TODO :: status abfragen!! (Kandidat: )
         self.client.get('ACQ_SRV_CurrentState')
 
-    def __init__(self, path, client=None):
-        '''Get a file path or directory.
-        '''
+    def __init__(self, path, client=None, prefix=''):
         if not len(path):
             path = os.getcwd()
         self.home = os.path.abspath(os.path.dirname(path))
         os.makedirs(self.home, exist_ok=True)
+        basename = os.path.basename(path)  # may be empty
+        self.basename, _ = os.path.splitext(basename)
         self.client = client
+        self.prefix = prefix
         self.datafiles = []
         self.settings = {}
 #         self._previous_settings = {}  # TODO : memorize old context
+#   ODER: gleich einfach mal alles vom server holen..??
 
     def start():
         if client is None:
@@ -55,9 +54,18 @@ class Measurement:
         if len(self.settings):
             self.client.set_many(self.settings)
             print('applied settings')
-        self.client.start_measurement(self.next_filename)
-        self.datafiles.append(self.next_filename)
+        filename = self._make_filename()
+        if os.path.exists(filename):
+            raise Exception(f'{filename} exists and cannot be overwritten')
+
+        self.client.start_measurement(filename)
+        self.datafiles.append(filename)
         print(f'started measurement at {time.localtime()}')
+
+    def wait(seconds, reason=''):
+        if reason:
+            print(reason)
+        time.sleep(seconds)
 
     def stop():
         if client is None:
@@ -66,8 +74,9 @@ class Measurement:
         self.client.stop_measurement()
         print(f'stopped measurement at {time.localtime()}')
 
-
-
+    def set(varname, value):
+        self.client.set(varname, value)
+        self.settings.update({varname: value})
 
     def add_file(path):
         pass
