@@ -1,10 +1,7 @@
 import os
 import time
 
-from .sources.h5source import H5Source
-from .sources.webapisource import WebAPISource
-
-from .abstract.traceable import Traceable
+#from .abstract.traceable import Traceable
 
 
 class Measurement:
@@ -18,54 +15,73 @@ class Measurement:
     filename_format = "Cal_%Y-%m-%d_%H-%M-%S"
 
     @staticmethod
-    def _name_convention(fmt, filecount):
-        '''Factory for the current filename.
+    def _name_convention(fmt):
+        '''Factory for the next filename.
 
         Gets the `filename_format` string and the current `filecount` as parameters.
         '''
         return time.strftime(fmt, time.localtime())
 
-    @staticmethod
-    def make_with_client(host='localhost', port=8002):
-        '''Factory function.
-        '''
-        client = IoniClient(host, port)
-        return self.__init__('', client)
+    @property
+    def next_filename(self):
+        basename = self._name_convention(self.filename_format)
+        basename += '.h5'
+        return os.path.join(self.home, basename)
+
+    @property
+    def is_running(self):
+        if client is None:
+            return False
+
+        return True  # TODO :: status abfragen!! (Kandidat: )
+        self.client.get('ACQ_SRV_CurrentState')
 
     def __init__(self, path, client=None):
         '''Get a file path or directory.
         '''
         if not len(path):
             path = os.getcwd()
-        self._dir = os.path.abspath(os.path.dirname(path))
-        self._filename = os.path.basename(path)  # may be empty
-        self._filecount = 0
-        self._dfiles = []
-        os.makedirs(self._dir, exist_ok=True)
+        self.home = os.path.abspath(os.path.dirname(path))
+        os.makedirs(self.home, exist_ok=True)
+        self.client = client
+        self.datafiles = []
+        self.settings = {}
+#         self._previous_settings = {}  # TODO : memorize old context
 
-        self._client = client
+    def start():
+        if client is None:
+            raise Exception('no connection to instrument')
+
+        if len(self.settings):
+            self.client.set_many(self.settings)
+            print('applied settings')
+        self.client.start_measurement(self.next_filename)
+        self.datafiles.append(self.next_filename)
+        print(f'started measurement at {time.localtime()}')
+
+    def stop():
+        if client is None:
+            raise Exception('no connection to instrument')
+
+        self.client.stop_measurement()
+        print(f'stopped measurement at {time.localtime()}')
+
+
+
 
     def add_file(path):
-        self.sources = sorted(self.sources + [H5Source(path)], key=attrgetter('timezero'))
+        pass
+#         self.sources = sorted(self.sources + [H5Source(path)], key=attrgetter('timezero'))
 
-
-    @property
-    def filename(self):
-        basename = self._name_convention(self.filename_format, self._filecount)
-        basename += '.h5'
-        return os.path.join(self._dir, basename)
-
-    def __iter__(self):
-        return iter(self._dfiles)
 
     def find(self, needle):
         self.client.get_traces()
 
     def iterrows(self):
-        return PollingIterator(self._client)
+        return PollingIterator(self.client)
 
 
-class PollingIterator:
+class PollingIterator:  # TODO :: in etwa so, nur anders
 
     def __init__(self, client):
         self.client = client
@@ -74,7 +90,7 @@ class PollingIterator:
         return self
 
     def __next__(self):
-        if not self.client.measuring:
+        if not False: #self.client.measuring:
             raise StopIteration
 
         time.sleep(1)

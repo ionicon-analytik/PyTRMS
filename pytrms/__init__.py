@@ -8,10 +8,16 @@ from .measurement import Measurement
 __all__ += ['Measurement']
 
 
-from .sources.h5source import H5Source
-
 def open(path):
     '''Open a datafile for a quick view on it.
     '''
-    return H5Source(path)
+    return Measurement(path)
+
+def connect(host='localhost', port=8002, home=''):
+    '''Factory function.
+    '''
+    from .ioniclient import IoniClient
+    client = IoniClient(host, port)
+
+    return Measurement(home, client)
 
