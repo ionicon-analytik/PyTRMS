@@ -1,5 +1,8 @@
 import os.path
 import time
+import datetime as dt
+
+import h5py
 
 
 class Measurement:
@@ -14,11 +17,10 @@ class Measurement:
     A running Measurement can be stopped.
     A finished Measurement cannot be started again.
 
-    Subclasses of `Process` must implement the `__iter__()` function to guarantee
-    the common behaviour for online and offline processing with one or multiple
-    datafiles.
-
-    mm = Measurement()
+    CAUTION: Attaching to an already running measurement is not
+    explicitly supported and may cause errors or weird behaviour.
+    Automation using scripts should therefore not be mixed with
+    other means of experiment control.
     '''
     time_format = "%Y-%m-%d_%H-%M-%S"
     prefix = ''
@@ -63,6 +65,14 @@ class Measurement:
     def is_running(self):
         raise NotImplementedError()
 
+    @property
+    def timezero(self):
+        raise NotImplementedError()
+
+    @property
+    def datafile(self):
+        raise NotImplementedError()
+
     def start(self):
         raise NotImplementedError()
 
@@ -92,9 +102,18 @@ class PrepareMeasurement(Measurement):
     def is_running(self):
         return False
 
+    @property
+    def timezero(self):
+        return dt.datetime(dt.MAXYEAR, 1, 1)  # some day, but definitely in the future
+
+    @property
+    def datafile(self):
+        raise RuntimeError('no datafile has been written')
+
     def start(self):
+        self._timestamp = time.localtime()
         if os.path.isdir(self.path):
-            basename = time.strftime(Measurement.time_format, time.localtime())
+            basename = time.strftime(Measurement.time_format, self._timestamp)
             basename = Measurement.prefix + basename + '.h5'
             self.path = os.path.join(self.path, basename)
 
@@ -124,6 +143,14 @@ class RunningMeasurement(Measurement):
     def is_running(self):
         return False
 
+    @property
+    def timezero(self):
+        return dt.fromtimestamp(self._timestamp)
+
+    @property
+    def datafile(self):
+        raise RuntimeError('cannot access datafile of a running measurement')
+
     def start(self):
         raise RuntimeError('measurement has already started')
 
@@ -147,6 +174,14 @@ class FinishedMeasurement(Measurement):
     @property
     def is_running(self):
         return False
+
+    @property
+    def timezero(self):
+        return self.datafile.get_timezero()
+
+    @property
+    def datafile(self):
+        return h5py.File(self.path, 'r')
 
     def start(self):
         raise RuntimeError('measurement has finished and cannot be restarted')
