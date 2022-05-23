@@ -13,8 +13,17 @@ def open(path):
     '''
     return Measurement(path)
 
+
+def measure(filename='', host='localhost', port=8002):
+    '''Prepare a measurement.
+    '''
+    client = connect(host, port)
+
+    return Measurement(filename, client)
+
+
 def connect(host='localhost', port=8002):
-    '''Factory function.
+    '''Connect a client to a running measurement server.
     '''
     from .ioniclient import IoniClient
 

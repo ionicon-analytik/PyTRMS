@@ -23,16 +23,29 @@ class Measurement:
     time_format = "%Y-%m-%d_%H-%M-%S"
     prefix = ''
 
+    _lock = object()
+
     def _new_state(self, newstate):
+        if issubclass(newstate, RunningMeasurement):
+            if isinstance(Measurement._lock, Measurement):
+                raise RuntimeError(f'running measurement locked by {Measurement._lock}')
+            Measurement._lock = self
+        if issubclass(self.__class__, RunningMeasurement):
+            Measurement._lock = object()  # clear lock
         self.__class__ = newstate
 
     def __init__(self, path, client=None):
         if client is None and os.path.isfile(path):
             self._new_state(FinishedMeasurement)
-        elif client is not None: # TODO :: and client.is_running --> RunningMeasurement ??
+        elif client is not None:
+            # TODO :: this is a bit weary if a measurement is already running. in that
+            # case we would have to attach to the current measurement and override the
+            # path. however, there is no means of testing this without making a
+            # web-request in the constructor! instead, we never attach to a running
+            # measurement. people should not mix scripting and device operation.
             self._new_state(PrepareMeasurement)
         else:
-            raise Exception('path does not exist and client is None')
+            raise Exception('no client and path does not exist')
 
         if not len(path):
             path = os.getcwd()
