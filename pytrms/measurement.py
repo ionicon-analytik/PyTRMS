@@ -78,6 +78,13 @@ class Measurement:
     def iterrows(self):
         raise NotImplementedError()
 
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, tb):
+        self.stop()
+
 
 class PrepareMeasurement(Measurement):
 

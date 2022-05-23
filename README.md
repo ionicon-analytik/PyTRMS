@@ -62,6 +62,24 @@ for row in file.iterrows():  # the DataFile behaves similar to a Pandas datafram
 	print(row.keys)
 ```
 
+## Use as a context manager
+
+The `Measurement` serves as a context in which the experiment is running:
+
+```python
+import pytrms
+
+meas = pytrms.measure(host='localhost')
+
+print(meas)  # prints PrepareMeasurement
+
+with meas as running:
+    print(meas)  # prints RunningMeasurement
+    meas.wait(3)
+
+print(meas)  # prints FinishedMeasurement
+```
+
 ## Getting started
 
 Download and install the latest Python version if you have not done so. **Ionicon**
