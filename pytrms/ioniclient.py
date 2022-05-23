@@ -43,34 +43,34 @@ class IoniClient:
     def get(self, varname):
         uri = self.baseurl + '/WebAPI_Get'
         payload = {varname: '?'}
-        r = requests.get(uri, params=payload)
+        r = requests.get(uri, params=payload, timeout=10)
 
         return r.text
 
     def get_many(self, varnames):
         uri = self.baseurl + '/WebAPI_Get'
         payload = {varname: '?' for varname in varnames}
-        r = requests.get(uri, params=payload)
+        r = requests.get(uri, params=payload, timeout=10)
 
         return r.text
 
     def get_traces(self):
         uri = self.baseurl + '/TRACES_WebAPI_Get' + '?'
-        r = requests.get(uri)
+        r = requests.get(uri, timeout=10)
 
         return r.text
 
     def set(self, varname, value):
         uri = self.baseurl + '/WebAPI_Set'
         payload = {varname: value}
-        r = requests.post(uri, data=payload)
+        r = requests.post(uri, data=payload, timeout=10)
 
         return r.text
 
     def set_many(self, key_value_pairs):
         uri = self.baseurl + '/WebAPI_Set'
         payload = dict(key_value_pairs)
-        r = requests.post(uri, data=payload)
+        r = requests.post(uri, data=payload, timeout=10)
 
         return r.text
 
