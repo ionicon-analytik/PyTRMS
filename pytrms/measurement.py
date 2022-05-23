@@ -1,12 +1,5 @@
-import os
+import os.path
 import time
-
-#from .abstract.traceable import Traceable
-
-# TODO :: States: NICHT GESTARTET --> RUNNING --> STOPPED
-#  das soll sich verbrauchen" und dann nicht mehr gestartet werden koennen
-#  anschliessend kann man's postprocessen
-#  es gilt: ein Measurement, ein filename!
 
 
 class Measurement:
@@ -34,10 +27,13 @@ class Measurement:
         self.__class__ = newstate
 
     def __init__(self, path, client=None):
-        if client is None:
+        if client is None and os.path.isfile(path):
             self._new_state(FinishedMeasurement)
-        else:
+        elif client is not None: # TODO :: and client.is_running --> RunningMeasurement ??
             self._new_state(PrepareMeasurement)
+        else:
+            raise Exception('path does not exist and client is None')
+
         if not len(path):
             path = os.getcwd()
         home = os.path.dirname(path)
