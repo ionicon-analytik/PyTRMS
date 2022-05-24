@@ -5,6 +5,8 @@ import datetime as dt
 
 import h5py
 
+from .tracebuffer import TraceBuffer
+
 
 class Measurement:
     '''
@@ -168,7 +170,15 @@ class RunningMeasurement(Measurement):
         self.client.get_traces()
 
     def iterrows(self):
-        return PollingIterator(self.client)
+        buf = TraceBuffer(self.client)
+        buf.start()
+        try:
+            while issubclass(self.__class__, RunningMeasurement):
+                yield buf.queue.get()
+
+        finally:
+            buf.stop_producing()
+            buf.join()
 
 
 class FinishedMeasurement(Measurement):
