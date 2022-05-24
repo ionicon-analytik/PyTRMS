@@ -7,7 +7,7 @@
 # >> pip install --user requests                #
 #                                               #
 #################################################
-import os
+import ntpath
 import time
 
 import requests
@@ -75,11 +75,11 @@ class IoniClient:
         return r.text
 
     def set_filename(self, filename):
-        return self.set('ACQ_SRV_SetFullStorageFile', os.path.normpath(filename))
+        return self.set('ACQ_SRV_SetFullStorageFile', ntpath.normpath(filename))
 
     def start_measurement(self, filename=''):
         if filename:
-            return self.set('ACQ_SRV_Start_Meas_Auto', os.path.normpath(filename))
+            return self.set('ACQ_SRV_Start_Meas_Auto', ntpath.normpath(filename))
 
         return self.set('ACQ_SRV_Start_Meas_Quick', 1)
 
