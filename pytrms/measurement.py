@@ -1,4 +1,5 @@
 import os.path
+import ntpath
 import time
 import datetime as dt
 
@@ -49,11 +50,12 @@ class Measurement:
         else:
             raise Exception('no client and path does not exist')
 
-        if not len(path):
-            path = os.getcwd()
-        home = os.path.dirname(path)
-        os.makedirs(home, exist_ok=True)
-        self.path = os.path.abspath(path)
+        # TODO :: das funzt natuerlich nicht, wenn man an den server connected...
+        # if not len(path):
+        #     path = os.getcwd()
+        # home = os.path.dirname(path)
+        # os.makedirs(home, exist_ok=True)
+        self.path = ntpath.normpath(path)
         self.client = client
 
     def wait(self, seconds, reason=''):
