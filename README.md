@@ -6,63 +6,84 @@ This is the official **Ionicon** Python toolbox for proton-transfer reaction mas
 ## Lab automation
 
 Write simple Python scripts to automate your measurement process and get repeatable
-results!
+results.
 
-For example, to perform ten measurements of one minute each and count up the
-filename:
+For example, perform ten measurements of one minute each and save the datafiles in a
+folder. The filename is automatically set to the timestamp at the start of the
+measurement.
+
 ```python
 import pytrms
 
-ptr = pytrms.webclient()
-
-measurement = ptr.Measure(r'D:\Data\one_minute_each')
+folder = 'D:/Data/one_minute_each'
 
 for i in range(10):
-    measurement.repeat_for(60)
+    measurement = ptr.measure(folder, 'localhost')
+    measurement.start()
+    measurement.wait(60, 'measuring for one minute...')
+    measurement.stop()
 ```
 
-## Postprocessing and Pandas compatibility
+## Postprocessing and Pandas support
 
 For simple analysis tasks, use the Python package to read and analyse the *hdf5*
-files:
+files. Traces are available as `Pandas.DataFrame`.
 
 ```python
 import glob
 import pandas as pd
 import pytrms
 
-batch = pytrms.PostProcessor()
+batch = []
 for filename in glob.rec('D:/Data/my_experiment/*.h5'):
-	batch.add(filename)  # or later maybe batch.gather_datafiles()
+    batch.append(pytrms.Measurement(filename))
 
-print(batch)  # the datafiles are sorted by their time of measurement
+averages = []
+for measurement in batch:
+    dataframe = measurement.traces
+    dataframe.write_csv(measurement.path + '_avg.tsv', sep='\t')
+    averages.append(dataframe.avg())
 
-average = pd.DataFrame()
-
-for file in batch:
-	dataframe = file.traces  # traces are available as Pandas dataframe
-	dataframe.write_csv(file.basename + '_avg.tsv', sep='\t')
-
-	average.append(dataframe.avg())
-
-average.write_csv('grand_average.tsv', sep='\t')
+pd.concat(averages).write_csv('grand_average.tsv', sep='\t')
 ```
 
-## Iteration and trace lookup
+## Online analysis in real-time
+
+The `Measurement` can register callback functions that are executed on every
+cycle with the current trace data:
 
 ```python
 import pytrms
 
-file = pytrms.DataFile('/home/ionicon/data/foo.h5')
+m = pytrms.measure('localhost')
 
-print(file.find('H2o_max'))  # find traces by name..
-print(file.find(42.1234))  # ..or by closest exact mass
+def oxygen_watchdog(meas, trace):
+    if trace['O2_level'] < 10_000:
+        print('oxygen level critical! closing valve 1...')
+        meas.set('Valve_1', 0)
 
-for row in file.iterrows():  # the DataFile behaves similar to a Pandas dataframe
-	print(row.keys)
+def detect_threshold(meas, trace):
+    if trace['H2o_level'] > 20_000:
+        print('water level above threshold! aborting.')
+        meas.stop()
+
+ema = 1
+alpha = 0.2
+file = 'C:/Temp/m_42_avg.dat'
+def moving_average(meas, trace):
+    ema = alpha * trace['m_42'] + (1-alpha) * ema
+    with open(file, 'a') as f:
+        f.write(str(ema) + '\n')
+    
+m.register_callback(oxygen_watchdog)
+m.register_callback(detect_threshold)
+m.register_callback(moving_average)
+
+m.start()
+
 ```
 
-## Use as a context manager
+## Use as a context manager (TODO)
 
 The `Measurement` serves as a context in which the experiment is running:
 
