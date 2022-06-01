@@ -38,24 +38,25 @@ class TraceBuffer(Thread):
             self._stopped = True
 
     def run(self):
-        dt = 0
+        poll = 0.2  # seconds
+        last = 0xffffffffffffffff  # largest reasonable integer
         while not self._stopped:
             with self._cond:  #.acquire()
                 raw = self._client.get_traces()
 
                 jsonized = json.loads(raw)
                 ts = jsonized['TimeCycle']['AbsTime']
-
-                self.queue.put(parse(raw))
-
-                dt = 1.5 - ts % 1  # try to settle in between two full seconds
-                print('wait for', dt)
+                oc = jsonized['TimeCycle']['OverallCycle']
+                if oc > last:
+                    self.queue.put(parse(raw))
+                last = oc
 
                 # This method releases the underlying lock, and then blocks until it is
                 # awakened by a notify() or notify_all() call for the same condition variable
                 # in another thread, or until the optional timeout occurs. Once awakened or
                 # timed out, it re-acquires the lock and returns.  The return value is True
                 # unless a given timeout expired, in which case it is False.
-                if self._cond.wait(dt):
+                print('wait for', poll)
+                if self._cond.wait(poll):
                     break
 
