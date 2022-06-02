@@ -31,7 +31,7 @@ def connect(host='localhost', port=8002):
 
 
     '''
-    from .ioniclient import IoniClient
+    from .clients.ioniclient import IoniClient
     from .tracebuffer import TraceBuffer
 
     global _client
