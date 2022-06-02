@@ -25,4 +25,6 @@ report.html
 .coverage
 .coveragerc
 
+poetry.lock
+
 **/MAKEFILE
