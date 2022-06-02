@@ -8,7 +8,7 @@ from .measurement import Measurement
 __all__ += ['Measurement']
 
 
-def open(path):
+def load(path):
     '''Open a datafile for a quick view on it.
     '''
     return Measurement(path)
@@ -24,6 +24,12 @@ def measure(filename='', host='localhost', port=8002):
 
 def connect(host='localhost', port=8002):
     '''Connect a client to a running measurement server.
+
+    makes connection via modbus or webapi or whatnot
+    tests connection
+    returns an instrument.
+
+
     '''
     from .ioniclient import IoniClient
 

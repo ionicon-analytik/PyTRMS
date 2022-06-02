@@ -207,22 +207,3 @@ class FinishedMeasurement(Measurement):
     def find(self, needle):
         self.client.get_traces()
 
-    def iterrows(self):
-        return PollingIterator(self.client)
-
-
-class PollingIterator:  # TODO :: in etwa so, nur anders
-
-    def __init__(self, client):
-        self.client = client
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if not False: #self.client.measuring:
-            raise StopIteration
-
-        time.sleep(1)
-        return self.client
-
