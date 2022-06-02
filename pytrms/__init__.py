@@ -1,4 +1,5 @@
-from .__version__ import version as _version
+_version = '0.1.1'
+
 
 __all__ = []
 
