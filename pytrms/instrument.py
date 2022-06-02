@@ -1,7 +1,5 @@
 import time
 import os.path
-#import ntpath
-#import datetime as dt
 
 
 class Instrument:
@@ -52,19 +50,6 @@ class Instrument:
         self._client = client
         self._buffer = buffer
 
-    prefix = ''
-
-    @property
-    def time_format(self):
-        """Set the time format for the filename of quick measurements.
-
-        Use placeholders according to 
-        """
-        return self._time_format
-
-    _time_format = "%Y-%m-%d_%H-%M-%S"
-    time_format.__doc__ += time.strftime.__doc__
-
     def is_local(self):
         """Returns True if files are written to the local machine."""
         host = self._client.host
@@ -76,11 +61,11 @@ class Instrument:
         time.sleep(seconds)
 
     def get(self, varname):
+        """Get the current value of a setting."""
         return self._client.get(varname)
 
-    get.__doc__ = IoniClient.get.__doc__
-
     def set(self, varname, value):
+        """Set a variable to a new value."""
         return self._client.set(varname, value)
 
     def __enter__(self):
@@ -91,9 +76,21 @@ class Instrument:
     def __exit__(self, exc_type, exc_val, tb):
         self.stop()
 
-    def start(self):
+    def start(self, path=''):
+        """Start a measurement on the PTR server.
+
+        'path' is the filename of the datafile to write to. 
+        If left blank, start a "quick measurement".
+        If pointing to a file and the file exist on the (local) server, raise an exception.
+        To create unique filenames, use placeholders for year (%Y), month (%m), and so on,
+        for example `path=C:/Ionicon/Data/Sauerteig_%Y-%m-%d_%H-%M-%S.h5`.
+
+        see also:
+        """
         # this method must be implemented by each state
         raise NotImplementedError()
+
+    start.__doc__ += time.strftime.__doc__
 
     def stop(self):
         # this method must be implemented by each state
@@ -102,28 +99,23 @@ class Instrument:
 
 class IdleInstrument(Instrument):
 
-    def start(self):
-        # _client.is_local ??  --> Pfade setzen..
-
-        # TODO :: das funzt natuerlich nicht, wenn man an den server connected...
-        
-        # if not len(path):
-        #     path = os.getcwd()
-        # home = os.path.dirname(path)
-        # os.makedirs(home, exist_ok=True)
-        #self.path = ntpath.normpath(path)
-        self._timestamp = time.localtime()
-        #if os.path.isdir(self.path):
-        #    basename = time.strftime(instrument.time_format, self._timestamp)
-        #    basename = instrument.prefix + basename + '.h5'
-        #    self.path = os.path.join(self.path, basename)
-
-        #if os.path.exists(self.path):
-        #    raise RuntimeError(f'{self.path} exists and cannot be overwritten')
+    def start(self, path=''):
+        # if we send a filepath to the server that does not exist there, the server will
+        # open a dialog and "hang" (which I'd very much like to avoid).
+        # the safest way is to not send a path at all and start a 'Quick' measurement.
+        # but if the server is the local machine, we do our best to verify the path:
+        if path and self.is_local():
+            home = os.path.dirname
+            base = os.path.basename
+            os.makedirs(home, exist_ok=True)
+            base = time.strftime(base)
+            path = os.path.join(home, base)
+            if os.path.exists(path):
+                raise RuntimeError(f'path exists and cannot be overwritten')
 
         self._new_state(BusyInstrument)
-        self._client.start_measurement()#self.path)
-        self.start()
+        self._client.start_measurement(path)
+        self.start(path)
 
     def stop(self):
         raise RuntimeError('instrument is not running')
@@ -131,7 +123,7 @@ class IdleInstrument(Instrument):
 
 class RunningInstrument(Instrument):
 
-    def start(self):
+    def start(self, path=''):
         raise RuntimeError('instrument is already running')
 
     def stop(self):
@@ -142,7 +134,7 @@ class RunningInstrument(Instrument):
 
 class BusyInstrument(Instrument):
 
-    def start(self):
+    def start(self, path=''):
         while self._buffer.is_idle:
             time.sleep(0.01)
         self._new_state(RunningInstrument)
