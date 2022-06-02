@@ -1,32 +1,20 @@
-import os.path
-import ntpath
 import time
-import datetime as dt
-
-import h5py
-
-#from .tracebuffer import TraceBuffer
+import os.path
+#import ntpath
+#import datetime as dt
 
 
 class Instrument:
     '''
-    Base class for PTRMS instruments or batch processing.
+    Class for controlling the PTR instrument remotely.
 
-    A Instrument has one unique filename. 
+    This class reflects the states of the actual instrument, which can be currently idle
+    or running a measurement. An idle instrument can start a measurement. A running
+    instrument can be stopped. But trying to start a measurement twice will raise an
+    exception (RuntimeError).
 
-    A Instrument can be preparing, running or finished.
-
-    A prepared Instrument can be started.
-    A running Instrument can be stopped.
-    A finished Instrument cannot be started again.
-
-    CAUTION: Attaching to an already running instrument is not
-    explicitly supported and may cause errors or weird behaviour.
-    Automation using scripts should therefore not be mixed with
-    other means of experiment control.
+    This is a singleton class, i.e. it is only instanciated once per script.
     '''
-    time_format = "%Y-%m-%d_%H-%M-%S"
-    prefix = ''
 
     __instance = None
 
@@ -34,22 +22,88 @@ class Instrument:
         self.__class__ = newstate
         print(self)
 
-    def __new__(cls, client):
+    def __new__(cls, client, buffer):
         # make this class a singleton
         if cls._Instrument__instance is not None:
-            # If __new__() does not return an instance of cls, then the new instance’s
-            # __init__() method will not be invoked:
-            #return cls._Instrument__instance  # TODO :: to raise or not to raise..?
-            raise Exception('the Instrument class can only have one instance')
+            # quick reminder: If __new__() does not return an instance of cls, then the
+            # new instance’s __init__() method will *not* be invoked:
+            return cls._Instrument__instance
+            #raise Exception('the Instrument class can only have one instance')
 
         inst = object.__new__(cls)
         cls._Instrument__instance = inst
 
+        # launch the buffer's thread..
+        if not buffer.is_alive():
+            buffer.daemon = True
+            buffer.start()
+        # ..and synchronize the PTR-instrument state with this Python object:
+        Instrument._new_state(inst, BusyInstrument)
+        if buffer.is_idle:
+            Instrument._new_state(inst, IdleInstrument)
+        else:
+            Instrument._new_state(inst, RunningInstrument)
+
         return inst
 
-    def __init__(self, client):
-        print('run init')
-        self.client = client
+    def __init__(self, client, buffer):
+        # dispatch all blocking calls to the client
+        # and fetch current data from the buffer!
+        self._client = client
+        self._buffer = buffer
+
+    prefix = ''
+
+    @property
+    def time_format(self):
+        """Set the time format for the filename of quick measurements.
+
+        Use placeholders according to 
+        """
+        return self._time_format
+
+    _time_format = "%Y-%m-%d_%H-%M-%S"
+    time_format.__doc__ += time.strftime.__doc__
+
+    def is_local(self):
+        """Returns True if files are written to the local machine."""
+        host = self._client.host
+        return host == 'localhost' or host == '127.0.0.1'
+
+    def wait(self, seconds, reason=''):
+        if reason:
+            print(reason)
+        time.sleep(seconds)
+
+    def get(self, varname):
+        return self._client.get(varname)
+
+    get.__doc__ = IoniClient.get.__doc__
+
+    def set(self, varname, value):
+        return self._client.set(varname, value)
+
+    def __enter__(self):
+        # TODO :: implement proper context with dict of settings...
+        self.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, tb):
+        self.stop()
+
+    def start(self):
+        # this method must be implemented by each state
+        raise NotImplementedError()
+
+    def stop(self):
+        # this method must be implemented by each state
+        raise NotImplementedError()
+
+
+class IdleInstrument(Instrument):
+
+    def start(self):
+        # _client.is_local ??  --> Pfade setzen..
 
         # TODO :: das funzt natuerlich nicht, wenn man an den server connected...
         
@@ -58,50 +112,18 @@ class Instrument:
         # home = os.path.dirname(path)
         # os.makedirs(home, exist_ok=True)
         #self.path = ntpath.normpath(path)
-
-    @property
-    def is_remote(self):
-        host = self.client.host
-        return host == 'localhost' or host == '127.0.0.1'
-
-    def wait(self, seconds, reason=''):
-        if reason:
-            print(reason)
-        time.sleep(seconds)
-
-    def set(self, varname, value):
-        self.client.set(varname, value)
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, tb):
-        self.stop()
-
-    def start(self):
-        raise NotImplementedError()
-
-    def stop(self):
-        raise NotImplementedError()
-
-
-class IdleInstrument(Instrument):
-
-    def start(self):
         self._timestamp = time.localtime()
-        if os.path.isdir(self.path):
-            basename = time.strftime(instrument.time_format, self._timestamp)
-            basename = instrument.prefix + basename + '.h5'
-            self.path = os.path.join(self.path, basename)
+        #if os.path.isdir(self.path):
+        #    basename = time.strftime(instrument.time_format, self._timestamp)
+        #    basename = instrument.prefix + basename + '.h5'
+        #    self.path = os.path.join(self.path, basename)
 
-        if os.path.exists(self.path):
-            raise RuntimeError(f'{self.path} exists and cannot be overwritten')
+        #if os.path.exists(self.path):
+        #    raise RuntimeError(f'{self.path} exists and cannot be overwritten')
 
         self._new_state(BusyInstrument)
-        print(f'started instrument in {self.path}')
-        self.client.start_measurement(self.path)
-        self._new_state(RunningInstrument)
+        self._client.start_measurement()#self.path)
+        self.start()
 
     def stop(self):
         raise RuntimeError('instrument is not running')
@@ -114,15 +136,19 @@ class RunningInstrument(Instrument):
 
     def stop(self):
         self._new_state(BusyInstrument)
-        self.client.stop_measurement()
-        self._new_state(IdleInstrument)
+        self._client.stop_measurement()
+        self.stop()
 
 
 class BusyInstrument(Instrument):
 
     def start(self):
-        raise RuntimeError('instrument is busy')
+        while self._buffer.is_idle:
+            time.sleep(0.01)
+        self._new_state(RunningInstrument)
 
     def stop(self):
-        raise RuntimeError('instrument is busy')
+        while not self._buffer.is_idle:
+            time.sleep(0.01)
+        self._new_state(IdleInstrument)
 
