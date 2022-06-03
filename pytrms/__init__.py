@@ -24,6 +24,7 @@ def connect(host='localhost', port=8002):
     '''
     from .clients.ioniclient import IoniClient
     from .tracebuffer import TraceBuffer
+    from .instrument import Instrument
 
     global _client
     global _buffer

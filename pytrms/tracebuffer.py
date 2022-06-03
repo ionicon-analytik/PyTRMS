@@ -60,7 +60,9 @@ class TraceBuffer(Thread):
                 # the client returns the "current", i.e. last known trace data, even if
                 # the machine is currently stopped. we want to definitely reflect this
                 # idle state of the (actual) machine in our Python objects!
-                # TODO :: figure this out on a real machine!!!
+                # TODO :: *ideally*, the state is returned by a webAPI-call.. but as long
+                # as this doesn't work perfectly, let's just do the next best thing and
+                # watch the current cycle:
                 if last < 0: last = oc
 
                 if oc > last:
