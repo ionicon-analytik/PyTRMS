@@ -7,13 +7,13 @@ from threading import Thread, Condition
 
 import pandas as pd
 
+from .helpers import convert_labview_to_posix
+
 
 def parse(response, trace='raw'):
     jsonized = json.loads(response)
     info = jsonized['TimeCycle']
-    labview_ts = info['AbsTime']
-    posix_ts = labview_ts - 2082844800  # TODO :: das hat der .reader auch!!
-    ts = pd.Timestamp(posix_ts, unit='s')
+    ts = convert_labview_to_posix(info['AbsTime'])
 
     data = [list(info.values())] + [a['Data'] for a in jsonized['AddData']] + [jsonized[trace]]
     desc = [list(info.keys())] + [a['Desc'] for a in jsonized['AddData']] + [jsonized['masses']]
