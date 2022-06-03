@@ -1,8 +1,13 @@
-import abc
+import os.path
+from abc import abstractmethod
+from collections.abc import Iterable
 
 
-class Measurement(abc.Iterable):
+class Measurement(Iterable):
     """Base class for PTRMS-measurements or batch processing.
+
+    Every instance is associated with exactly one `.filename` to a datafile.
+    The start time of the measurement is given by `.timezero`.
 
     A measurement is iterable over the 'rows' of its data. 
     In the online case, this would slowly produce the current trace, one after another.
@@ -10,26 +15,26 @@ class Measurement(abc.Iterable):
     measurement file.
     """
 
+    def is_local(self):
+        return os.path.exists(self.filename)
+
+    def __init__(self, filename):
+        self._filename = filename
+
     @property
-    @abc.abstractmethod
+    def filename(self):
+        return self._filename
+    
+    @property
+    @abstractmethod
     def timezero(self):
         raise NotImplementedError()
-
-    #@abc.abstractmethod
-    def iterwindow(self, width):
-        """window function
-
-        give the last n datapoints
-
-        also quickly realized with a deque
-        """
-        raise NotImplementedError()
-
 
 
 class OnlineMeasurement(Measurement):
 
     def __init__(self, instrument):
+        super().__init__(filename)
         self.instrument = instrument
 
     @property
@@ -51,14 +56,14 @@ class OnlineMeasurement(Measurement):
 
 class OfflineMeasurement(Measurement):
 
-    def __init__(self, path):
-        #self.hf = somereader(path)
-        pass
+    def __init__(self, h5reader):
+        super().__init__(h5reader.path)
+        self.hr = h5reader
 
     @property
     def timezero(self):
-        return self.datafile.get_timezero()
+        return self.hr.timezero
 
     def __iter__(self):
-        pass
+        return iter(self.hr)
 

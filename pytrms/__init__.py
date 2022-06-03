@@ -8,19 +8,22 @@ _client = None
 _buffer = None
 
 def load(path):
-    '''Open a datafile for a quick view on it.
+    '''Open a datafile for post-analysis or batch processing.
 
-    returns a measurement.
+    returns a Measurement.
     '''
-    from .measurement import Measurement
+    from .measurement import OfflineMeasurement
+    from .reader import H5Reader
 
-    return Measurement(path)
+    reader = H5Reader(path)
+
+    return OfflineMeasurement(reader)
 
 
 def connect(host='localhost', port=8002):
     '''Connect a client to a running measurement server.
 
-    returns an instrument.
+    returns an Instrument.
     '''
     from .clients.ioniclient import IoniClient
     from .tracebuffer import TraceBuffer
