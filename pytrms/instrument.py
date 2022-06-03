@@ -81,7 +81,8 @@ class Instrument:
 
         'path' is the filename of the datafile to write to. 
         If left blank, start a "quick measurement".
-        If pointing to a file and the file exist on the (local) server, raise an exception.
+
+        If pointing to a file and the file exist on the (local) server, this raises an exception.
         To create unique filenames, use placeholders for year (%Y), month (%m), and so on,
         for example `path=C:/Ionicon/Data/Sauerteig_%Y-%m-%d_%H-%M-%S.h5`.
 
@@ -93,7 +94,31 @@ class Instrument:
     start.__doc__ += time.strftime.__doc__
 
     def stop(self):
+        """Stop the current measurement on the PTR server."""
         # this method must be implemented by each state
+        raise NotImplementedError()
+
+    def get_traces(self, kind='raw', indexed='abs_cycle'):
+        """Return the timeseries ("traces") of all masses, compounds and settings.
+
+        This will grow with time if a measurement is currently running and stop growing
+        once the measurement has been stopped. The tracedata is cleared, when a new
+        measurement is started.
+
+        'kind' is the type of traces and must be one of 'raw', 'concentration' or 'corrected'.
+
+        'indexed' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
+        'abs_time' or 'rel_time'.
+        """
+        # TODO :: this method must be implemented by each state
+        raise NotImplementedError()
+
+    def follow(self, kind='raw'):
+        """Returns an iterator over the timeseries ("traces") of all masses, compounds and settings.
+
+        'kind' is the type of traces and must be one of 'raw', 'concentration' or 'corrected'.
+        """
+        # TODO :: this method must be implemented by each state
         raise NotImplementedError()
 
 
