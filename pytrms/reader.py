@@ -1,22 +1,28 @@
 from abc import abstractmethod
 from collections.abc import Iterable
-from functools import partial
+from functools import partial, lru_cache
 
 import h5py
 import pandas as pd
+
+from .helpers import convert_labview_to_posix
 
 
 class H5Reader(Iterable):
 
     @property
     def timezero(self):
-        return 0
+        return convert_labview_to_posix(float(self.hf.attrs['FileCreatedTime_UTC']))
 
     def __init__(self, path):
         self.path = path
         self.hf = h5py.File(path, 'r')
 
     def __iter__(self):
+        # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
+        # columns merkt! diese haelt die ganze erste Zeile des datensatzes. 
+        # ab dem zweiten durchgang kann die Series auf diese columns
+        # reduziert werden
         traces = self.get_traces()
         addtraces = self.get_addtraces()
         combined = pd.concat([traces, addtraces], axis='columns')
@@ -32,7 +38,6 @@ class H5Reader(Iterable):
             return None
     
         self.hf.visit(func)
-    
     
     def locate_datainfo(self):
         """Look for data-info traces."""
@@ -53,7 +58,6 @@ class H5Reader(Iterable):
     
         return dataloc.intersection(infoloc)
     
-    
     def read_datainfo(self, groupname):
         group = self.hf[groupname]
         data = group['Data']
@@ -62,7 +66,6 @@ class H5Reader(Iterable):
     
         return pd.DataFrame(data, columns=names)
     
-    
     def get_addtraces(self):
         frames = []
         for loc in self.locate_datainfo():
@@ -70,11 +73,23 @@ class H5Reader(Iterable):
     
         return pd.concat(frames, axis='columns')
     
-    
-    def get_traces(self, kind='raw'):
-        loc = 'TRACEdata/Trace' + kind.capitalize()
+    def get_traces(self, kind='raw', force_original=False):
+        tracedata = self.hf.get('PROCESSED/TraceData')
+        loc = {
+            'con': 'ConcentrationsData',
+            'raw': 'RawData',
+            'cor': 'CorrectedData',
+        }[kind]
+        if tracedata is None:
+            tracedata = self.hf['TRACEdata']
+            loc = {
+                'con': 'TraceConcentration',
+                'raw': 'TraceRaw',
+                'cor': 'TraceCorrected',
+            }[kind]
+
         try:
-            data = self.hf[loc]
+            data = tracedata[loc]
         except KeyError as exc:
             msg = ("Unknown trace-type! `kind` must be one of 'raw', 'corrected' or "
                    "'concentration'.")
@@ -84,17 +99,19 @@ class H5Reader(Iterable):
         labels = [b.decode('latin1') for b in info[1,:]]
     
         return pd.DataFrame(data, columns=labels)
-    
-    @staticmethod
-    def _labview_to_posix(t):
-        return pd.Timestamp(t-2082844800, unit='s')
-    
-    
+
+    @lru_cache
+    def get_all(self, kind='raw', indexed='abs_cycle', force_original=False):
+        frame = pd.concat([self.get_traces(kind, force_original), self.get_addtraces()], axis='columns')
+        frame.index = self.get_index(indexed)
+
+        return frame
+
     def get_index(self, kind='abs_cycle'):
         lut = {
                 'REL_CYCLE': (0, lambda a: a.astype('int', copy=False)),
                 'ABS_CYCLE': (1, lambda a: a.astype('int', copy=False)),
-                'ABS_TIME': (2, lambda a: list(map(_labview_to_posix, a))),
+                'ABS_TIME': (2, lambda a: list(map(convert_labview_to_posix, a))),
                 'REL_TIME': (3, lambda a: list(map(partial(pd.Timedelta, unit='s'), a))),
         }
         info = self.hf['SPECdata/Times']

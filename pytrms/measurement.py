@@ -33,25 +33,22 @@ class Measurement(Iterable):
 
 class OnlineMeasurement(Measurement):
 
+    # TODO :: ausbauen oder abreissen....
     def __init__(self, instrument):
         super().__init__(filename)
         self.instrument = instrument
 
     @property
     def timezero(self):
-        return dt.fromtimestamp(self._timestamp)
+        return 0
 
+    @property
+    def traces(self):
+        pass
 
     def __iter__(self):
-        buf = TraceBuffer(self.client)
-        buf.start()
-        try:
-            while issubclass(self.__class__, RunningMeasurement):
-                yield buf.queue.get()
-
-        finally:
-            buf.stop_producing()
-            buf.join()
+        while issubclass(self.__class__, RunningMeasurement):
+            yield self.instrument.buffer.queue.get()
 
 
 class OfflineMeasurement(Measurement):
@@ -63,6 +60,20 @@ class OfflineMeasurement(Measurement):
     @property
     def timezero(self):
         return self.hr.timezero
+
+    def get_traces(self, kind='raw', indexed='abs_cycle', force_original=False):
+        """Return the timeseries ("traces") of all masses, compounds and settings.
+
+        'kind' is the type of traces and must be one of 'raw', 'concentration' or
+        'corrected'.
+
+        'indexed' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
+        'abs_time' or 'rel_time'.
+
+        If the traces have been post-processed in the Ionicon Viewer, those will be used,
+        unless `force_original=True`.
+        """
+        return self.hr.get_all(kind, indexed, force_original)
 
     def __iter__(self):
         return iter(self.hr)
