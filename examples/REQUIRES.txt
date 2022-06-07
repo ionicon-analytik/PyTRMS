@@ -1,0 +1,5 @@
+h5py == 3.6.0
+requests == 2.27.1
+pandas == 1.4.0
+ipykernel == 6.13.1
+matplotlib == 3.5.2
