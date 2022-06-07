@@ -27,4 +27,6 @@ report.html
 
 poetry.lock
 
+examples/**/*.tsv
+
 **/MAKEFILE
