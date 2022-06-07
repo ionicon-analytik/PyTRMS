@@ -75,19 +75,20 @@ class H5Reader(Iterable):
     
     def get_traces(self, kind='raw', force_original=False):
         tracedata = self.hf.get('PROCESSED/TraceData')
-        loc = {
+        lut = {
             'con': 'ConcentrationsData',
             'raw': 'RawData',
             'cor': 'CorrectedData',
-        }[kind]
+        }
         if tracedata is None:
             tracedata = self.hf['TRACEdata']
-            loc = {
+            lut = {
                 'con': 'TraceConcentration',
                 'raw': 'TraceRaw',
                 'cor': 'TraceCorrected',
-            }[kind]
+            }
 
+        loc = lut[kind[:3].lower()]
         try:
             data = tracedata[loc]
         except KeyError as exc:

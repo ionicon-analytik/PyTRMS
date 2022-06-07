@@ -30,6 +30,11 @@ class Measurement(Iterable):
     def timezero(self):
         raise NotImplementedError()
 
+    @property
+    @abstractmethod
+    def traces(self):
+        raise NotImplementedError()
+
 
 class OnlineMeasurement(Measurement):
 
@@ -60,6 +65,11 @@ class OfflineMeasurement(Measurement):
     @property
     def timezero(self):
         return self.hr.timezero
+
+    @property
+    def traces(self):
+        """shortcut for `.get_traces(kind='concentration')`."""
+        return self.get_traces(kind='concentration')
 
     def get_traces(self, kind='raw', indexed='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.

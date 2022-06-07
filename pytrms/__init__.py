@@ -4,9 +4,6 @@ _version = '0.1.1'
 __all__ = []
 
 
-_client = None
-_buffer = None
-
 def load(path):
     '''Open a datafile for post-analysis or batch processing.
 
@@ -19,6 +16,9 @@ def load(path):
 
     return OfflineMeasurement(reader)
 
+
+_client = None
+_buffer = None
 
 def connect(host='localhost', port=8002):
     '''Connect a client to a running measurement server.

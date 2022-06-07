@@ -13,7 +13,23 @@ folder. The filename is automatically set to the timestamp at the start of the
 measurement.
 
 ```python
+>>> import pytrms
+
 import pytrms
+from os.path import basename, splittext, dirname, join
+
+import pandas as pd
+
+
+# optional
+batch = [pytrms.load(file) for file in files]
+from operator import attrgetter
+batch = sorted(batch, key=attrgetter('timezero'))
+
+
+# optional
+print([name for name in traces.columns if 'H2O' in name])
+
 
 folder = 'D:/Data/one_minute_each'
 
