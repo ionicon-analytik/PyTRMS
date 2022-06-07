@@ -1,3 +1,11 @@
+##########################################################
+#                                                        #
+# example script for starting and stopping measurements  #
+#                                                        #
+# this assumes, that a PTR instrument is connected to    #
+# the local computer and is running a 'webAPI' server    #
+#                                                        #
+##########################################################
 try:
     import pytrms
 except ModuleNotFoundError:

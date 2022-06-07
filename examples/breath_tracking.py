@@ -1,3 +1,9 @@
+####################################################
+#                                                  #
+# example script for post-processing breath files  #
+#                                                  #
+#                                                  #
+####################################################
 import sys
 from glob import glob
 from os.path import basename, splitext, dirname, join
@@ -38,16 +44,25 @@ if __name__ == '__main__':
         base, _ = splitext(basename(file))
         print('processing', base, '...')
     
+        # load a Ionicon .h5 file for post-processing the traces:
         measurement = pytrms.load(file)
         traces = measurement.traces
     
         water_cluster = traces['*(H2O)3H+']
         
-        inhale, exhale = breath_tracker(water_cluster)
+        inhale, exhale = breath_tracker(track_signal=water_cluster)
     
-        avg = pd.concat([traces[inhale].mean(), traces[exhale].mean()], axis='columns')
+        # the inhale/exhale marker can be used as 'boolean indexes' to compute an average
+        # of the regions of interest only:
+        avg_inhale = traces[inhale].mean()
+        avg_exhale = traces[exhale].mean()
+
+        # combine the pd.Series to a pd.DataFrame with two columns...
+        avg = pd.concat([avg_inhale, avg_exhale], axis='columns')
+        # ...and save as a .tsv file to be imported in excel:
         avg.to_csv(join(dirname(file), base+'.tsv'), sep='\t', header=['inhale', 'exhale'])
     
+        # finally, create a plot under the same filename, but with a '.jpg' file extension:
         fig, _ = pytrms.plot_marker(water_cluster, marker=exhale)
         fig.savefig(join(dirname(file), base+'.jpg'))
 
