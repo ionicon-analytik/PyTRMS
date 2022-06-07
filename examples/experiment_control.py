@@ -1,4 +1,10 @@
-import pytrms
+try:
+    import pytrms
+except ModuleNotFoundError:
+    # find module if running from the example folder
+    # in a cloned repository from GitHub:
+    sys.path.insert(0, join(dirname(__file__), '..'))
+    import pytrms
 
 ptr = pytrms.connect('localhost')
 
