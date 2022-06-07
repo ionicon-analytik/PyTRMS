@@ -102,9 +102,9 @@ class H5Reader(Iterable):
         return pd.DataFrame(data, columns=labels)
 
     @lru_cache
-    def get_all(self, kind='raw', indexed='abs_cycle', force_original=False):
+    def get_all(self, kind='raw', index='abs_cycle', force_original=False):
         frame = pd.concat([self.get_traces(kind, force_original), self.get_addtraces()], axis='columns')
-        frame.index = self.get_index(indexed)
+        frame.index = self.get_index(index)
 
         return frame
 

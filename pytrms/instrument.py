@@ -98,7 +98,7 @@ class Instrument:
         # this method must be implemented by each state
         raise NotImplementedError()
 
-    def get_traces(self, kind='raw', indexed='abs_cycle'):
+    def get_traces(self, kind='raw', index='abs_cycle'):
         """Return the timeseries ("traces") of all masses, compounds and settings.
 
         This will grow with time if a measurement is currently running and stop growing
@@ -107,7 +107,7 @@ class Instrument:
 
         'kind' is the type of traces and must be one of 'raw', 'concentration' or 'corrected'.
 
-        'indexed' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
+        'index' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
         'abs_time' or 'rel_time'.
         """
         # TODO :: this method must be implemented by each state

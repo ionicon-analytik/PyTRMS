@@ -71,19 +71,19 @@ class OfflineMeasurement(Measurement):
         """shortcut for `.get_traces(kind='concentration')`."""
         return self.get_traces(kind='concentration')
 
-    def get_traces(self, kind='raw', indexed='abs_cycle', force_original=False):
+    def get_traces(self, kind='raw', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
 
         'kind' is the type of traces and must be one of 'raw', 'concentration' or
         'corrected'.
 
-        'indexed' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
+        'index' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
         'abs_time' or 'rel_time'.
 
         If the traces have been post-processed in the Ionicon Viewer, those will be used,
         unless `force_original=True`.
         """
-        return self.hr.get_all(kind, indexed, force_original)
+        return self.hr.get_all(kind, index, force_original)
 
     def __iter__(self):
         return iter(self.hr)
