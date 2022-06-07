@@ -1,7 +1,12 @@
 # PyTRMS
 
-This is the official **Ionicon** Python toolbox for proton-transfer reaction mass-spectrometry (PTR-MS).
-
+This is the official **Ionicon** Python toolbox for proton-transfer reaction mass-spectrometry (PTR-MS). 
+ 
+Install from `PyPI` (see also [getting started](https://github.com/ionicon-analytik/PyTRMS#getting-started)):
+```bash
+>> pip install -U pytrms
+```
+ 
 
 ## Postprocessing (with Pandas support)
 
