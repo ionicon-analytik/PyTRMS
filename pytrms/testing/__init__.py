@@ -1,8 +1,7 @@
-print('TEST ENV TEST ENV TEST ENV TEST ENV TEST ENV')
 
 
 
-def connect_():
+def connect_(*args):
 
     from ..instrument import Instrument
     from ..clients.mockclient import MockClient

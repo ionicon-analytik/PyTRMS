@@ -3,6 +3,71 @@
 This is the official **Ionicon** Python toolbox for proton-transfer reaction mass-spectrometry (PTR-MS).
 
 
+## Postprocessing (with Pandas support)
+
+For simple analysis tasks use the `PyTRMS` Python package to read and analyse Ionicon
+*hdf5* files. The [Pandas](https://pandas.pydata.org/pandas-docs/stable/index.html)
+Python package is the de-facto standard for data analysis. Use `PyTRMS` to load the
+traces directly into a `Pandas.DataFrame`.
+
+```python
+>>> import pytrms
+>>> import pandas as pd
+
+>>> measurement = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
+>>> measurement.filename
+'examples/data/peter_emmes_2022-03-31_08-51-13.h5'
+
+>>> measurement.timezero
+Timestamp('2022-03-31 06:51:13.415745735')
+
+>>> traces = measurement.get_traces('concentration', index='abs_time')
+>>> water_columns = [col for col in traces.columns if 'H2O' in col]
+>>> for col_name in sorted(water_columns): print(col_name)
+*(FeH2O2)H+
+*(H2O)+
+*(H2O)2H+
+*(H2O)2H+ i_17O
+*(H2O)2H+ i_18O
+*(H2O)3H+
+*(H2O)3H+ i_18O
+*(H2O)4H+
+*(H2O)H+
+*(H2O)H+  i_18O
+H2O.H3O+ (Cluster)
+H2O_Act
+H2O_Set
+
+>>> measurement.traces[['*(H2O)+', '*(H2O)H+', '*(H2O)2H+']].describe()
+           *(H2O)+     *(H2O)H+    *(H2O)2H+
+count   129.000000   129.000000   129.000000
+mean    865.904846   980.209534  6049.917480
+std     320.313477   826.358704  3256.141846
+min     399.933929   170.015930  1947.956299
+25%     584.200745   224.781387  2227.153320
+50%     822.613037   712.026062  8409.678711
+75%    1161.566528  1466.957397  9112.859375
+max    1476.455444  2872.100098  9476.558594
+
+```
+
+
+```python
+>>> from glob import iglob
+>>> from operator import attrgetter
+
+>>> loader = (pytrms.load(file) for file in iglob('examples/data/*.h5'))
+
+>>> batch = sorted(loader, key=attrgetter('timezero'))
+>>> for measurement in batch: print(measurement.filename)
+examples/data/peter_emmes_2022-03-31_08-51-13.h5
+examples/data/peter_emmes_2022-03-31_08-59-30.h5
+examples/data/peter_emmes_2022-03-31_09-10-08.h5
+examples/data/peter_emmes_2022-03-31_09-20-31.h5
+examples/data/peter_emmes_2022-03-31_09-29-40.h5
+
+```
+
 ## Lab automation
 
 Write simple Python scripts to automate your measurement process and get repeatable
@@ -14,60 +79,18 @@ measurement.
 
 ```python
 >>> import pytrms
+>>> from pytrms.testing import connect_ as connect
 
->>> m = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
->>> import pytrms
->>> m.filename
-'examples/data/peter_emmes_2022-03-31_08-51-13.h5'
+>>> ptr = connect('localhost')  # doctest: +ELLIPSIS
+<pytrms.instrument.BusyInstrument object at 0x...>
+<pytrms.instrument.IdleInstrument object at 0x...>
 
-from os.path import basename, splittext, dirname, join
+>>> ptr  # doctest: +ELLIPSIS
+<pytrms.instrument.IdleInstrument object at 0x...>
 
-import pandas as pd
-
-
-# optional
-batch = [pytrms.load(file) for file in files]
-from operator import attrgetter
-batch = sorted(batch, key=attrgetter('timezero'))
-
-
-# optional
-print([name for name in traces.columns if 'H2O' in name])
-
-
-folder = 'D:/Data/one_minute_each'
-
-for i in range(10):
-    measurement = ptr.measure(folder, 'localhost')
-    measurement.start()
-    measurement.wait(60, 'measuring for one minute...')
-    measurement.stop()
 ```
 
-## Postprocessing and Pandas support
-
-For simple analysis tasks, use the Python package to read and analyse the *hdf5*
-files. Traces are available as `Pandas.DataFrame`.
-
-```python
-import glob
-import pandas as pd
-import pytrms
-
-batch = []
-for filename in glob.rec('D:/Data/my_experiment/*.h5'):
-    batch.append(pytrms.Measurement(filename))
-
-averages = []
-for measurement in batch:
-    dataframe = measurement.traces
-    dataframe.write_csv(measurement.path + '_avg.tsv', sep='\t')
-    averages.append(dataframe.avg())
-
-pd.concat(averages).write_csv('grand_average.tsv', sep='\t')
-```
-
-## Online analysis in real-time
+## Online analysis in real-time (TODO)
 
 The `Measurement` can register callback functions that are executed on every
 cycle with the current trace data:
@@ -124,7 +147,7 @@ print(meas)  # prints FinishedMeasurement
 ## Getting started
 
 Download and install the latest Python version if you have not done so. **Ionicon**
-recommends to [download Python 3.9 for Windows](https://www.python.org/ftp/python/3.9.12/python-3.9.12-amd64.exe).
+recommends to [download Python 3.8 for Windows](https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe).
 This will install the Python executable along with the package manager *pip*. 
 Using *pip* is the preferred way to get the latest version of *PyTRMS*, but other
 solutions like *Anaconda* should also work. In a terminal type
@@ -138,9 +161,6 @@ time to upgrade to the newest version.
 
 
 ### Running the examples
-
-This assumes you have a **Ionicon PTR-MS** connected to your PC and running the 
-**ioniTOF** server with the **Ionicon webAPI**. 
 
 Download and extract the examples folder (by clicking on `Code` and selecting
 `Download ZIP` from the dropdown menu).
@@ -159,10 +179,19 @@ use any python command in this virtual environment, simply prefix it with `poetr
 for example like this:
 `> poetry run python examples\breath_tracking.py`
 
-Without poetry, create and activate a fresh virtual environment with
-`> python -m venv test-pytrms`
-`> .\test-pytrms\bin\activate`
-then install the requirements:
-`> python -m pip install -r examples\REQUIRES.txt`
+Without poetry, create and activate a fresh virtual environment, then install the
+requirements:
+```bash
+> python -m venv test-pytrms
+> .\test-pytrms\bin\activate
+> python -m pip install -r examples\REQUIRES.txt
+```
+
 You may now run the examples like this:
-`> python examples\breath_tracking.py`
+```bash
+> python examples\breath_tracking.py
+```
+
+Note, that the online examples assume that you have a **Ionicon PTR-MS** connected to
+your PC and running the which is running a **ioniTOF** server with the **Ionicon webAPI**. 
+
