@@ -15,7 +15,11 @@ measurement.
 ```python
 >>> import pytrms
 
-import pytrms
+>>> m = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
+>>> import pytrms
+>>> m.filename
+'examples/data/peter_emmes_2022-03-31_08-51-13.h5'
+
 from os.path import basename, splittext, dirname, join
 
 import pandas as pd
@@ -145,4 +149,20 @@ If something is not working correctly, the setup may be broken.
 Repeat the steps from the [Getting started](https://github.com/ionicon-analytik/PyTRMS#getting-started)
 section and make sure to use the default options.
 
+For testing purposes it is strongly recommended to install the `pytrms` package in a fresh
+virtual environment, separated from the system-wide installed Python packages.
 
+If you have installed [Python Poetry](https://python-poetry.org/docs/#osx--linux--bashonwindows-install-instructions), 
+managing the dependencies is a breeze. In the pytrms folder type `poetry install` to
+install the `pytrms` package and its dependencies in a fresh virtual environment. To then
+use any python command in this virtual environment, simply prefix it with `poetry run`,
+for example like this:
+`> poetry run python examples\breath_tracking.py`
+
+Without poetry, create and activate a fresh virtual environment with
+`> python -m venv test-pytrms`
+`> .\test-pytrms\bin\activate`
+then install the requirements:
+`> python -m pip install -r examples\REQUIRES.txt`
+You may now run the examples like this:
+`> python examples\breath_tracking.py`
