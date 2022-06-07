@@ -30,7 +30,7 @@ def breath_tracker(track_signal, percent_max = 0.4):
 
 if __name__ == '__main__':
 
-    patient = 'peter'
+    patient = 'peter_emmes'
     files = glob(f'**/{patient}_*.h5', recursive=True)
     
 
