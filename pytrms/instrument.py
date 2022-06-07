@@ -130,9 +130,11 @@ class IdleInstrument(Instrument):
         # the safest way is to not send a path at all and start a 'Quick' measurement.
         # but if the server is the local machine, we do our best to verify the path:
         if path and self.is_local():
-            home = os.path.dirname
-            base = os.path.basename
+            home = os.path.dirname(path)
             os.makedirs(home, exist_ok=True)
+            base = os.path.basename(path)
+            if not base:
+                base = '%Y-%m-%d_%H-%M-%S.h5'
             base = time.strftime(base)
             path = os.path.join(home, base)
             if os.path.exists(path):

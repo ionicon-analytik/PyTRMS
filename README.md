@@ -10,17 +10,13 @@ For simple analysis tasks use the `PyTRMS` Python package to read and analyse Io
 Python package is the de-facto standard for data analysis. Use `PyTRMS` to load the
 traces directly into a `Pandas.DataFrame`.
 
+In the following example, the traces (i.e. timeseries data) is loaded from a datafile. We are looking for traces containing the term 'H2O' and print out some statistics:
+
 ```python
 >>> import pytrms
 >>> import pandas as pd
 
 >>> measurement = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
->>> measurement.filename
-'examples/data/peter_emmes_2022-03-31_08-51-13.h5'
-
->>> measurement.timezero
-Timestamp('2022-03-31 06:51:13.415745735')
-
 >>> traces = measurement.get_traces('concentration', index='abs_time')
 >>> water_columns = [col for col in traces.columns if 'H2O' in col]
 >>> for col_name in sorted(water_columns): print(col_name)
@@ -51,13 +47,15 @@ max    1476.455444  2872.100098  9476.558594
 
 ```
 
+When analysing a bunch of datafiles, we can leverage the full power of Python to
+collect files from a directory tree and use sorting functions to sort our batch e.g.
+by the start time:
 
 ```python
 >>> from glob import iglob
 >>> from operator import attrgetter
 
 >>> loader = (pytrms.load(file) for file in iglob('examples/data/*.h5'))
-
 >>> batch = sorted(loader, key=attrgetter('timezero'))
 >>> for measurement in batch: print(measurement.filename)
 examples/data/peter_emmes_2022-03-31_08-51-13.h5
@@ -70,8 +68,8 @@ examples/data/peter_emmes_2022-03-31_09-29-40.h5
 
 ## Lab automation
 
-Write simple Python scripts to automate your measurement process and get repeatable
-results.
+When performing many consecutive and repetitive measurements, it is desirable to get
+repeatable results. With the `PyTRMS` package, measurements can be easily scripted.
 
 For example, perform ten measurements of one minute each and save the datafiles in a
 folder. The filename is automatically set to the timestamp at the start of the
@@ -79,13 +77,28 @@ measurement.
 
 ```python
 >>> import pytrms
->>> from pytrms.testing import connect_ as connect
+>>> from pytrms.testing import connect_ as connect  # (for testing)
 
+# initialize a connection to a PTR instrument server
+# (when connecting to an instrument use `pytrms.connect(..)`):
 >>> ptr = connect('localhost')  # doctest: +ELLIPSIS
 <pytrms.instrument.BusyInstrument object at 0x...>
 <pytrms.instrument.IdleInstrument object at 0x...>
 
 >>> ptr  # doctest: +ELLIPSIS
+<pytrms.instrument.IdleInstrument object at 0x...>
+
+# the instrument is idle, let's start a measurement:
+>>> ptr.start('/tmp/pytrms-test/')  # doctest: +ELLIPSIS
+<pytrms.instrument.BusyInstrument object at 0x...>
+<pytrms.instrument.RunningInstrument object at 0x...>
+
+>>> ptr.wait(1, 'collecting data for a humble second...')
+collecting data for a humble second...
+
+# enough, let's stop the measurement:
+>>> ptr.stop()  # doctest: +ELLIPSIS
+<pytrms.instrument.BusyInstrument object at 0x...>
 <pytrms.instrument.IdleInstrument object at 0x...>
 
 ```
@@ -169,12 +182,12 @@ If something is not working correctly, the setup may be broken.
 Repeat the steps from the [Getting started](https://github.com/ionicon-analytik/PyTRMS#getting-started)
 section and make sure to use the default options.
 
-For testing purposes it is strongly recommended to install the `pytrms` package in a fresh
+For testing purposes it is strongly recommended to install the `PyTRMS` package in a fresh
 virtual environment, separated from the system-wide installed Python packages.
 
 If you have installed [Python Poetry](https://python-poetry.org/docs/#osx--linux--bashonwindows-install-instructions), 
 managing the dependencies is a breeze. In the pytrms folder type `poetry install` to
-install the `pytrms` package and its dependencies in a fresh virtual environment. To then
+install the `PyTRMS` package and its dependencies in a fresh virtual environment. To then
 use any python command in this virtual environment, simply prefix it with `poetry run`,
 for example like this:
 `> poetry run python examples\breath_tracking.py`
