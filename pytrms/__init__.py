@@ -46,7 +46,7 @@ def connect(host='localhost', port=8002):
         inst = Instrument(_client, _buffer)
     except PTRConnectionError as exc:
         print(exc)
-        return None
+        inst = None
 
     return inst
 
