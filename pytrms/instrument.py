@@ -37,7 +37,8 @@ class Instrument:
             buffer.start()
         # ..and synchronize the PTR-instrument state with this Python object:
         Instrument._new_state(inst, BusyInstrument)
-        if buffer.is_idle:
+        buffer.wait_for_connection(timeout=3)  # may raise PTRConnectionError!
+        if buffer.is_idle():
             Instrument._new_state(inst, IdleInstrument)
         else:
             Instrument._new_state(inst, RunningInstrument)

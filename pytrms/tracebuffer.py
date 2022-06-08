@@ -7,7 +7,7 @@ from threading import Thread, Condition
 
 import pandas as pd
 
-from .helpers import convert_labview_to_posix
+from .helpers import convert_labview_to_posix, PTRConnectionError
 
 
 def parse(response, trace='raw'):
@@ -28,7 +28,7 @@ class TraceBuffer(Thread):
     poll = 0.2  # seconds
 
     class State(Enum):
-        UNKNOWN = -1
+        CONNECTING = -1
         IDLE = 0
         ACTIVE = 1
 
@@ -39,21 +39,41 @@ class TraceBuffer(Thread):
         self.daemon = True
         self.client = client
         self.queue = queue.Queue()
-        self.state = TraceBuffer.State.UNKNOWN
+        self.state = TraceBuffer.State.CONNECTING
         self._cond = Condition()
 
-    @property
-    def is_idle(self):
-        while self.state == TraceBuffer.State.UNKNOWN:
-            time.sleep(0.01)
+    def is_connected(self):
+        return self.state != TraceBuffer.State.CONNECTING
 
+    def is_idle(self):
         return self.state == TraceBuffer.State.IDLE
 
+    def wait_for_connection(self, timeout=5):
+        '''
+        will raise a PTRConnectionError if not connected after `timeout` 
+        '''
+        waited = 0
+        dt = 0.01
+        while not self.is_connected():
+            waited += dt
+            if waited > timeout:
+                raise PTRConnectionError('no connection to instrument')
+            time.sleep(dt)
+
     def run(self):
-        last = -753  # the year Rome was founded
+        last = -753  # the year Rome was founded is never a valid cycle
         while True:
+            if not self.is_connected():
+                time.sleep(self.poll)
+                continue
+
             with self._cond:  # .acquire()`s the underlying lock
                 raw = self.client.get_traces()
+                #try:
+                #except PTRConnectionError as exc:
+                #    print(exc)
+                #    break
+
                 jsonized = json.loads(raw)
                 ts = jsonized['TimeCycle']['AbsTime']
                 oc = jsonized['TimeCycle']['OverallCycle']

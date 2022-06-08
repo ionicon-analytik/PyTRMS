@@ -27,7 +27,7 @@ _buffer = None
 def connect(host='localhost', port=8002):
     '''Connect a client to a running measurement server.
 
-    returns an Instrument.
+    returns an `Instrument` if connected successfully, `None` if not.
     '''
     from .clients.ioniclient import IoniClient
     from .tracebuffer import TraceBuffer
