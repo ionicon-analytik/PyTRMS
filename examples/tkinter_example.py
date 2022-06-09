@@ -15,18 +15,6 @@ except ModuleNotFoundError:
     import pytrms
 
 import tkinter as tk
-from tkinter import (
-        Button,
-        END,
-        Entry,
-        Frame,
-        Label,
-        Menu,
-        messagebox,
-        StringVar,
-        Text,
-        Tk
-)
 
 import matplotlib
 matplotlib.use('TKAgg')
@@ -35,19 +23,21 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import (
         FigureCanvasTkAgg,
         NavigationToolbar2Tk
-        )
+)
+
+from numpy.random import random
 
 
-class MainFrame(Frame):
+class MainFrame(tk.Frame):
 
     def __init__(self, master=None):
-        Frame.__init__(self, master)   
+        tk.Frame.__init__(self, master)   
         self.master = master
         self.ptr = None
 
-        self.host_var = StringVar()
-        self.port_var = StringVar()
-        self.info_string = StringVar()
+        self.host_var = tk.StringVar()
+        self.port_var = tk.StringVar()
+        self.info_string = tk.StringVar()
 
         self.init_window()
 
@@ -60,41 +50,53 @@ class MainFrame(Frame):
 
         self.master.config(menu=self.make_menu())
 
-        label1 = Label(self.master, text="IP Address:")
+        label1 = tk.Label(self.master, text="IP Address:")
         label1.pack()
         self.host_var.set('localhost')
-        txt = Entry(self.master, textvariable=self.host_var)
+        txt = tk.Entry(self.master, textvariable=self.host_var)
         txt.pack()
 
-        label2 = Label(self.master, text='Port:')
+        label2 = tk.Label(self.master, text='Port:')
         label2.pack()
         self.port_var.set('8002')
-        txt = Entry(self.master, textvariable=self.port_var)
+        txt = tk.Entry(self.master, textvariable=self.port_var)
         txt.pack()
 
-        buttonConnect = Button(self.master, text="Connect",command=self.connect)
+        buttonConnect = tk.Button(self.master, text="Connect",command=self.connect)
         buttonConnect.pack()
 
-        buttonDisconnect = Button(self.master, text="Disconnect",command=self.disconnect)
+        buttonDisconnect = tk.Button(self.master, text="Disconnect",command=self.disconnect)
         buttonDisconnect.pack()
 
+        buttonPlot = tk.Button(self.master, text="Plot",command=self.plot_smth)
+        buttonPlot.pack()
+
         self.info_string.set("")
-        info_label = Label(self.master, textvariable=self.info_string)
+        info_label = tk.Label(self.master, textvariable=self.info_string)
         info_label.pack()
+
+        self.figure = Figure(figsize=(3,2), dpi=100)
+        figure_canvas = FigureCanvasTkAgg(self.figure, self)
+        #NavigationToolbar2Tk(figure_canvas, self)
+        self.axes = self.figure.add_subplot()
+        self.axes.set_title('my title')
+        self.axes.set_ylim([0,1])
+        self.line, = self.axes.plot(random(5))
+        figure_canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
     
     def make_menu(self):
-        menu = Menu(self.master)
+        menu = tk.Menu(self.master)
 
-        file_menu = Menu(menu)
+        file_menu = tk.Menu(menu)
         file_menu.add_command(label="Exit", command=self.client_exit)
 
         menu.add_cascade(label="File", menu=file_menu)
 
-        mb_menu = Menu(menu)
-        mb_menu.add_command(label="Connect", command=self.connect)
-        mb_menu.add_command(label="Disconnect", command=self.disconnect)
+        webAPI_menu = tk.Menu(menu)
+        webAPI_menu.add_command(label="Connect", command=self.connect)
+        webAPI_menu.add_command(label="Disconnect", command=self.disconnect)
 
-        menu.add_cascade(label="Modbus", menu=mb_menu)
+        menu.add_cascade(label="webAPI", menu=webAPI_menu)
 
         return menu
 
@@ -116,30 +118,30 @@ class MainFrame(Frame):
         self.info_string.set(str(self.ptr))
 
     def disconnect(self):
-        self.plot_smth()
-        return 
-
         self.ptr = None
         self.info_string.set('disconnected')
 
     def plot_smth(self):
-        figure = Figure(figsize=(3,2), dpi=100)
 
-        figure_canvas = FigureCanvasTkAgg(figure, self)
+        self.line.set_ydata(random(5))
+        # The data limits are not updated automatically when artist data are changed after
+        # the artist has been added to an Axes instance. In that case, use
+        # matplotlib.axes.Axes.relim() prior to calling autoscale_view.
+        self.axes.relim()
+        # Autoscale the view limits using the data limits (if `tight=True`, only expand
+        # the axis limits using the margins):
+        #self.axes.axes.autoscale_view(tight=True, scalex=True, scaley=True)
+        # If the views of the Axes are fixed, e.g. via set_xlim, they will not be changed
+        # by autoscale_view(). See matplotlib.axes.Axes.autoscale() for an alternative.
 
-        NavigationToolbar2Tk(figure_canvas, self)
+        # Update the figure and react to events:
+        self.figure.canvas.draw()
+        self.figure.canvas.flush_events()
 
-        axes = figure.add_subplot()
-
-        
-        axes.plot([3,4,7,1,2,5])
-        axes.set_title('my title')
-
-        figure_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=1)
 
 if __name__ == '__main__':
 
-    root = Tk()
+    root = tk.Tk()
     root.geometry("640x480")
     
     app = MainFrame(root)
