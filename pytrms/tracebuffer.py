@@ -63,9 +63,10 @@ class TraceBuffer(Thread):
     def run(self):
         last = -753  # the year Rome was founded is never a valid cycle
         while True:
-            if not self.is_connected():
-                time.sleep(self.poll)
-                continue
+            #TODO :: das kann ja gar nicht funktionieren!?!?
+            #if not self.is_connected():
+            #    time.sleep(self.poll)
+            #    continue
 
             with self._cond:  # .acquire()`s the underlying lock
                 raw = self.client.get_traces()
