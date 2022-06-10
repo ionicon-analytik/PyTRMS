@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pytrms"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python bundle for proton-transfer reaction mass-spectrometry (PTR-MS)."
 authors = ["Moritz Koenemann <github@lefitz.net>"]
 license = "GPL-2.0"
