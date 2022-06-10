@@ -115,7 +115,7 @@ class MainFrame(tk.Frame):
             self.disconnect()
             return 
 
-        self.info_string.set(str(self.ptr))
+        self.info_string.set(str(self.ptr.get('TPS_Push_H')))
 
     def disconnect(self):
         self.ptr = None

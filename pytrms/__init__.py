@@ -37,10 +37,10 @@ def connect(host='localhost', port=8002):
     global _client
     global _buffer
 
-    if _client is None:
-        _client = IoniClient(host, port)
-    if _buffer is None:
-        _buffer = TraceBuffer(_client)
+    #if _client is None:
+    _client = IoniClient(host, port)
+    #if _buffer is None:
+    _buffer = TraceBuffer(_client)
 
     try:
         inst = Instrument(_client, _buffer)
