@@ -5,7 +5,15 @@ from functools import partial, lru_cache
 import h5py
 import pandas as pd
 
-from .helpers import convert_labview_to_posix
+# make this file %run'nable from IPython:
+try:
+    from .helpers import convert_labview_to_posix
+except ImportError:  # attempted relative import with no known parent package
+    from pytrms.helpers import convert_labview_to_posix
+
+
+class GroupNotFoundError(KeyError):
+    pass
 
 
 class H5Reader(Iterable):
@@ -58,43 +66,80 @@ class H5Reader(Iterable):
     
         return dataloc.intersection(infoloc)
     
-    def read_datainfo(self, groupname):
-        group = self.hf[groupname]
-        data = group['Data']
-        info = group['Info']
-        names = [b.decode('latin1') for b in info[0,:]]
+    def _read_datainfo(self, group, prefix=''):
+        # parse a "Data-Info" group into a pd.DataFrame
+        # 'group' may be a hdf5 group or a string-location to a group
+        if isinstance(group, str):
+            group = self.hf[group]
+        data = group[prefix + 'Data']
+        info = group[prefix + 'Info']
+        if info.ndim > 1:
+            info = info[0,:]
+        if hasattr(info[0], 'decode'):
+            info = [b.decode('latin1') for b in info]
     
-        return pd.DataFrame(data, columns=names)
+        return pd.DataFrame(data, columns=info)
     
     def get_addtraces(self):
         frames = []
         for loc in self.locate_datainfo():
-            frames.append(self.read_datainfo(loc))
+            frames.append(self._read_datainfo(loc))
     
         return pd.concat(frames, axis='columns')
     
     def get_traces(self, kind='raw', force_original=False):
-        tracedata = self.hf.get('PROCESSED/TraceData')
-        lut = {
-            'con': 'ConcentrationsData',
-            'raw': 'RawData',
-            'cor': 'CorrectedData',
-        }
-        if tracedata is None:
-            tracedata = self.hf['TRACEdata']
-            lut = {
-                'con': 'TraceConcentration',
-                'raw': 'TraceRaw',
-                'cor': 'TraceCorrected',
-            }
-
-        loc = lut[kind[:3].lower()]
+        if force_original:
+            return _read_traces(kind)
         try:
+            return self._read_processed_traces(kind)
+        except GroupNotFoundError:
+            return _read_traces(kind)
+
+    def _read_processed_traces(self, kind):
+        # error conditions:
+        # 1) 'kind' is not recognized -> ValueError
+        # 2) no 'PROCESSED/TraceData' group -> GroupNotFoundError
+        # 3) expected group not found -> KeyError (file is not supported yet)
+        lut = {
+            'con': 'Concentrations',
+            'raw': 'Raw',
+            'cor': 'Corrected',
+        }
+        tracedata = self.hf.get('PROCESSED/TraceData')
+        if tracedata is None:
+            raise GroupNotFoundError()
+
+        try:
+            prefix = lut[kind[:3].lower()]
+        except KeyError as exc:
+            msg = ("Unknown trace-type! `kind` must be one of 'raw', 'corrected' or 'concentration'.")
+            raise ValueError(msg) from exc
+
+        try:
+            data = self._read_datainfo(tracedata, prefix=prefix)  # may raise KeyError
+            pt = self._read_datainfo(tracedata, prefix='PeakTable')  # may raise KeyError
+            labels = [b.decode('latin1') for b in pt['label']]
+        except KeyError as exc:
+            raise KeyError(f'unknown group {exc}. filetype is not supported yet.') from exc
+
+        mapper = dict(zip(data.columns, labels))
+        data.rename(columns=mapper)
+
+        return data
+
+    def _read_traces(self, kind):
+        lut = {
+            'con': 'TraceConcentration',
+            'raw': 'TraceRaw',
+            'cor': 'TraceCorrected',
+        }
+        tracedata = self.hf['TRACEdata']
+        try:
+            loc = lut[kind[:3].lower()]
             data = tracedata[loc]
         except KeyError as exc:
-            msg = ("Unknown trace-type! `kind` must be one of 'raw', 'corrected' or "
-                   "'concentration'.")
-            raise KeyError(msg) from exc
+            msg = ("Unknown trace-type! `kind` must be one of 'raw', 'corrected' or 'concentration'.")
+            raise ValueError(msg) from exc
     
         info = self.hf['TRACEdata/TraceInfo']
         labels = [b.decode('latin1') for b in info[1,:]]
