@@ -67,7 +67,12 @@ class Instrument:
 
     def get(self, varname):
         """Get the current value of a setting."""
-        return self._client.get(varname)
+        # TODO :: this is not an interface implementation
+        import json
+        raw = self._client.get(varname)
+        jobj = json.loads(raw)
+
+        return jobj[0]['Act']['Real']
 
     def set(self, varname, value):
         """Set a variable to a new value."""
