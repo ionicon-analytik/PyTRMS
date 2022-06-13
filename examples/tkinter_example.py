@@ -78,10 +78,10 @@ class MainFrame(tk.Frame):
         self.figure = Figure(figsize=(3,2), dpi=100)
         figure_canvas = FigureCanvasTkAgg(self.figure, self)
         #NavigationToolbar2Tk(figure_canvas, self)
-        self.axes = self.figure.add_subplot()
-        self.axes.set_title('my title')
-        self.axes.set_ylim([0,1])
-        self.line, = self.axes.plot(random(5))
+        self.axis = self.figure.add_subplot()
+        self.axis.set_title('my title')
+        #self.axis.set_ylim([0,1])
+        self.line, = self.axis.plot(random(5))
         figure_canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
     
     def make_menu(self):
@@ -122,15 +122,20 @@ class MainFrame(tk.Frame):
         self.info_string.set('disconnected')
 
     def plot_smth(self):
+        if self.ptr is None:
+            return
 
-        self.line.set_ydata(random(5))
+        names = ['TPS_Pull_L', 'TPS_Pull_L', 'TPS_Pull_L', 'TPS_Pull_L', 'TPS_Push_H']
+        values = list(map(self.ptr.get, names))
+
+        self.line.set_ydata(values)
         # The data limits are not updated automatically when artist data are changed after
         # the artist has been added to an Axes instance. In that case, use
         # matplotlib.axes.Axes.relim() prior to calling autoscale_view.
-        self.axes.relim()
+        self.axis.relim()
         # Autoscale the view limits using the data limits (if `tight=True`, only expand
         # the axis limits using the margins):
-        #self.axes.axes.autoscale_view(tight=True, scalex=True, scaley=True)
+        self.axis.axes.autoscale_view(tight=True, scalex=True, scaley=True)
         # If the views of the Axes are fixed, e.g. via set_xlim, they will not be changed
         # by autoscale_view(). See matplotlib.axes.Axes.autoscale() for an alternative.
 
