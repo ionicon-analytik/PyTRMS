@@ -26,15 +26,14 @@ def connect(host='localhost', port=8002):
 
     returns an `Instrument` if connected successfully, `None` if not.
     '''
-    from .factory import *
+    from .factory import make_client, make_buffer
     from .instrument import Instrument
     from .helpers import PTRConnectionError
 
-    _client = make_client(host, port, method='webAPI')
     _buffer = make_buffer(host, port, method='webAPI')
 
     try:
-        inst = Instrument(_client, _buffer)
+        inst = Instrument(_buffer)
     except PTRConnectionError as exc:
         print(exc)
         inst = None
