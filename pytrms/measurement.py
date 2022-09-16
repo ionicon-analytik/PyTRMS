@@ -6,6 +6,8 @@ from collections.abc import Iterable
 class Measurement(Iterable):
     """Base class for PTRMS-measurements or batch processing.
 
+    ---------- OLD ideas ------------
+
     Every instance is associated with exactly one `.filename` to a datafile.
     The start time of the measurement is given by `.timezero`.
 
@@ -13,6 +15,79 @@ class Measurement(Iterable):
     In the online case, this would slowly produce the current trace, one after another.
     In the offline case, this would quickly iterate over the traces in the given
     measurement file.
+
+    ---------- NEW ideas ------------
+
+    A 'Measurement'...
+    - comprises of one or more consecutive datafiles (i.e. there is no gap in time).
+    - is in one of three states: Preparing, Running, Finished.
+    - can be scripted while preparing, but cannot be changed once running (compare this
+      to an 'Instrument', which remains in control as long as the connection is upheld).
+    - only one 'Measurement' can run on one 'Instrument' at a time (but several can be
+      queued).
+
+
+    >>> ptr = connect('localhost')
+    >>> m = Measurement(ptr)  # no!
+    >>> m = Measurement()
+
+    >>> m.run(ptr)  # ?
+    >>> ptr.run(m)  # !
+
+    >>> ptr.run_repeated(m, 5)
+    >>> ptr.run([m, m2, meas, Measurement()])
+    >>> ptr.run()
+    >>> ptr.run_quick()
+
+
+    >>> m.datafiles
+    []
+
+    >>> m.current_file  # not accessible...
+    >>> ptr.current_file
+    None
+
+    >>> m.wait()  # doesn't make sense
+    AttributeError
+
+    >>> ptr.wait_until(cycle=123)  # blocks until cycle 123 comes along (raise if that's not going to happen)
+    ...
+    >>> ptr.wait_for(cycles=123)  # blocks for 123 cycles...
+    ...
+
+    >>> m.schedule({'DPS_Udrift': 432}, cycle=15, repeat_every=15, repeat_until=60 [,repeat_for=4])
+    >>> m.generate_schedule()
+    <generator>
+
+    >>> list(m.generate_schedule())
+    {'cycle': 15, 'updates': {'DPS_Udrift': 432}}
+    {'cycle': 30, 'updates': {'DPS_Udrift': 432}}
+    {'cycle': 45, 'updates': {'DPS_Udrift': 432}}
+    {'cycle': 60, 'updates': {'DPS_Udrift': 432}}
+
+    When the measurement has been prepared, let the measurement run. This will
+    block the execution of the script at this point! Internally, the control is
+    given to the 'Instrument':
+
+    >>> m.run_forever()  # call this only when the measurement has been prepared
+    ...
+    >>> m.run()  # this implies that the Measurement is predefined
+    >>> m  # the Instrument is not Busy, the Measurement is!!
+    Running
+    >>> m.run_for(seconds=120)  # blocks for two minutes!
+    ...
+
+    # ..  or the measurementwas stopped for some reason
+
+
+    >>> ptr.get_schedule()  # same in green, but read out the instrument buffer
+
+    >>> m.blocks(marker='AddData/PTR_Instrument/DPS_Udrift')  # every set of instrument parameters forms a 'block', until any parameter changes
+    <generator>
+
+    >>> m.blocks(marker=pytrms.markers.Periodic(20))
+    <generator>
+
     """
 
     def is_local(self):
