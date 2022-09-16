@@ -11,25 +11,24 @@ class Instrument:
     instrument can be stopped. But trying to start a measurement twice will raise an
     exception (RuntimeError).
 
-    This is a singleton class, i.e. it is only instanciated once per script.
+    Note, that for every client PTR instrument there is only one instance of this class.
     '''
 
-    __instance = None
+    __buffer_instances = {}
 
     def _new_state(self, newstate):
         self.__class__ = newstate
         print(self)
 
-    def __new__(cls, client, buffer):
+    def __new__(cls, buffer):
         # make this class a singleton
-        if cls._Instrument__instance is not None:
+        if buffer in cls._Instrument__buffer_instances:
             # quick reminder: If __new__() does not return an instance of cls, then the
             # new instance’s __init__() method will *not* be invoked:
-            return cls._Instrument__instance
-            #raise Exception('the Instrument class can only have one instance')
+            return cls._Instrument__buffer_instances[buffer]
 
         inst = object.__new__(cls)
-        cls._Instrument__instance = inst
+        cls._Instrument__buffer_instances[buffer] = inst
 
         # launch the buffer's thread..
         if not buffer.is_alive():
@@ -37,18 +36,24 @@ class Instrument:
             buffer.start()
         # ..and synchronize the PTR-instrument state with this Python object:
         Instrument._new_state(inst, BusyInstrument)
-        if buffer.is_idle:
+        try:
+            buffer.wait_for_connection(timeout=3)  # may raise PTRConnectionError!
+        except:
+            del cls._Instrument__buffer_instances[buffer]
+            raise
+
+        if buffer.is_idle():
             Instrument._new_state(inst, IdleInstrument)
         else:
             Instrument._new_state(inst, RunningInstrument)
 
         return inst
 
-    def __init__(self, client, buffer):
+    def __init__(self, buffer):
         # dispatch all blocking calls to the client
         # and fetch current data from the buffer!
-        self._client = client
         self._buffer = buffer
+        self._client = buffer.client
 
     def is_local(self):
         """Returns True if files are written to the local machine."""

@@ -1,11 +1,12 @@
 # PyTRMS
 
 This is the official **Ionicon** Python toolbox for proton-transfer reaction mass-spectrometry (PTR-MS). 
-
+ 
 Install from `PyPI` (see also [getting started](https://github.com/ionicon-analytik/PyTRMS#getting-started)):
 ```bash
 >> pip install -U pytrms
 ```
+ 
 
 ## Postprocessing (with Pandas support)
 
@@ -107,6 +108,59 @@ collecting data for a humble second...
 
 ```
 
+## Online analysis in real-time (TODO)
+
+The `Measurement` can register callback functions that are executed on every
+cycle with the current trace data:
+
+```python
+import pytrms
+
+m = pytrms.measure('localhost')
+
+def oxygen_watchdog(meas, trace):
+    if trace['O2_level'] < 10_000:
+        print('oxygen level critical! closing valve 1...')
+        meas.set('Valve_1', 0)
+
+def detect_threshold(meas, trace):
+    if trace['H2o_level'] > 20_000:
+        print('water level above threshold! aborting.')
+        meas.stop()
+
+ema = 1
+alpha = 0.2
+file = 'C:/Temp/m_42_avg.dat'
+def moving_average(meas, trace):
+    ema = alpha * trace['m_42'] + (1-alpha) * ema
+    with open(file, 'a') as f:
+        f.write(str(ema) + '\n')
+    
+m.register_callback(oxygen_watchdog)
+m.register_callback(detect_threshold)
+m.register_callback(moving_average)
+
+m.start()
+
+```
+
+## Use as a context manager (TODO)
+
+The `Measurement` serves as a context in which the experiment is running:
+
+```python
+import pytrms
+
+meas = pytrms.measure(host='localhost')
+
+print(meas)  # prints PrepareMeasurement
+
+with meas as running:
+    print(meas)  # prints RunningMeasurement
+    meas.wait(3)
+
+print(meas)  # prints FinishedMeasurement
+```
 
 ## Getting started
 
