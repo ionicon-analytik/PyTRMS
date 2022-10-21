@@ -1,22 +1,10 @@
 """Test of module pytrms.modbus
 
 """
-import sys, os
-from os.path import abspath, join, dirname
-import platform
 import pytest
-from unittest.mock import *
 
-import logging
-import itertools
-from numpy import array
-from numpy.testing import assert_allclose
-
-sys.path.insert(0, abspath(join(dirname(__file__), '..')))
-sys.path.insert(0, abspath(join(dirname(__file__), '..', 'pytrms')))
-
-
-from pytrms.modbus import IoniconModbus
+import pytrms.modbus
+IoniconModbus = pytrms.modbus.IoniconModbus
 
 
 class TestIoniconModbus:
