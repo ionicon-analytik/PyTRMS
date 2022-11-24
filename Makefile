@@ -45,6 +45,9 @@ bdist_wheel: icapi.cp38-win_amd64.pyd
 	:: building package $(TARGET)...
 	poetry build
 
+ext: icapi.cp38-win_amd64.pyd
+	
+
 icapi.cp38-win_amd64.pyd: src/icapimodule.c
 	:: building package $(TARGET)...
 	:: $(PYTHON) setup.py $@
