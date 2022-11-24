@@ -51,22 +51,22 @@ extra_compile_args = [
     # '/DDEBUG',
 ]
 
-#extensions=[
-#    Extension('icapi',
-#              ['src/icapimodule.c'],
-#              libraries=['IcAPI_c_%s' % arch],
-#              library_dirs=['lib/'],
-#              include_dirs=[
-#                  'include',
-#                  np_get_include(),
-#                  ],
-#              extra_compile_args=extra_compile_args,
-#              ),
-#]
+extensions=[
+    Extension('icapi',
+              ['src/icapimodule.c'],
+              libraries=['IcAPI_c_%s' % arch],
+              library_dirs=['lib/'],
+              include_dirs=[
+                  'include',
+                  np_get_include(),
+                  ],
+              extra_compile_args=extra_compile_args,
+              ),
+]
 
 package_data = {
     'pytrms': [
-        'data/par_ID_list.txt',
+        '../par_ID_list.txt',
         'data/IoniTofPrefs.ini',
     ],
 }
@@ -82,7 +82,7 @@ setup_kwargs = {
     'url': 'https://www.ionicon.com/',
     'packages': packages,
     'package_data': package_data,
-#    'ext_modules': extensions,
+    'ext_modules': extensions,
     'install_requires': install_requires,
     'python_requires': '>=3.8,<4.0',
 }
