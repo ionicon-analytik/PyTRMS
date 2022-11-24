@@ -68,12 +68,16 @@ class TraceBuffer(Thread):
             #    time.sleep(self.poll)
             #    continue
 
+            time.sleep(self.poll)
+
             with self._cond:  # .acquire()`s the underlying lock
                 raw = self.client.get_traces()
                 #try:
                 #except PTRConnectionError as exc:
                 #    print(exc)
                 #    break
+                if not len(raw):
+                    continue
 
                 jsonized = json.loads(raw)
                 ts = jsonized['TimeCycle']['AbsTime']

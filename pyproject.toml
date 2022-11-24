@@ -4,12 +4,17 @@ version = "0.2.1"
 description = "Python bundle for proton-transfer reaction mass-spectrometry (PTR-MS)."
 authors = ["Moritz Koenemann <moritz.koenemann@ionicon.com>"]
 license = "GPL-2.0"
+include = [
+    "par_ID_list.txt",
+    "pytrms/data/IoniTofPrefs.ini",
+]
 
 [tool.poetry.dependencies]
 python = "^3.8"
 h5py = "^3.6.0"
 requests = "^2.27.1"
 pandas = "^1.4.0"
+pyModbusTCP = "^0.2.0"
 
 [tool.poetry.dev-dependencies]
 ipykernel = "^6.13.1"

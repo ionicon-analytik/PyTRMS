@@ -21,7 +21,7 @@ def load(path):
     return OfflineMeasurement(reader)
 
 
-def connect(host='localhost', port=8002):
+def connect(host='localhost', method='webAPI', port=None):
     '''Connect a client to a running measurement server.
 
     returns an `Instrument` if connected successfully, `None` if not.
