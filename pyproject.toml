@@ -7,6 +7,7 @@ license = "GPL-2.0"
 include = [
     "par_ID_list.txt",
     "pytrms/data/IoniTofPrefs.ini",
+    "*.pyd",
 ]
 
 [tool.poetry.dependencies]
@@ -20,7 +21,9 @@ pyModbusTCP = "^0.2.0"
 ipykernel = "^6.13.1"
 matplotlib = "^3.5.2"
 Sphinx = "^5.3.0"
+Cython = "^0.29.32"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+

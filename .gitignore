@@ -4,6 +4,10 @@
 .tox
 /**/__pycache__
 
+# please do not ignore the lock-file!
+# this is useful for reproducible builds:
+#poetry.lock
+
 *.png
 *.pdf
 
@@ -15,6 +19,7 @@
 **/build
 **/dist
 **/doc/_build
+*.pyd
 *.egg-info
 .eggs
 _build
@@ -25,9 +30,6 @@ report.html
 .coverage
 .coveragerc
 
-poetry.lock
-
 examples/**/*.tsv
 examples/**/*.jpg
 
-**/MAKEFILE
