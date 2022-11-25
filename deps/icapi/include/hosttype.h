@@ -2,7 +2,7 @@
 #define _hosttype_H
 /**
 	NI CONFIDENTIAL
-	(c) Copyright 1990-2018 by National Instruments Corp.
+	(c) Copyright 1990-2015 by National Instruments Corp.
 	All rights reserved.
 
 	@file
@@ -58,15 +58,15 @@ struct Pattern;
 		#else
 			/* Ensure that the _WIN32_WINNT version is adequate. */
 			#if (OpSystem==kMSWin32)
-				#if (_WIN32_WINNT < 0x0601)
+				#if (_WIN32_WINNT < 0x0501)
 					#undef _WIN32_WINNT
-					#define _WIN32_WINNT 0x0601
-				#endif // (_WIN32_WINNT < 0x0601)
+					#define _WIN32_WINNT 0x0501
+				#endif // (_WIN32_WINNT < 0x0501)
 			#else
-				#if (_WIN32_WINNT < 0x0601)
+				#if (_WIN32_WINNT < 0x0600)
 					#undef _WIN32_WINNT
-					#define _WIN32_WINNT 0x0601
-				#endif // (_WIN32_WINNT < 0x0601)
+					#define _WIN32_WINNT 0x0600
+				#endif // (_WIN32_WINNT < 0x0600)
 			#endif // (OpSystem==kMSWin32)
 		#endif
 	#endif /* MSWin_DISABLE_MIN_WINVER_CHECK */

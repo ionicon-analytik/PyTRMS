@@ -1,7 +1,7 @@
 #ifndef _platdefines_H
 #define _platdefines_H
 /*
-	(c) Copyright 1990-2018 by National Instruments Corp.
+	(c) Copyright 1990-2015 by National Instruments Corp.
 	All rights reserved.
 
 
@@ -48,12 +48,10 @@ LabVIEW system options: don't uncomment, the compiler defines these automaticall
 	#define kBeOS		27		/* OBSOLETE */
 	#define kOSF1		28		/* OBSOLETE */
 	#define kVxWorks	29
-	#define kPalmOS		30
-	#define kLinux64	31		/* OBSOLETE: DO NOT USE: UNUSED AND UNDEFINED: PRESERVED FOR DOCUMENTARY PURPOSES ONLY */
+	#define kPalmOS	    30
+	#define kLinux64	31
 	#define kVdk		32
 	#define kRtx		33
-
-	#undef kLinux64				/* This is unused and has never been properly defined or used. */
 
 /* Possible values for WindowSystem */
 	#define kMacWM		1
@@ -381,7 +379,7 @@ LabVIEW system options: don't uncomment, the compiler defines these automaticall
 #define Palm		 	(Compiler==kMetroWerks && OpSystem==kPalmOS)
 #define MWerksPPC		(Compiler==kMetroWerks && ProcessorType==kPPC)
 #define Sparc			(ProcessorType==kSparc)
-#define Linux			(OpSystem==kLinux)
+#define Linux			(OpSystem==kLinux || OpSystem==kLinux64)
 #define PowerPC			(ProcessorType==kPPC)
 #define SVR4			(OpSystem==kSolaris)
 #define VxWorks			(OpSystem==kVxWorks)
@@ -415,7 +413,7 @@ LabVIEW system options: don't uncomment, the compiler defines these automaticall
 	#define ThreadKind kNoThreads
 #endif
 
-#define IsOpSystem64Bit ((OpSystem==kMSWin64) || MacX64 || __x86_64__ || __x86_64 || __LP64__)
+#define IsOpSystem64Bit ((OpSystem==kMSWin64) || (OpSystem==kLinux64) || MacX64 || __x86_64__ || __x86_64 || __LP64__)
 
 #if defined(_WIN32_WCE)
 	#define WinCE 1
@@ -428,12 +426,6 @@ LabVIEW system options: don't uncomment, the compiler defines these automaticall
 	#define FPUASM 1
 #else
 	#define FPUASM 0
-#endif
-
-#if (ProcessorType==kX86) || (ProcessorType==kM68000) || (ProcessorType==kX64)
-	#define UseGetSetIntMacros	1
-#else
-	#define UseGetSetIntMacros	0
 #endif
 
 #endif /* _platdefines_H */

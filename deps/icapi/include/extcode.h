@@ -1,7 +1,7 @@
 #ifndef _extcode_H
 #define _extcode_H
 /**
-	(c) Copyright 1990-2018 by National Instruments Corp.
+	(c) Copyright 1990-2015 by National Instruments Corp.
 	All rights reserved.
 
 	@author National Instruments Corp.
@@ -39,14 +39,10 @@
 #if !defined(_FUNCC)
 	#if MSWin && (ProcessorType == kX86)
 		#define _FUNCC __cdecl
-		/* Used for defining function pointers that use __cdecl */
-		#define _PFUNCC __cdecl
 	#elif (Compiler == kGCC) && Linux && defined(LV_USE_WEAK_LINKAGE)
 		#define _FUNCC __attribute__((weak))
-		#define _PFUNCC
 	#else
 		#define _FUNCC
-		#define _PFUNCC
 	#endif
 #endif
 
@@ -54,14 +50,10 @@
 #if !defined(_FUNCSTDCALL)
 	#if MSWin && (ProcessorType == kX86)
 		#define _FUNCSTDCALL __stdcall
-		/* Used for defining function pointers that use __stdcall */
-		#define _PFUNCSTDCALL __stdcall
 	#elif (Compiler == kGCC) && Linux && defined(LV_USE_WEAK_LINKAGE)
-		#define _FUNCCSTDCALL __attribute__((weak))
-		#define _PFUNCSTDCALL
+		#define _FUNCSTDCALL __attribute__((weak))
 	#else
 		#define _FUNCSTDCALL
-		#define _PFUNCSTDCALL
 	#endif
 #endif
 
@@ -437,10 +429,8 @@ enum {
 
 	ncSocketQueryFailed, /* 126: Failed to query socket state */
 	ncNotInetSocket, /* 127: Not an IP4 internet socket */
-	ncTooManySocketsErr, /* 128: too many open sockets */
 
-    mgPathTooLong,  /* 129: The path is too long for the OS.*/
-	mgErrSentinel,	// 130
+	mgErrSentinel,	// 128
 
 	mgPrivErrBase = 500,	/* Start of Private Errors */
 	mgPrivErrLast = 599,	/* Last allocated in Error DB */
@@ -511,7 +501,7 @@ enum {
 
 /*** Numeric Support Functions and Utilities ***/
 /** @brief These values describe various scalar numeric types. */
-typedef enum { iB=1, iW, iL, iQ, uB, uW, uL, uQ, fS, fD, fX, cS, cD, cX } NumType;
+typedef enum {	iB=1, iW, iL, iQ, uB, uW, uL, uQ, fS, fD, fX, cS, cD, cX } NumType;
 
 #define _NumericTypeCast_(T,v)	NI_STATIC_CAST(T,v)
 #define _NumericTypeCastTwice_(T1,T2,v) _NumericTypeCast_(T1,_NumericTypeCast_(T2,v))
@@ -519,7 +509,7 @@ typedef enum { iB=1, iW, iL, iQ, uB, uW, uL, uQ, fS, fD, fX, cS, cD, cX } NumTyp
 #define HiNibble(x)		_NumericTypeCast_(uInt8,((x)>>4) & 0x0F)
 #define LoNibble(x)		_NumericTypeCast_(uInt8,(x) & 0x0F)
 #define HiByte(x)		_NumericTypeCast_(int8,_NumericTypeCast_(int16,x)>>8)
-#define LoByte(x)		_NumericTypeCast_(int8,x)
+#define LoByte(x)		_NumericTypeCast_(int8,x) 
 #define Word(hi,lo)		((_NumericTypeCast_(int16,hi)<<8) | _NumericTypeCastTwice_(int16, uInt8, lo))
 #define Hi16(x)			_NumericTypeCast_(int16, _NumericTypeCast_(int32, x) >> 16)
 #define Lo16(x)			_NumericTypeCastTwice_(int16, int32, x)
@@ -554,7 +544,7 @@ typedef enum { iB=1, iW, iL, iQ, uB, uW, uL, uQ, fS, fD, fX, cS, cD, cX } NumTyp
 #else
 	#define RTToL(c1,c2,c3,c4)	Cat4Chrs(c4,c3,c2,c1)
 	#define RTToW(c1,c2)		Cat2Chrs(c2,c1)
-	#define IntFrom4Chars(s)	(((_NumericTypeCast_(int32,s)&0x000000ff)<<24)|((_NumericTypeCast_(int32,s)&0x0000ff00)<<8)|(_NumericTypeCast_(uInt32,s)>>24)|((_NumericTypeCast_(int32,s)&0x00ff0000)>>8))
+	#define IntFrom4Chars(s)	((_NumericTypeCast_(int32,s)<<24)|((_NumericTypeCast_(int32,s)&0x0000ff00)<<8)|(_NumericTypeCast_(uInt32,s)>>24)|((_NumericTypeCast_(int32,s)&0x00ff0000)>>8))
 #endif /* NI_BIG_ENDIAN */
 #endif /* NIDL */
 
@@ -735,7 +725,7 @@ TH_REENTRANT EXTERNC int32 _FUNCC PPrintfp(PStr, ConstPStr, ...);
 #ifndef NIDL
 /*** Sort / Search Utilities ***/
 /** @brief Comparison function pointer type definiton. */
-typedef int32 (_PFUNCC *CompareProcPtr)(const void *lhs, const void *rhs);
+typedef int32 (_FUNCC *CompareProcPtr)(const void *lhs, const void *rhs);
 
 /* Avoid conflict with functions in LabWindows CVI that can arise for LabVIEW DLLs used in CVI projects. */
 #ifndef _CVI_

@@ -1,7 +1,7 @@
 #ifndef _fundtypes_H
 #define _fundtypes_H
 /*
-	(c) Copyright 1990-2018 by National Instruments Corp.
+	(c) Copyright 1990-2015 by National Instruments Corp.
 	All rights reserved.
 
 
@@ -14,7 +14,7 @@
 
 /*The MSVC compiler does not define all the C99 types, so define a subset here*/
 #if MSWin
-#  if (defined(_CVI_) && (_CVI_ >= 910)) || (_MSC_VER >= 1900 && (!defined(USE_C99_TYPES) || USE_C99_TYPES == 1))
+#  if defined(_CVI_) && (_CVI_ >= 910)
     /* If we're compiling using CVI, just use their C99 types. */
 #   include <stdint.h>
 #  else
@@ -45,42 +45,15 @@
 
 #ifdef USE_C99_TYPES
 
-#  ifndef _NI_int8_DEFINED_
-    #define _NI_int8_DEFINED_
     typedef int8_t              int8;
-#  endif
-#  ifndef _NI_uInt8_DEFINED_
-    #define _NI_uInt8_DEFINED_
     typedef uint8_t             uInt8;
-#  endif
-#  ifndef _NI_uChar_DEFINED_
-    #define _NI_uChar_DEFINED_
     typedef uInt8               uChar;
-#  endif
-#  ifndef _NI_int16_DEFINED_
-    #define _NI_int16_DEFINED_
     typedef int16_t             int16;
-#  endif
-#  ifndef _NI_uInt16_DEFINED_
-    #define _NI_uInt16_DEFINED_
     typedef uint16_t            uInt16;
-#  endif
-#  ifndef _NI_int32_DEFINED_
-    #define _NI_int32_DEFINED_
     typedef int32_t             int32;
-#  endif
-#  ifndef _NI_uInt32_DEFINED_
-    #define _NI_uInt32_DEFINED_
     typedef uint32_t            uInt32;
-#  endif
-#  ifndef _NI_float32_DEFINED_
-    #define _NI_float32_DEFINED_
     typedef float               float32;
-#  endif
-#  ifndef _NI_float64_DEFINED_
-    #define _NI_float64_DEFINED_
     typedef double              float64;
-#  endif
 
 #endif /* USE_C99_TYPES */
 
@@ -89,290 +62,134 @@
 #if Mac || Palm/*##############################################################*/
 
 #   ifndef USE_C99_TYPES
-#     ifndef _NI_int8_DEFINED_
-        #define _NI_int8_DEFINED_
         typedef char                int8;
-#     endif
-#     ifndef _NI_uInt8_DEFINED_
-        #define _NI_uInt8_DEFINED_
         typedef unsigned char       uInt8;
-#     endif
-#     ifndef _NI_uChar_DEFINED_
-        #define _NI_uChar_DEFINED_
         typedef uInt8               uChar;
-#     endif
-#     ifndef _NI_int16_DEFINED_
-        #define _NI_int16_DEFINED_
         typedef short               int16;
-#     endif
-#     ifndef _NI_uInt16_DEFINED_
-        #define _NI_uInt16_DEFINED_
         typedef unsigned short      uInt16;
-#     endif
-#     if (ProcessorType == kX64)
-#       ifndef _NI_int32_DEFINED_
-            #define _NI_int32_DEFINED_
-            typedef int                 int32;
-#       endif
-#       ifndef _NI_uInt32_DEFINED_
-            #define _NI_uInt32_DEFINED_
-            typedef unsigned int        uInt32;
-#       endif
-#     else
-#       ifndef _NI_int32_DEFINED_
-            #define _NI_int32_DEFINED_
-            typedef long                 int32;
-#       endif
-#        ifndef _NI_uInt32_DEFINED_
-            #define _NI_uInt32_DEFINED_
-            typedef unsigned long        uInt32;
-#        endif
-#     endif
-#     ifndef _NI_float32_DEFINED_
-        #define _NI_float32_DEFINED_
+#		if (ProcessorType == kX64)
+			typedef int                 int32;
+			typedef unsigned int        uInt32;
+#		else
+			typedef long                 int32;
+			typedef unsigned long        uInt32;
+#		endif
         typedef float               float32;
-#     endif
-#     ifndef _NI_float64_DEFINED_
-        #define _NI_float64_DEFINED_
         typedef double              float64;
-#     endif
 #   endif /* USE_C99_TYPES */
 
 #   if (ProcessorType == kM68000) || ((ProcessorType == kPPC) && (Compiler == kMPW))
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef long double floatExt;
-#     endif
 #       define ExtHiLo 0
 #       define CompilerSupportsExt 1
 #   elif MacOSX && (ProcessorType == kPPC)
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef double floatExt;
-#     endif
-#     define CompilerSupportsExt 1
+#       define CompilerSupportsExt 1
 #   elif MacX86 || MacX64
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef struct { /* force GCC to make this struct 10 bytes */
             int32   mlo __attribute__((packed,aligned(2)));
             int32   mhi __attribute__((packed,aligned(2)));
             int16   e __attribute__((packed,aligned(2)));
         } floatExt;
-#     endif
-#     define CompilerSupportsExt 0
+#       define CompilerSupportsExt 0
 #   else
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef struct {
             double hi;
             double lo;
         } floatExt;
-#     endif
-#     define ExtHiLo 1
-#     define CompilerSupportsExt 1
+#       define ExtHiLo 1
+#       define CompilerSupportsExt 1
 #   endif
 
 #    define CompilerSupportsInt64 1
 #    ifndef USE_C99_TYPES
-#     ifndef _NI_int64_DEFINED_
-        #define _NI_int64_DEFINED_
         typedef long long           int64;
-#     endif
-#     ifndef _NI_uInt64_DEFINED_
-        #define _NI_uInt64_DEFINED_
         typedef unsigned long long  uInt64;
-#     endif
 #    endif /* USE_C99_TYPES */
 
 #elif Unix /*###########################################################*/
 
 #   ifndef USE_C99_TYPES
-#     ifndef _NI_int8_DEFINED_
-        #define _NI_int8_DEFINED_
         typedef signed char         int8;
-#     endif
-#     ifndef _NI_uInt8_DEFINED_
-        #define _NI_uInt8_DEFINED_
         typedef unsigned char       uInt8;
-#     endif
-#     ifndef _NI_uChar_DEFINED_
-        #define _NI_uChar_DEFINED_
         typedef uInt8               uChar;
-#     endif
-#     ifndef _NI_int16_DEFINED_
-        #define _NI_int16_DEFINED_
         typedef short int           int16;
-#     endif
-#     ifndef _NI_uInt16_DEFINED_
-        #define _NI_uInt16_DEFINED_
         typedef unsigned short int  uInt16;
-#     endif
-#     ifndef _NI_int32_DEFINED_
-        #define _NI_int32_DEFINED_
         typedef int                 int32;
-#     endif
-#     ifndef _NI_uInt32_DEFINED_
-        #define _NI_uInt32_DEFINED_
         typedef unsigned int        uInt32;
-#     endif
-#     ifndef _NI_float32_DEFINED_
-        #define _NI_float32_DEFINED_
         typedef float               float32;
-#     endif
-#     ifndef _NI_float64_DEFINED_
-        #define _NI_float64_DEFINED_
         typedef double              float64;
-#     endif
 #   endif /* USE_C99_TYPES */
 
 #   define ExtHiLo 0
 #   if ProcessorType==kPARISC || ProcessorType==kMIPS || (Linux && PowerPC)
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef double          floatExt;
-#     endif
-#     define CompilerSupportsExt 1
+#       define CompilerSupportsExt 1
 #   elif ProcessorType==kX86 || ProcessorType==kX64
 #       if (Compiler==kGCC)
-#         ifndef _NI_floatExt_DEFINED_
-            #define _NI_floatExt_DEFINED_
             typedef struct { /* force GCC to make this struct 10 bytes */
                 int32   mlo __attribute__((packed,aligned(2)));
                 int32   mhi __attribute__((packed,aligned(2)));
                 int16   e __attribute__((packed,aligned(2)));
             } floatExt;
-#         endif
 #       else
-#         ifndef _NI_floatExt_DEFINED_
-            #define _NI_floatExt_DEFINED_
             typedef struct {
                 int32   mlo;
                 int32   mhi;
                 int16   e;
             } floatExt;
-#         endif
 #       endif
 #       define CompilerSupportsExt 0
 #   elif ProcessorType == kARM
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef double          floatExt;
-#     endif
-#     define CompilerSupportsExt 1
+#       define CompilerSupportsExt 1
 #   else
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef long double     floatExt;
-#     endif
-#     define CompilerSupportsExt 1
+#       define CompilerSupportsExt 1
 #   endif
 
 #   if OpSystem==kPowerUnix || (OpSystem == kHPUX && defined(__cplusplus))
 #       define CompilerSupportsInt64 0
-#         ifndef _NI_int64_DEFINED_
-            #define _NI_int64_DEFINED_
             typedef struct {
                 int32   hi, lo;
-            } int64;
-#         endif
-#         ifndef _NI_uInt64_DEFINED_
-            #define _NI_uInt64_DEFINED_
-            typedef struct {
-                int32   hi, lo;
-            } uInt64;
-#         endif
+            } int64, uInt64;
 #   else
 #       define CompilerSupportsInt64 1
 #       ifndef USE_C99_TYPES
-#         ifndef _NI_int64_DEFINED_
-            #define _NI_int64_DEFINED_
             typedef long long       int64;
-#         endif
-#         ifndef _NI_uInt64_DEFINED_
-            #define _NI_uInt64_DEFINED_
             typedef unsigned long long  uInt64;
-#         endif
 #       endif /* USE_C99_TYPES */
 #   endif /*OpSystem==kPowerUnix || (OpSystem == kHPUX && defined(__cplusplus))*/
 
 #elif MSWin /*##########################################################*/
 
 #   ifndef USE_C99_TYPES
-#     ifndef _NI_int8_DEFINED_
-        #define _NI_int8_DEFINED_
         typedef char                int8;
-#     endif
-#     ifndef _NI_uInt8_DEFINED_
-        #define _NI_uInt8_DEFINED_
         typedef unsigned char       uInt8;
-#     endif
-#     ifndef _NI_uChar_DEFINED_
-        #define _NI_uChar_DEFINED_
         typedef uInt8               uChar;
-#     endif
-#     ifndef _NI_int16_DEFINED_
-        #define _NI_int16_DEFINED_
         typedef short int           int16;
-#     endif
-#     ifndef _NI_uInt16_DEFINED_
-        #define _NI_uInt16_DEFINED_
         typedef unsigned short int  uInt16;
-#     endif
-#     ifndef _NI_int32_DEFINED_
-        #define _NI_int32_DEFINED_
         typedef long                int32;
-#     endif
-#     ifndef _NI_uInt32_DEFINED_
-        #define _NI_uInt32_DEFINED_
         typedef unsigned long       uInt32;
-#     endif
-#     ifndef _NI_float32_DEFINED_
-        #define _NI_float32_DEFINED_
         typedef float               float32;
-#     endif
-#     ifndef _NI_float64_DEFINED_
-        #define _NI_float64_DEFINED_
         typedef double              float64;
-#     endif
 
 #   endif /* USE_C99_TYPES */
 
 #   if (defined(_NI_VC_) || defined(_NI_SC_) || defined(_NI_BC_)) && !(defined(_CVI_) && (_CVI_ >= 910))
 #       define CompilerSupportsInt64 0
-#       ifndef _NI_int64_DEFINED_
-          #define _NI_int64_DEFINED_
-          typedef struct {
-              int32   hi, lo;
-          } int64;
-#       endif
-#       ifndef _NI_uInt64_DEFINED_
-          #define _NI_uInt64_DEFINED_
-          typedef struct {
-              int32   hi, lo;
-          } uInt64;
-#       endif
+            typedef struct {
+                int32   hi, lo;
+            } int64, uInt64;
 #   else
 #       define CompilerSupportsInt64 1
 #       ifndef USE_C99_TYPES
 #           if Compiler==kMetroWerks
-#             ifndef _NI_int64_DEFINED_
-                #define _NI_int64_DEFINED_
                 typedef long long               int64;
-#             endif
-#             ifndef _NI_uInt64_DEFINED_
-                #define _NI_uInt64_DEFINED_
                 typedef unsigned long long      uInt64;
-#             endif
 #           else
-#             ifndef _NI_int64_DEFINED_
-                #define _NI_int64_DEFINED_
                 typedef __int64                 int64;
-#             endif
-#             ifndef _NI_uInt64_DEFINED_
-                #define _NI_uInt64_DEFINED_
                 typedef unsigned __int64        uInt64;
-#             endif
 #           endif
 #       endif /* USE_C99_TYPES */
 #   endif
@@ -382,14 +199,11 @@
 #       pragma pack(push)
 #       pragma pack(2)
 #   endif
-#     ifndef _NI_floatExt_DEFINED_
-        #define _NI_floatExt_DEFINED_
         typedef struct {
             int32   mlo;
             int32   mhi;
             int16   e;
         } floatExt;
-#     endif
 #       define CompilerSupportsExt 0
 #   if ProcessorType == kX64
 #       pragma pack(pop)
@@ -398,155 +212,72 @@
 #elif Vdk /*##########################################################*/
 
 #   ifndef USE_C99_TYPES
-#     ifndef _NI_int8_DEFINED_
-        #define _NI_int8_DEFINED_
         typedef signed char         int8;
-#     endif
-#     ifndef _NI_uInt8_DEFINED_
-        #define _NI_uInt8_DEFINED_
         typedef unsigned char       uInt8;
-#     endif
-#     ifndef _NI_uChar_DEFINED_
-        #define _NI_uChar_DEFINED_
         typedef uInt8               uChar;
-#     endif
-#     ifndef _NI_int16_DEFINED_
-        #define _NI_int16_DEFINED_
         typedef short int           int16;
-#     endif
-#     ifndef _NI_uInt16_DEFINED_
-        #define _NI_uInt16_DEFINED_
         typedef unsigned short int  uInt16;
-#     endif
-#     ifndef _NI_int32_DEFINED_
-        #define _NI_int32_DEFINED_
         typedef int                 int32;
-#     endif
-#     ifndef _NI_uInt32_DEFINED_
-        #define _NI_uInt32_DEFINED_
         typedef unsigned int        uInt32;
-#     endif
-#     ifndef _NI_float32_DEFINED_
-        #define _NI_float32_DEFINED_
         typedef float               float32;
-#     endif
-#     ifndef _NI_float64_DEFINED_
-        #define _NI_float64_DEFINED_
         typedef double              float64;
-#     endif
 #   endif /* USE_C99_TYPES */
 
-#  ifndef _NI_floatExt_DEFINED_
-    #define _NI_floatExt_DEFINED_
     typedef double              floatExt;
-#  endif
 
 #   define CompilerSupportsInt64 1
 #   ifndef USE_C99_TYPES
-#     ifndef _NI_int64_DEFINED_
-        #define _NI_int64_DEFINED_
-        typedef long long     int64;
-#     endif
-#     ifndef _NI_uInt64_DEFINED_
-        #define _NI_uInt64_DEFINED_
+        typedef long long int64;
         typedef unsigned long long uInt64;
-#     endif
 #   endif /* USE_C99_TYPES */
 
 #elif Rtx /*##########################################################*/
 
-#  ifndef _NI_int8_DEFINED_
-	#define _NI_int8_DEFINED_
 	typedef signed char			int8;
-#  endif
-#  ifndef _NI_uInt8_DEFINED_
-	#define _NI_uInt8_DEFINED_
 	typedef unsigned char		uInt8;
-#  endif
-#  ifndef _NI_uChar_DEFINED_
-	#define _NI_uChar_DEFINED_
 	typedef uInt8				uChar;
-#  endif
-#  ifndef _NI_int16_DEFINED_
-	#define _NI_int16_DEFINED_
 	typedef short int			int16;
-#  endif
-#  ifndef _NI_uInt16_DEFINED_
-	#define _NI_uInt16_DEFINED_
 	typedef unsigned short int	uInt16;
-#  endif
-#  ifndef _NI_int32_DEFINED_
-	#define _NI_int32_DEFINED_
 	typedef int					int32;
-#  endif
-#  ifndef _NI_uInt32_DEFINED_
-	#define _NI_uInt32_DEFINED_
 	typedef unsigned int		uInt32;
-#  endif
-#  ifndef _NI_float32_DEFINED_
-	#define _NI_float32_DEFINED_
 	typedef float				float32;
-#  endif
-#  ifndef _NI_float64_DEFINED_
-	#define _NI_float64_DEFINED_
 	typedef double				float64;
-#  endif
 
-#  ifndef _NI_floatExt_DEFINED_
-	#define _NI_floatExt_DEFINED_
 	typedef double              floatExt;
-#  endif
+
 	#define CompilerSupportsInt64 1
-#  ifndef _NI_int64_DEFINED_
-	#define _NI_int64_DEFINED_
 	typedef long long int64;
-#  endif
-#  ifndef _NI_uInt64_DEFINED_
-	#define _NI_uInt64_DEFINED_
 	typedef unsigned long long uInt64;
-#  endif
 
 #endif
 
 #ifndef EXTCODE_CMPLX_TYPES
 #define EXTCODE_CMPLX_TYPES
 
-#ifndef _NI_cmplx64_DEFINED_
-#define _NI_cmplx64_DEFINED_
 /** @brief Complex single-precision floating point number. */
 typedef struct {
 	float32 re;
 	float32 im;
 } cmplx64;
-#endif
 
-#ifndef _NI_cmplx128_DEFINED_
-#define _NI_cmplx128_DEFINED_
 /** @brief Complex double-precision floating point number. */
 typedef struct {
 	float64 re;
 	float64 im;
 } cmplx128;
-#endif
 
-#ifndef _NI_cmplxExt_DEFINED_
-#define _NI_cmplxExt_DEFINED_
 /** @brief Complex extended-precision floating point number. */
 typedef struct {
 	floatExt re;
 	floatExt im;
 } cmplxExt;
-#endif
 
 #endif /* EXTCODE_CMPLX_TYPES */
 
 #include "lv_epilog.h"
 
-#ifndef _NI_Bool32_DEFINED_
-#define _NI_Bool32_DEFINED_
 /* Bool32 is based on our own int32 type. */
 typedef int32       Bool32;
-#endif
 #undef  TRUE
 #undef  FALSE
 #define TRUE        1
@@ -588,41 +319,19 @@ typedef int32       Bool32;
 #endif /* UINT32_MAX */
 
 /* Limits for fundamental types. */
-#ifndef uInt8_MAX
 #define uInt8_MAX       UINT8_MAX
-#endif
-#ifndef uInt16_MAX
 #define uInt16_MAX      UINT16_MAX
-#endif
-#ifndef uInt32_MAX
 #define uInt32_MAX      UINT32_MAX
-#endif
 
-#ifndef int8_MIN
 #define int8_MIN        INT8_MIN
-#endif
-#ifndef int8_MAX
 #define int8_MAX        INT8_MAX
-#endif
-#ifndef int16_MIN
 #define int16_MIN       INT16_MIN
-#endif
-#ifndef int16_MAX
 #define int16_MAX       INT16_MAX
-#endif
-#ifndef int32_MIN
 #define int32_MIN       INT32_MIN
-#endif
-#ifndef int32_MAX
 #define int32_MAX       INT32_MAX
-#endif
 
-#ifndef float32_MAX
 #define float32_MAX     3.402823466e+38F
-#endif
-#ifndef float64_MAX
 #define float64_MAX     1.7976931348623158e+308
-#endif
 
 #if CompilerSupportsInt64
 #  if MSWin
@@ -638,14 +347,8 @@ typedef int32       Bool32;
 #    endif /* !defined(_STDINT_H_) && !defined(_STDINT_H) */
 #  endif /* MSWin */
 #  ifdef USE_C99_TYPES
-#     ifndef _NI_int64_DEFINED_
-        #define _NI_int64_DEFINED_
         typedef int64_t     int64;
-#     endif
-#     ifndef _NI_uInt64_DEFINED_
-        #define _NI_uInt64_DEFINED_
         typedef uint64_t    uInt64;
-#     endif
 #  endif /* USE_C99_TYPES */
 
 /* 64-bit integer constants */
@@ -654,8 +357,13 @@ typedef int32       Bool32;
 #       define I64Const(n) n##i64
 #       define U64Const(n) n##ui64
 #   else
-#       define I64Const(n) n##LL
-#       define U64Const(n) n##ULL
+#       if OpSystem==kLinux64
+#           define I64Const(n) n##L
+#           define U64Const(n) n##UL
+#       else
+#           define I64Const(n) n##LL
+#           define U64Const(n) n##ULL
+#       endif /* kLinux64 */
 #   endif
 
 #   ifndef INT64_MIN
@@ -668,21 +376,11 @@ typedef int32       Bool32;
 #       define UINT64_MAX   U64Const(0xffffffffffffffff)
 #   endif /* UINT64_MAX */
 
-#ifndef int64_ZERO
 #   define int64_ZERO   I64Const(0)
-#endif
-#ifndef uInt64_ZERO
 #   define uInt64_ZERO  U64Const(0)
-#endif
-#ifndef int64_MIN
 #   define int64_MIN    INT64_MIN
-#endif
-#ifndef int64_MAX
 #   define int64_MAX    INT64_MAX
-#endif
-#ifndef uInt64_MAX
 #   define uInt64_MAX   UINT64_MAX
-#endif
 
 #else /* CompilerSupportsInt64=0 */
 #   if MSWin

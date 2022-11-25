@@ -8,17 +8,18 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "IcAPI.h"
+
+#include <IcAPI.h>
 
 #define RAW 0
 #define CORR 1
 #define CONC 2
 
-#define LEN_META_DATA 6
+#define N_CAL_PARS 2
 
 #define NAME 0
 #define INDEX 1
-#define ALT_NAME 2
+
 #define SET 3
 #define ACT 4
 #define NIL 5  // seems to be 0 always...
@@ -30,199 +31,171 @@
 #endif
 
 static PyObject *
-icapi_connect(PyObject *self, PyObject *args)
+icapi_GetNumberOfTimebins(PyObject* self, PyObject* args)
 {
 	char* ip;
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
-	IcAPI_SetURLofSharedVariables(ip);
-
-	int con = IcAPI_CheckConnection();
-	return PyLong_FromLong(con);
-}
-
-static PyObject *
-icapi_CheckConnection(PyObject *self, PyObject *args)
-{
-	int rv = IcAPI_CheckConnection();
-	return PyLong_FromLong(rv);
-}
-
-static PyObject *
-icapi_start(PyObject *self, PyObject *args)
-{
-	Common_MeasureState state = 999;
-	IcAPI_StartAcquisition();
-	IcAPI_GetMeasureState(&state);
-
-	return PyLong_FromLong(state);
-}
-
-static PyObject *
-icapi_stop(PyObject *self, PyObject *args)
-{
-	Common_MeasureState state = 999;
-	IcAPI_StopAcquisition();
-	IcAPI_GetMeasureState(&state);
-
-	return PyLong_FromLong(state);
-}
-
-/* @ function get_timebins()
- *
- * helper function to access length of one spectrum.
- */
-int get_timebins(void)
-{
-    int32 timebins, specmasses, tracedata, tracemasses;
-    IcAPI_GetArrayLenght(&timebins, &specmasses, &tracedata, &tracemasses);
-
-    return timebins;
-}
-
-static PyObject *
-icapi_GetArrayLength(PyObject* self, PyObject* args)
-{
-    int32 timebins, specmasses, tracedata, tracemasses;
-    IcAPI_GetArrayLenght(&timebins, &specmasses, &tracedata, &tracemasses);
-    PyObject* rv = Py_BuildValue("iiii", timebins, specmasses, tracedata, tracemasses);
-
-    return rv;
+    uint32_t timebins;
+	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
+	return PyLong_FromLong(timebins);
 }
 
 static PyObject *
 icapi_GetMeasureState(PyObject *self, PyObject *args)
 {
-	Common_MeasureState state = 999;
-	IcAPI_GetMeasureState(&state);
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
 
+	Common_MeasureState state = 999;
+	if (IcAPI_GetMeasureState(ip, &state) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
 	return PyLong_FromLong(state);
 }
 
 static PyObject *
 icapi_GetServerState(PyObject *self, PyObject *args)
 {
-	Common_ServerState state = 999;
-	IcAPI_GetServerState(&state);
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
 
+	Common_ServerState state = 999;
+	if (IcAPI_GetServerState(ip, &state) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
 	return PyLong_FromLong(state);
 }
 
 static PyObject *
-icapi_GetServerAction(PyObject *self, PyObject *args)
+icapi_GetVersion(PyObject *self, PyObject *args)
 {
-	Common_ServerActions state = 999;
-	IcAPI_GetServerAction(&state);
+    double version;
+	IcAPI_GetVersion(&version);
 
-	return PyLong_FromLong(state);
+	return PyLong_FromDouble(version);
 }
 
-static PyObject*
-icapi_SetServerAction(PyObject* self, PyObject* args)
-{
-	Common_ServerActions action;
-	if (!PyArg_ParseTuple(args, "i", &action))
-		return NULL;
-    
-    IcAPI_SetServerAction(action);
-
-    return Py_None;
-}
+//   static PyObject*
+//   icapi_SetServerAction(PyObject* self, PyObject* args)
+//   {
+//   	char* ip;
+//   	Common_ServerActions action;
+//   	if (!PyArg_ParseTuple(args, "si", &ip, &action))
+//   		return NULL;
+//       
+//   	if (IcAPI_SetServerAction(ip, action) != IcReturnType_ok)
+//   	{
+//   		PyErr_SetString(PyExc_IOError, "unknown error!");
+//   		return NULL;
+//   	}
+//       return Py_None;
+//   }
 
 static PyObject *
 icapi_GetNumberOfPeaks(PyObject *self, PyObject *args)
 {
-	uint32_t n_peaks = 0;
-	ICAPI_GetNumberOfPeaks(&n_peaks);
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
 
+    int32_t timeout_ms = 1000;
+	uint32_t n_peaks = 0;
+	if (IcAPI_GetNumberOfPeaks(ip, timeout_ms, &n_peaks) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
 	return PyLong_FromLong(n_peaks);
 }
 
 static PyObject *
 icapi_GetTraceData(PyObject *self, PyObject *args)
 {
-	int con = IcAPI_CheckConnection();
-	if (! con)
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
+
+    int32_t timeout_ms = 1000;
+	int32_t n_peaks = 0;
+	if (IcAPI_GetNumberOfPeaks(ip, timeout_ms, &n_peaks) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "no connection!");
+		PyErr_SetString(PyExc_IOError, "unknown error!");
 		return NULL;
 	}
-
-	uint32_t n_peaks = 0;
-	ICAPI_GetNumberOfPeaks(&n_peaks);
-
-	const short len = n_peaks + LEN_META_DATA;  /* there are 6 fields of meta-data */
 	npy_intp dims[2];
     dims[0] = 3; 
     dims[1] = n_peaks;
 
-	size_t size = sizeof(float) * len;
-	int32_t sizeS;
+	size_t size = sizeof(float) * n_peaks;
 	float* raw = (float*) malloc(size);
 	float* corr = (float*) malloc(size);
 	float* conc = (float*) malloc(size);
-	IcAPI_GetTraceData(&sizeS, raw, corr, conc, len, len, len);
+	if (IcAPI_GetTraceData(ip, timeout_ms, raw, corr, conc, n_peaks, n_peaks, n_peaks) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+	    free(raw);
+	    free(corr);
+	    free(conc);
+		return NULL;
+	}
 #ifdef DEBUG
-	printf("done reading arrays of length (%d). Got sizeS=%d\n", len, sizeS);
+	printf("done reading arrays of length (%d). Got sizeS=%d\n", n_peaks, sizeS);
 	printf("allocating %d dimension(s) of %d...\n", 2, (int) dims[0]);
 #endif
 	PyObject* oarr = PyArray_SimpleNew(2, dims, NPY_FLOAT);
 
 	float* p = (float*) PyArray_DATA(oarr);
-	memcpy(p, &raw[LEN_META_DATA], sizeof(float) * n_peaks);
+	memcpy(p, raw, sizeof(float) * n_peaks);
     p += n_peaks;
-	memcpy(p, &corr[LEN_META_DATA], sizeof(float) * n_peaks);
+	memcpy(p, corr, sizeof(float) * n_peaks);
     p += n_peaks;
-	memcpy(p, &conc[LEN_META_DATA], sizeof(float) * n_peaks);
-
-#ifdef DEBUG
-	puts("casting meta-data...");
-#endif
-	PyObject* rel_cycle = PyLong_FromDouble(conc[0]);
-	PyObject* abs_cycle = PyLong_FromDouble(conc[1]);
-
-    // use numpy array for timestamps...
-    dims[0] = 4;
-#ifdef DEBUG
-	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-#endif
-	PyObject* ts_arr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
-
-	p = (float*) PyArray_DATA(ts_arr);
-	memcpy(p, &conc[2], sizeof(float) * dims[0]);
-
-	Py_ssize_t n_objects = 4;
-	PyObject* rv = PyTuple_New(n_objects);
-	PyTuple_SetItem(rv, 0, rel_cycle);
-	PyTuple_SetItem(rv, 1, abs_cycle);
-	PyTuple_SetItem(rv, 2, ts_arr);
-	PyTuple_SetItem(rv, 3, oarr);
+	memcpy(p, conc, sizeof(float) * n_peaks);
 
 	free(raw);
 	free(corr);
 	free(conc);
 
-	return rv;
+	return oarr;
 }
 
 static PyObject *
 icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 {
-	int con = IcAPI_CheckConnection();
-	if (! con)
-	{
-		PyErr_SetString(PyExc_IOError, "no connection!");
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
-	}
 
 	/* define shape of output array */
-    int timebins = get_timebins();
+    uint32_t timebins;
+	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
 	npy_intp dims[1] = { timebins };
-	int len = dims[0] + LEN_META_DATA;
-	size_t size = sizeof(float) * len;
+	int32_t len = dims[0];
+	size_t size = sizeof(float) * (size_t)len;
 	float* raw_spec = (float*) malloc(size);
-	IcAPI_GetCurrentSpec(raw_spec, (int32_t) len);
+    IcTimingInfo timing;
+	float cal_pars[N_CAL_PARS] = { 0., 0. };
+	if (IcAPI_GetCurrentSpec(ip, raw_spec, &timing, cal_pars, len, N_CAL_PARS) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+	    free(raw_spec);
+		return NULL;
+	}
 #ifdef DEBUG
 	printf("done reading arrays of length (%d) of size (%d)\n", len, (int) size);
 	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
@@ -230,131 +203,125 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
 
 	float* p = (float*) PyArray_DATA(oarr);
-	memcpy(p, &raw_spec[LEN_META_DATA], sizeof(float) * dims[0]);
+	memcpy(p, raw_spec, sizeof(float) * dims[0]);
 
 #ifdef DEBUG
 	puts("casting meta-data...");
 #endif
-	PyObject* rel_cycle = PyLong_FromDouble(raw_spec[0]);
-	PyObject* abs_cycle = PyLong_FromDouble(raw_spec[1]);
+	PyObject* rel_cycle = PyLong_FromLong(timing.Cycle);
+	PyObject* abs_cycle = PyLong_FromLong(timing.CycleOverall);
+	PyObject* rel_time = PyFloat_FromDouble(timing.relTime);
+	PyObject* abs_time = PyFloat_FromDouble(timing.absTime);
 
-    // use numpy array for timestamps
-    dims[0] = 4;
-#ifdef DEBUG
-	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-#endif
-	PyObject* ts_arr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
-	p = (float*) PyArray_DATA(ts_arr);
-	memcpy(p, &raw_spec[2], sizeof(float) * dims[0]);
-
-	Py_ssize_t n_objects = 4;
+	Py_ssize_t n_objects = 5;
 	PyObject* rv = PyTuple_New(n_objects);
 	PyTuple_SetItem(rv, 0, rel_cycle);
 	PyTuple_SetItem(rv, 1, abs_cycle);
-	PyTuple_SetItem(rv, 2, ts_arr);
-	PyTuple_SetItem(rv, 3, oarr);
+	PyTuple_SetItem(rv, 2, rel_time);
+	PyTuple_SetItem(rv, 3, abs_time);
+	PyTuple_SetItem(rv, 4, oarr);
 
 	free(raw_spec);
 
 	return rv;
 }
 
-static PyObject*
-icapi_read_PTR_data(PyObject* self, PyObject* args)
-{
-    if (!IcAPI_CheckConnection()) {
-        PyErr_SetString(PyExc_IOError, "no connection!");
-        return NULL;
-    }
-    LStrHandle sh;
-    int32 dims[2] = { 100, 8 };  /* the passed dims don't seem to matter much */
-	LStrHandleArray sh_arr = AllocateLStrHandleArray(dims);
-    if (sh_arr == NULL) {
-        char err_msg[100];
-        sprintf(err_msg, "in read_PTR_data :: unable to allocate LStrHandleArray "
-                         "with dims %dx%d!", (int) dims[0], (int) dims[1]);
-		PyErr_SetString(PyExc_IOError, err_msg);
-		return NULL;
-    }
-    int32 n_entries, n_fields;  
-#ifdef DEBUG
-    puts("reading PTR data...");
-#endif
-	IcAPI_readPTRdata(&n_fields, &n_entries, &sh_arr);
-//    n_entries = (*sh_arr)->dimSizes[0];
-//    n_fields = (*sh_arr)->dimSizes[1];
-#ifdef DEBUG
-    printf("done reading PTR data with n_entries: (%d) / n_fields (%d)\n", n_entries, n_fields);
-    printf("got sh_arr with dims (%dx%d)\n", (*sh_arr)->dimSizes[0], (*sh_arr)->dimSizes[1]);
-#endif
-	
-    PyObject* rv = PyList_New(n_entries);  // return object (list)
-    int i, j;
-    int* len = (int*) malloc(sizeof(int)*n_fields);  /* the string-lengths in the fields */
-    uChar** field = (uChar**) malloc(sizeof(uChar*)*n_fields);
-    PyObject* entry;  /* becomes a tuple of values */
-
-    double set, act;  /* temporary variable for float conversion */
-    PyObject* unit;  /* temporary variable to treat the latin1 encoded unit */
-    const char errors[] = "strict";  /* tell PyUnicode_DecodeLatin1 to raise */
-    				     /* a ValueError on decoding error       */
-    for (i=0; i<n_entries; i++)
-    {
-        for (j=0; j<n_fields; j++)
-        {
-            /* this yields the LStrHandle in the array: */
-            sh = (*sh_arr)->String[i*n_fields+j];
-            field[j] = LHStrBuf(sh);
-            len[j] = LHStrLen(sh);
-#ifdef DEBUG
-            if (field[j] == NULL)
-                printf("encountered empty field (%d)...", j);
-            // print string:
-            for(int k=0; k < len[j]; k++)
-                putchar(field[j][k]);
-            putchar('\t');
-#endif
-        }
-        /* handle NaN values in set- and act-values.. */
-        if (strncmp(field[SET], "NaN", 3) == 0)
-            set = NPY_NAN;
-        else
-            set = atof(field[SET]);
-        if (strncmp(field[ACT], "NaN", 3) == 0)
-            act = NPY_NAN;
-        else
-            act = atof(field[ACT]);
-        /* here lay the cause for a nasty error: The PyUnicode_New() raised an exception
-         * like this:
-         * ... unicode error: can't decode byte 0xb0 in position 0 ...
-         *
-         * Byte 0xB0 is the degree-sign and this is not expected in utf-8, where all
-         * special characters are encoded with 2-4 bytes and the degree sign is 0x00B0.
-         * The unit is now decoded into a temporary Python unicode object: */
-        unit = PyUnicode_DecodeLatin1(field[UNIT], len[UNIT], errors);
-        /* (this is a safe operation even if field[UNIT] is NULL, because in that      
-         *  case len[UNIT] == 0 and the return value is either '' or None) */
-        entry = Py_BuildValue("(s#,i,s#,d,d,i,O,s#)",
-                         field[NAME], len[NAME], 
-                         atoi(field[INDEX]),
-                         field[ALT_NAME], len[ALT_NAME], 
-                         set,
-                         act,
-                         atoi(field[NIL]),
-                         unit, 
-                         field[TIME], len[TIME]);
-        PyList_SetItem(rv, i, entry);
-#ifdef DEBUG
-        puts("\nDone reading PTR-data.");
-#endif
-	}
-    Py_DECREF(unit);  // clear temporary Python object
-
-    free(field);
-    free(len);
-
-	return rv;
-}
+//   static PyObject*
+//   icapi_read_PTR_data(PyObject* self, PyObject* args)
+//   {
+//       if (!IcAPI_CheckConnection()) {
+//           PyErr_SetString(PyExc_IOError, "no connection!");
+//           return NULL;
+//       }
+//       LStrHandle sh;
+//       int32 dims[2] = { 100, 8 };  /* the passed dims don't seem to matter much */
+//   	LStrHandleArray sh_arr = AllocateLStrHandleArray(dims);
+//       if (sh_arr == NULL) {
+//           char err_msg[100];
+//           sprintf(err_msg, "in read_PTR_data :: unable to allocate LStrHandleArray "
+//                            "with dims %dx%d!", (int) dims[0], (int) dims[1]);
+//   		PyErr_SetString(PyExc_IOError, err_msg);
+//   		return NULL;
+//       }
+//       int32 n_entries, n_fields;  
+//   #ifdef DEBUG
+//       puts("reading PTR data...");
+//   #endif
+//   	IcAPI_readPTRdata(&n_fields, &n_entries, &sh_arr);
+//   //    n_entries = (*sh_arr)->dimSizes[0];
+//   //    n_fields = (*sh_arr)->dimSizes[1];
+//   #ifdef DEBUG
+//       printf("done reading PTR data with n_entries: (%d) / n_fields (%d)\n", n_entries, n_fields);
+//       printf("got sh_arr with dims (%dx%d)\n", (*sh_arr)->dimSizes[0], (*sh_arr)->dimSizes[1]);
+//   #endif
+//   	
+//       PyObject* rv = PyList_New(n_entries);  // return object (list)
+//       int i, j;
+//       int* len = (int*) malloc(sizeof(int)*n_fields);  /* the string-lengths in the fields */
+//       uChar** field = (uChar**) malloc(sizeof(uChar*)*n_fields);
+//       PyObject* entry;  /* becomes a tuple of values */
+//   
+//       double set, act;  /* temporary variable for float conversion */
+//       PyObject* unit;  /* temporary variable to treat the latin1 encoded unit */
+//       const char errors[] = "strict";  /* tell PyUnicode_DecodeLatin1 to raise */
+//       				     /* a ValueError on decoding error       */
+//       for (i=0; i<n_entries; i++)
+//       {
+//           for (j=0; j<n_fields; j++)
+//           {
+//               /* this yields the LStrHandle in the array: */
+//               sh = (*sh_arr)->String[i*n_fields+j];
+//               field[j] = LHStrBuf(sh);
+//               len[j] = LHStrLen(sh);
+//   #ifdef DEBUG
+//               if (field[j] == NULL)
+//                   printf("encountered empty field (%d)...", j);
+//               // print string:
+//               for(int k=0; k < len[j]; k++)
+//                   putchar(field[j][k]);
+//               putchar('\t');
+//   #endif
+//           }
+//           /* handle NaN values in set- and act-values.. */
+//           if (strncmp(field[SET], "NaN", 3) == 0)
+//               set = NPY_NAN;
+//           else
+//               set = atof(field[SET]);
+//           if (strncmp(field[ACT], "NaN", 3) == 0)
+//               act = NPY_NAN;
+//           else
+//               act = atof(field[ACT]);
+//           /* here lay the cause for a nasty error: The PyUnicode_New() raised an exception
+//            * like this:
+//            * ... unicode error: can't decode byte 0xb0 in position 0 ...
+//            *
+//            * Byte 0xB0 is the degree-sign and this is not expected in utf-8, where all
+//            * special characters are encoded with 2-4 bytes and the degree sign is 0x00B0.
+//            * The unit is now decoded into a temporary Python unicode object: */
+//           unit = PyUnicode_DecodeLatin1(field[UNIT], len[UNIT], errors);
+//           /* (this is a safe operation even if field[UNIT] is NULL, because in that      
+//            *  case len[UNIT] == 0 and the return value is either '' or None) */
+//           entry = Py_BuildValue("(s#,i,s#,d,d,i,O,s#)",
+//                            field[NAME], len[NAME], 
+//                            atoi(field[INDEX]),
+//                            field[ALT_NAME], len[ALT_NAME], 
+//                            set,
+//                            act,
+//                            atoi(field[NIL]),
+//                            unit, 
+//                            field[TIME], len[TIME]);
+//           PyList_SetItem(rv, i, entry);
+//   #ifdef DEBUG
+//           puts("\nDone reading PTR-data.");
+//   #endif
+//   	}
+//       Py_DECREF(unit);  // clear temporary Python object
+//   
+//       free(field);
+//       free(len);
+//   
+//   	return rv;
+//   }
 
 //   static PyObject*
 //   icapi_write_PTR_data(PyObject* self, PyObject* args)
@@ -419,67 +386,78 @@ icapi_read_PTR_data(PyObject* self, PyObject* args)
 //       return Py_None;
 //   }
 
-static PyObject*
-icapi_GetTraceMasses(PyObject* self, PyObject* args)
-{
-    int32_t len;
-    uint32_t size;
-    ICAPI_GetNumberOfPeaks(&len);
+//   static PyObject*
+//   icapi_GetTraceMasses(PyObject* self, PyObject* args)
+//   {
+//       int32_t len;
+//       uint32_t size;
+//       ICAPI_GetNumberOfPeaks(&len);
+//   
+//       float* masses = (float*) malloc(len*sizeof(float));
+//   
+//       IcAPI_GetTraceMasses(masses, &size, len);
+//   #ifdef DEBUG
+//       printf("allocated %d masses, got %d masses, first mass: %f\n", len, size, masses[0]);
+//   #endif
+//       npy_intp dims[1];
+//       dims[0] = len;
+//   #ifdef DEBUG
+//   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
+//   #endif
+//   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
+//   	float* p = (float*) PyArray_DATA(oarr);
+//   	memcpy(p, masses, sizeof(float) * dims[0]);
+//   
+//       return oarr;
+//   }
+//   
+//   static PyObject*
+//   icapi_GetCurrentMasses(PyObject* self, PyObject* args)
+//   {
+//       int32_t len;
+//       ICAPI_GetNumberOfPeaks(&len);
+//   
+//       double* masses = (double*) malloc(len*sizeof(double));
+//   
+//       IcAPI_GetCurrentMasses(masses, len);
+//   #ifdef DEBUG
+//       printf("allocated %d masses, first mass: %f\n", len, masses[0]);
+//   #endif
+//       npy_intp dims[1];
+//       dims[0] = len;
+//   #ifdef DEBUG
+//   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
+//   #endif
+//   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
+//   	double* p = (double*) PyArray_DATA(oarr);
+//   	memcpy(p, masses, sizeof(double) * dims[0]);
+//   
+//       return oarr;
+//   }
 
-    float* masses = (float*) malloc(len*sizeof(float));
-
-    IcAPI_GetTraceMasses(masses, &size, len);
-#ifdef DEBUG
-    printf("allocated %d masses, got %d masses, first mass: %f\n", len, size, masses[0]);
-#endif
-    npy_intp dims[1];
-    dims[0] = len;
-#ifdef DEBUG
-	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-#endif
-	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
-	float* p = (float*) PyArray_DATA(oarr);
-	memcpy(p, masses, sizeof(float) * dims[0]);
-
-    return oarr;
-}
-
-static PyObject*
-icapi_GetCurrentMasses(PyObject* self, PyObject* args)
-{
-    int32_t len;
-    ICAPI_GetNumberOfPeaks(&len);
-
-    double* masses = (double*) malloc(len*sizeof(double));
-
-    IcAPI_GetCurrentMasses(masses, len);
-#ifdef DEBUG
-    printf("allocated %d masses, first mass: %f\n", len, masses[0]);
-#endif
-    npy_intp dims[1];
-    dims[0] = len;
-#ifdef DEBUG
-	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-#endif
-	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-	double* p = (double*) PyArray_DATA(oarr);
-	memcpy(p, masses, sizeof(double) * dims[0]);
-
-    return oarr;
-}
-
+#define MAX_PATH_LEN 260
 static PyObject*
 icapi_GetCurrentDataFileName(PyObject* self, PyObject* args)
 {
-    int32_t len = 260;
-    char file[260];
-    const char errors[] = "strict";  /* raise ValueError on decoding error */
-    IcAPI_GetCurrentDataFileName(file, len);
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
 
+    int32_t len = MAX_PATH_LEN;
+    char raw_file[MAX_PATH_LEN];
+    char file[MAX_PATH_LEN];
+	if (IcAPI_GetCurrentDataFileName(ip, raw_file, len) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "unknown error!");
+		return NULL;
+	}
+    strncpy(file, raw_file, MAX_PATH_LEN);
+    const char errors[] = "strict";  /* raise ValueError on decoding error */
     PyObject* rv = PyUnicode_DecodeLatin1(file, len, errors);
 
     return rv;
 }
+
 /*
 // TODO fill in more templates...
 
@@ -496,17 +474,8 @@ icapi_read_PTR_data(PyObject* self, PyObject* args)
 
 /* ------------------------------------------------- */
 static PyMethodDef Methods[] = {
-	{"start", icapi_start, METH_VARARGS,
-		"Starts the acquisition and returns measure state enum."},
-	{"stop", icapi_stop, METH_VARARGS,
-		"Stops the acquisition and returns measure state enum."},
-	{"connect", icapi_connect, METH_VARARGS,
-		"Connect to ip and return 1 on success 0 on failure."},
-    {"GetArrayLength", icapi_GetArrayLength, METH_VARARGS, 
-        "Returns timebins, specmasses, tracedata, tracemasses as a tuple.\n\n"
-        "This function exists for debugging purposes."},
-	{"CheckConnection", icapi_CheckConnection, METH_VARARGS,
-		"Returns 0 if not connected and 1 if connected."},
+    {"icapi_GetNumberOfTimebins", icapi_GetNumberOfTimebins, METH_VARARGS, 
+        "Returns the number of timebins."},
 	{"GetMeasureState", icapi_GetMeasureState, METH_VARARGS,
 		"Get current measure state.\n\n"
         "Use the dictionary 'measure_state' in this module \n"
@@ -515,17 +484,19 @@ static PyMethodDef Methods[] = {
 		"Get current server state.\n\n"
         "Use the dictionary 'server_state' in this module \n"
         "to decode the state."},
-	{"GetServerAction", icapi_GetServerAction, METH_VARARGS,
-		"Get current server action.\n\n"
-        "Use the dictionary 'server_actions' in this module "
-        "to decode the state."},
-	{"SetServerAction", icapi_GetServerAction, METH_VARARGS,
-		"Set the current server action.\n\n"
-        "Expects an enumerated integer value as argument."
-        "Use the dictionary 'server_actions' in this module "
-        "to find the desired enum."},
-	{"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
-		"Returns number of peaks."},
+	{"GetVersion", icapi_GetVersion, METH_VARARGS,
+		"Get IcAPI.dll version used."},
+//	{"GetServerAction", icapi_GetServerAction, METH_VARARGS,
+//		"Get current server action.\n\n"
+//        "Use the dictionary 'server_actions' in this module "
+//        "to decode the state."},
+//	{"SetServerAction", icapi_GetServerAction, METH_VARARGS,
+//		"Set the current server action.\n\n"
+//        "Expects an enumerated integer value as argument."
+//        "Use the dictionary 'server_actions' in this module "
+//        "to find the desired enum."},
+//	{"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
+//		"Returns number of peaks."},
 	{"GetTraceData", icapi_GetTraceData, METH_VARARGS,
 		"Gets the current data of all traces as a numpy array.\n\n"
         "The return value is a tuple containing meta-data: \n"
@@ -542,19 +513,21 @@ static PyMethodDef Methods[] = {
         "first 2 describing the absolute time in seconds after \n"
         "1st Jan 1904 and the latter the relative time since \n"
         "starting the measurement."},
-	{"read_PTR_data", icapi_read_PTR_data, METH_VARARGS,
-		"Returns the PTR data."},
+    {"GetCurrentDataFileName", icapi_GetCurrentDataFileName, METH_VARARGS,
+        "Returns the current source file name."},
+    {"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
+        "Returns the number of peaks in the IoniTOF peaktable."},
+//	{"read_PTR_data", icapi_read_PTR_data, METH_VARARGS,
+//		"Returns the PTR data."},
 // 	{"write_PTR_data", icapi_write_PTR_data, METH_VARARGS,
 // 		"Write to the PTR set values\n\n."
 //         "Expects a tuple of key-value byte strings like (b'key:value',..), \n"
 //         "where `key` must be a valid PTR data name as returned \n"
 //         "by `read_PTR_data()`. The encoding is expected to be Latin1.\n"},
-	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
-		"Returns the GetTraceMasses data."},
-	{"GetCurrentMasses", icapi_GetCurrentMasses, METH_VARARGS,
-		"Returns the GetCurrentMasses data."},
-	{"GetCurrentDataFileName", icapi_GetCurrentDataFileName, METH_VARARGS,
-		"Returns the GetCurrentDataFileName."},
+//	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
+//		"Returns the GetTraceMasses data."},
+//	{"GetCurrentMasses", icapi_GetCurrentMasses, METH_VARARGS,
+//		"Returns the GetCurrentMasses data."},
 	{NULL, NULL, 0, NULL}  /* Sentinel */
 };
 

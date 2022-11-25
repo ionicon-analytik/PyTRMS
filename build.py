@@ -23,18 +23,20 @@ extensions=[
             'src/icapimodule.c'
         ],
         libraries=[
-            'IcAPI_c_%s' % arch
+            'IcAPI'
         ],
         library_dirs=[
-            'lib/'
+            'deps/icapi/lib/'
         ],
         include_dirs=[
-            'include',
+            'deps/icapi/include',
             np_get_include(),
         ],
         extra_compile_args=[
-                # '/DDEBUG',
-            #com_args = ['-std=c99', '-O3', '-fopenmp']
+            #'/DNDEBUG',
+            '/std:c11',
+            '/O2',
+            '/Wall', '/W3', #'/WX',
         ],
     ),
 ]
@@ -73,11 +75,11 @@ setup_kwargs = {
 }
 
 if __name__ == '__main__':
+    target = './build/lib.win-amd64-cpython-38/icapi.cp38-win_amd64.pyd'
     build(setup_kwargs)
-    print('build succeeded! copying', 
-        shutil.copy2(
-            'build/lib.win-amd64-cpython-38/icapi.cp38-win_amd64.pyd',
-            '.'
-        ),
-        'to root directory')
+    if os.path.exists(target):
+        print('compiler has finished. copying', 
+            shutil.copy2(target, '.'),
+            'to root directory'
+        )
 

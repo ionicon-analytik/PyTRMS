@@ -1,5 +1,5 @@
 /**
-	(c) Copyright 2007-2018 by National Instruments Corp.
+	(c) Copyright 2007-2015 by National Instruments Corp.
 	All rights reserved.
 
 	@file

@@ -8,6 +8,7 @@ include = [
     "par_ID_list.txt",
     "pytrms/data/IoniTofPrefs.ini",
     "*.pyd",
+    "*.dll",
 ]
 
 [tool.poetry.dependencies]
