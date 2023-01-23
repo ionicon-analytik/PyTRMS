@@ -89,11 +89,12 @@ class H5Reader(Iterable):
     
     def get_traces(self, kind='raw', force_original=False):
         if force_original:
-            return _read_traces(kind)
-        try:
-            return self._read_processed_traces(kind)
-        except GroupNotFoundError:
-            return _read_traces(kind)
+            return self._read_traces(kind)
+        else:
+            try:
+                return self._read_processed_traces(kind)
+            except GroupNotFoundError:
+                return self._read_traces(kind)
 
     def _read_processed_traces(self, kind):
         # error conditions:
