@@ -74,11 +74,14 @@ class H5Reader(Iterable):
         data = group[prefix + 'Data']
         info = group[prefix + 'Info']
         if info.ndim > 1:
-            info = info[0,:]
-        if hasattr(info[0], 'decode'):
-            info = [b.decode('latin1') for b in info]
+            labels = info[0,:]
+        else:
+            labels = info[:]
+
+        if hasattr(labels[0], 'decode'):
+            labels = [b.decode('latin1') for b in labels]
     
-        return pd.DataFrame(data, columns=info)
+        return pd.DataFrame(data, columns=labels)
     
     def get_addtraces(self):
         frames = []
@@ -124,7 +127,7 @@ class H5Reader(Iterable):
             raise KeyError(f'unknown group {exc}. filetype is not supported yet.') from exc
 
         mapper = dict(zip(data.columns, labels))
-        data.rename(columns=mapper)
+        data = data.rename(columns=mapper)
 
         return data
 
