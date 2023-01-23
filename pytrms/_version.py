@@ -1,4 +1,4 @@
-__version__ = '0.2.1'  # must be on the first line!
+__version__ = '0.2.2'  # must be on the first line!
 
 __all__ = ['branch', 'digest', '__version__']
 
