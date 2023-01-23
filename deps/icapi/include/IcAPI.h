@@ -259,6 +259,18 @@ IcReturnType __cdecl IcAPI_SharedLib_IcAPI_ADD_SetUnitAsByte(
  * IcAPI_SharedLib_IcAPI_ADD_CheckAddDataDll
  */
 IcReturnType __cdecl IcAPI_SharedLib_IcAPI_ADD_CheckAddDataDll(void);
+/*!
+ * IcAPI_IcAPI_GetNextSpec
+ */
+IcReturnType __cdecl IcAPI_IcAPI_GetNextSpec(char IP[], int32_t timeout_ms, 
+	float SpecData[], IcTimingInfo *TimingInfo, float CalPara[], 
+	IcReturnType *returnType, int32_t len, int32_t len2);
+/*!
+ * IcAPI_SharedLib_IcAPI_SetTraceData
+ */
+IcReturnType __cdecl IcAPI_SharedLib_IcAPI_SetTraceData(char IP[], 
+	float Raw[], float Corr[], float Conc[], int32_t len, int32_t len2, 
+	int32_t len3);
 
 MgErr __cdecl LVDLLStatus(char *errStr, int errStrLen, void *module);
 
