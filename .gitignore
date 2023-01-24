@@ -1,4 +1,9 @@
+# ignore IDEs
 .idea
+.vs
+*.user
+
+# ignore caches
 .cache
 .pytest_cache
 .tox
@@ -11,19 +16,22 @@
 *.png
 *.pdf
 
+# ignore Vim files
 *.swp
 *~
 .~*
 **/.tmp
 
+# ignore generated files from builds
 **/build
 **/dist
 **/doc/_build
-*.pyd
 *.egg-info
 .eggs
 _build
 _testdata
+/**/x64
+/**/x86
 
 report.html
 

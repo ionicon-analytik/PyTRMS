@@ -9,7 +9,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include <IcAPI.h>
+//#include <IcAPI.h>
+#include "../deps/icapi/include/IcAPI.h"
 
 #define RAW 0
 #define CORR 1
@@ -26,9 +27,6 @@
 #define UNIT 6
 #define TIME 7
 
-#ifndef NDEBUG
-#define DEBUG
-#endif
 
 static PyObject *
 icapi_GetNumberOfTimebins(PyObject* self, PyObject* args)
@@ -65,7 +63,7 @@ icapi_GetMeasureState(PyObject *self, PyObject *args)
 static PyObject *
 icapi_GetServerState(PyObject *self, PyObject *args)
 {
-	char* ip;
+	char* ip;   
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
@@ -150,8 +148,8 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 	    free(conc);
 		return NULL;
 	}
-#ifdef DEBUG
-	printf("done reading arrays of length (%d). Got sizeS=%d\n", n_peaks, sizeS);
+#ifdef Mod_DEBUG
+	printf("done reading arrays of length (%d).\n", n_peaks);
 	printf("allocating %d dimension(s) of %d...\n", 2, (int) dims[0]);
 #endif
 	PyObject* oarr = PyArray_SimpleNew(2, dims, NPY_FLOAT);
@@ -196,7 +194,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 	    free(raw_spec);
 		return NULL;
 	}
-#ifdef DEBUG
+#ifdef Mod_DEBUG
 	printf("done reading arrays of length (%d) of size (%d)\n", len, (int) size);
 	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
 #endif
@@ -205,7 +203,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 	float* p = (float*) PyArray_DATA(oarr);
 	memcpy(p, raw_spec, sizeof(float) * dims[0]);
 
-#ifdef DEBUG
+#ifdef Mod_DEBUG
 	puts("casting meta-data...");
 #endif
 	PyObject* rel_cycle = PyLong_FromLong(timing.Cycle);
@@ -244,13 +242,13 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //   		return NULL;
 //       }
 //       int32 n_entries, n_fields;  
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       puts("reading PTR data...");
 //   #endif
 //   	IcAPI_readPTRdata(&n_fields, &n_entries, &sh_arr);
 //   //    n_entries = (*sh_arr)->dimSizes[0];
 //   //    n_fields = (*sh_arr)->dimSizes[1];
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       printf("done reading PTR data with n_entries: (%d) / n_fields (%d)\n", n_entries, n_fields);
 //       printf("got sh_arr with dims (%dx%d)\n", (*sh_arr)->dimSizes[0], (*sh_arr)->dimSizes[1]);
 //   #endif
@@ -273,7 +271,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //               sh = (*sh_arr)->String[i*n_fields+j];
 //               field[j] = LHStrBuf(sh);
 //               len[j] = LHStrLen(sh);
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //               if (field[j] == NULL)
 //                   printf("encountered empty field (%d)...", j);
 //               // print string:
@@ -311,7 +309,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //                            unit, 
 //                            field[TIME], len[TIME]);
 //           PyList_SetItem(rv, i, entry);
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //           puts("\nDone reading PTR-data.");
 //   #endif
 //   	}
@@ -344,7 +342,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //       char* buf;
 //       PyObject* item;
 //       LStrHandleArray1 sh_arr1 = AllocateLStrHandleArray1(len);
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       printf("allocated LStrHandleArray1 of dimSize %d, of size %d...\n", 
 //               (*sh_arr1)->dimSize, sizeof(sh_arr1));
 //   #endif
@@ -361,7 +359,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //           key_value = PyBytes_AsString(item);
 //           if (key_value == NULL)  /* this would have risen a TypeError already */
 //               return NULL;
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //           printf("writing %s to pos (%d)...\n", key_value, pos);
 //   #endif
 //           sh = (*sh_arr1)->String[pos];  /* this yields the LStrHandle in the array */
@@ -374,7 +372,7 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //           s.cnt = strlen(key_value);
 //   //        LHStrBuf(sh) =
 //       }
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       puts("writing to PTR data...");
 //   #endif
 //       IcAPI_writePTRdata(&sh_arr1);
@@ -396,12 +394,12 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //       float* masses = (float*) malloc(len*sizeof(float));
 //   
 //       IcAPI_GetTraceMasses(masses, &size, len);
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       printf("allocated %d masses, got %d masses, first mass: %f\n", len, size, masses[0]);
 //   #endif
 //       npy_intp dims[1];
 //       dims[0] = len;
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
 //   #endif
 //   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
@@ -420,12 +418,12 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //       double* masses = (double*) malloc(len*sizeof(double));
 //   
 //       IcAPI_GetCurrentMasses(masses, len);
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //       printf("allocated %d masses, first mass: %f\n", len, masses[0]);
 //   #endif
 //       npy_intp dims[1];
 //       dims[0] = len;
-//   #ifdef DEBUG
+//   #ifdef Mod_DEBUG
 //   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
 //   #endif
 //   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
