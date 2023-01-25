@@ -5,6 +5,7 @@ extern "C" {
 typedef uint16_t  IcReturnType;
 #define IcReturnType_ok 0
 #define IcReturnType_error 1
+#define IcReturnType_timeout 2
 typedef uint16_t  Common_MeasureState;
 #define Common_MeasureState_ReadyIdle 0
 #define Common_MeasureState_MeasurementActive 1
@@ -86,8 +87,8 @@ IcReturnType __cdecl IcAPI_GetMeasureState(char IP[],
  * IcAPI_GetCurrentSpec
  */
 IcReturnType __cdecl IcAPI_GetCurrentSpec(char IP[], float SpecData[], 
-	IcTimingInfo *TimingInfo, float CalPara[], int32_t lenData, 
-	int32_t lenCalPara);
+	IcTimingInfo *TimingInfo, float CalPara[], int32_t len_specdata, 
+	int32_t len_calpara);
 /*!
  * IcAPI_ConvertTimingInfo
  */
@@ -99,7 +100,10 @@ IcReturnType __cdecl IcAPI_ConvertTimingInfo(float SGL_TimingInfo[],
 IcReturnType __cdecl IcAPI_GetCurrentDataFileName(char IP[], char File[], 
 	int32_t len);
 /*!
- * IcAPI_GetNumberOfPeaks
+ * Retrieve the length of the mass-table for 'GetTraceMasses(..)'.
+ * 
+ * The length is written to 'NumOfPeaks' if not NULL.
+ * 'timeoutMs' is deprecated (no-op)
  */
 IcReturnType __cdecl IcAPI_GetNumberOfPeaks(char IP[], int32_t timeoutMs, 
 	uint32_t *NumOfPeaks);
@@ -120,11 +124,14 @@ IcReturnType __cdecl IcAPI_GetServerState(char IP[],
 /*!
  * IcAPI_GetTraceData
  */
-IcReturnType __cdecl IcAPI_GetTraceData(char IP[], int32_t timeoutMs, 
-	float Raw[], float Corr[], float Conc[], int32_t lenRaw, int32_t lenCorr, 
-	int32_t lenConc);
+IcReturnType __cdecl IcAPI_GetTraceData(char IP[], int32_t timeout_ms, 
+	float Raw[], float Corr[], float Conc[], int32_t len, int32_t len2, 
+	int32_t len3);
 /*!
- * IcAPI_GetTraceMasses
+ * Retrieve the list of exact masses as set in the current peaktable.
+ * 
+ * The 'Masses' must point to an array of length 'len'.
+ * If 'actual_size' is not NULL, the potential array size is written there.
  */
 IcReturnType __cdecl IcAPI_GetTraceMasses(char IP[], float Masses[], 
 	int32_t len);
@@ -177,11 +184,16 @@ IcReturnType __cdecl IcAPI_GetNumberOfAddData(char IP[], int32_t timeoutMs,
 IcReturnType __cdecl IcAPI_GetAddDataNameByIndex(char IP[], int32_t index, 
 	char Name[], int32_t len);
 /*!
- * IcAPI_GetTraceDataWithTimingInfo
+ * Retrieve the next trace-data with a timeout.
+ * 
+ * 'timeout_ms' is the time to wait for new data. If no new data has arrived, 
+ * return the last data and set the return value to 2 (timeout). 
+ * 'TraceType' is one of 0 (raw), 1 (corrected), 2 (concentration).
+ * 'data' is the float32 data of length passed with 'len'.
  */
 IcReturnType __cdecl IcAPI_GetTraceDataWithTimingInfo(char IP[], 
-	int32_t timeoutMs, int32_t TraceType, float data[], IcTimingInfo *TimingInfo, 
-	int32_t len);
+	int32_t timeout_ms, IcTimingInfo *TimingInfo, int32_t TraceType, 
+	float data[], int32_t len);
 /*!
  * IcAPI_GetParamter
  */
@@ -195,19 +207,22 @@ IcReturnType __cdecl IcAPI_GetAddDataNamesAsJson(char IP[], char Names[],
  * IcAPI_GetParameters
  */
 IcReturnType __cdecl IcAPI_GetParameters(char IP[], LStrHandleArray *Names, 
-	float Values[], int32_t Indices[], int32_t lenValues, int32_t lenIndices);
+	float Values[], int32_t Indices[], int32_t len, int32_t len2);
 /*!
  * IcAPI_GetParametersAsJson
  */
 IcReturnType __cdecl IcAPI_GetParametersAsJson(char IP[], char NamesAsJson[], 
-	float Values[], int32_t Indices[], int32_t lenValues, int32_t lenIndices);
+	float Values[], int32_t Indices[], int32_t len, int32_t len2);
 /*!
  * IcAPI_SharedLib_IcAPI_SetParametersAsJson
  */
 IcReturnType __cdecl IcAPI_SharedLib_IcAPI_SetParametersAsJson(char IP[], 
 	char pars[]);
 /*!
- * IcAPI_GetNumberOfPeaksOld
+ * Retrieve the length of the mass-table for 'GetTraceMasses(..)'.
+ * 
+ * The length is written to 'NumOfPeaks' if not NULL.
+ * 'timeoutMs' is deprecated (no-op)
  */
 IcReturnType __cdecl IcAPI_GetNumberOfPeaksOld(char IP[], int32_t timeoutMs, 
 	uint32_t *NumOfPeaks);
@@ -260,17 +275,39 @@ IcReturnType __cdecl IcAPI_SharedLib_IcAPI_ADD_SetUnitAsByte(
  */
 IcReturnType __cdecl IcAPI_SharedLib_IcAPI_ADD_CheckAddDataDll(void);
 /*!
- * IcAPI_IcAPI_GetNextSpec
+ * IcAPI_GetNextSpec
  */
-IcReturnType __cdecl IcAPI_IcAPI_GetNextSpec(char IP[], int32_t timeout_ms, 
-	float SpecData[], IcTimingInfo *TimingInfo, float CalPara[], 
-	IcReturnType *returnType, int32_t len, int32_t len2);
+IcReturnType __cdecl IcAPI_GetNextSpec(char IP[], int32_t timeout_ms, 
+	IcTimingInfo *TimingInfo, float SpecData[], float CalPara[], 
+	int32_t len_specdata, int32_t len_calpara);
 /*!
- * IcAPI_SharedLib_IcAPI_SetTraceData
+ * Set the current trace-data with the timing info.
+ * 
+ * 'TimingInfo' converts and saves the timestamp alongside the trace-data
+ * 'TraceType' is one of 0 (raw), 1 (corr), 2 (conz)
+ * 'data' input vector of length given in 'len'
  */
-IcReturnType __cdecl IcAPI_SharedLib_IcAPI_SetTraceData(char IP[], 
-	float Raw[], float Corr[], float Conc[], int32_t len, int32_t len2, 
-	int32_t len3);
+IcReturnType __cdecl IcAPI_SetTraceDataWithTimingInfo(char IP[], 
+	IcTimingInfo *TimingInfo, int32_t TraceType, float data[], int32_t len);
+/*!
+ * IcAPI_SetTraceMasses
+ */
+IcReturnType __cdecl IcAPI_SetTraceMasses(char IP[], float Masses[], 
+	int32_t len);
+/*!
+ * IcAPI_SetTraceMassesOld
+ */
+IcReturnType __cdecl IcAPI_SetTraceMassesOld(char IP[], float Masses[], 
+	int32_t len);
+/*!
+ * Set all current trace-data with the timing info.
+ * 
+ * 'TimingInfo' converts and saves the timestamp alongside the trace-data
+ * 'raw/corr/conz' are input vectors of length given in 'len_xxx'
+ */
+IcReturnType __cdecl IcAPI_SetTraceData(char IP[], IcTimingInfo *TimingInfo, 
+	float raw[], float corr[], float conz[], int32_t len_raw, int32_t len_corr, 
+	int32_t len_conz);
 
 MgErr __cdecl LVDLLStatus(char *errStr, int errStrLen, void *module);
 

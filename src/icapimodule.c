@@ -3,7 +3,7 @@
  * (see also <https://docs.scipy.org/doc/numpy-1.15.0/user/c-info.how-to-extend.html>) */
 #include "numpy/npy_math.h"  // defines NPY_NAN
 #include "numpy/ndarrayobject.h"
-#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
+//#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -38,7 +38,7 @@ icapi_GetNumberOfTimebins(PyObject* self, PyObject* args)
     uint32_t timebins;
 	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	return PyLong_FromLong(timebins);
@@ -54,7 +54,7 @@ icapi_GetMeasureState(PyObject *self, PyObject *args)
 	Common_MeasureState state = 999;
 	if (IcAPI_GetMeasureState(ip, &state) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	return PyLong_FromLong(state);
@@ -70,7 +70,7 @@ icapi_GetServerState(PyObject *self, PyObject *args)
 	Common_ServerState state = 999;
 	if (IcAPI_GetServerState(ip, &state) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	return PyLong_FromLong(state);
@@ -95,7 +95,7 @@ icapi_GetVersion(PyObject *self, PyObject *args)
 //       
 //   	if (IcAPI_SetServerAction(ip, action) != IcReturnType_ok)
 //   	{
-//   		PyErr_SetString(PyExc_IOError, "unknown error!");
+//   		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 //   		return NULL;
 //   	}
 //       return Py_None;
@@ -108,64 +108,204 @@ icapi_GetNumberOfPeaks(PyObject *self, PyObject *args)
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
-    int32_t timeout_ms = 1000;
 	uint32_t n_peaks = 0;
-	if (IcAPI_GetNumberOfPeaks(ip, timeout_ms, &n_peaks) != IcReturnType_ok)
+	if (IcAPI_GetNumberOfPeaks(ip, 0, &n_peaks) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	return PyLong_FromLong(n_peaks);
 }
 
 static PyObject *
-icapi_GetTraceData(PyObject *self, PyObject *args)
+icapi_SetTraceMasses(PyObject *self, PyObject *args)
+{
+	char* ip;
+	PyObject* iarr;
+	if (!PyArg_ParseTuple(args, "sO", &ip, &iarr))
+		return NULL;
+
+	npy_intp size = PyArray_Size(iarr);
+	npy_intp dim = PyArray_DIM(iarr, 0);
+	if (size != dim)
+	{
+		PyErr_SetString(PyExc_ValueError, "array must be 1-dimensional!");
+		return NULL;
+	}
+	int type = PyArray_TYPE(iarr);
+	if (type != NPY_FLOAT)
+	{
+		PyErr_SetString(PyExc_ValueError, "expected type np.float32!");
+		return NULL;
+	}
+#ifdef Mod_DEBUG
+	printf("received np-array with type (%d), dim (%d), size (%d).\n", (int)type, (int)dim, (int)size);
+#endif
+	float* masses = (float*) PyArray_DATA(iarr);
+	int32_t len = (int32_t)size;
+	if (IcAPI_SetTraceMasses(ip, masses, len) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+		return NULL;
+	}
+	return Py_None;
+}
+
+static PyObject *
+icapi_GetTraceMasses(PyObject *self, PyObject *args)
 {
 	char* ip;
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
-    int32_t timeout_ms = 1000;
-	int32_t n_peaks = 0;
-	if (IcAPI_GetNumberOfPeaks(ip, timeout_ms, &n_peaks) != IcReturnType_ok)
+	uint32_t n_peaks = 0;
+	if (IcAPI_GetNumberOfPeaks(ip, 0, &n_peaks) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
-		return NULL;
-	}
-	npy_intp dims[2];
-    dims[0] = 3; 
-    dims[1] = n_peaks;
-
-	size_t size = sizeof(float) * n_peaks;
-	float* raw = (float*) malloc(size);
-	float* corr = (float*) malloc(size);
-	float* conc = (float*) malloc(size);
-	if (IcAPI_GetTraceData(ip, timeout_ms, raw, corr, conc, n_peaks, n_peaks, n_peaks) != IcReturnType_ok)
-	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
-	    free(raw);
-	    free(corr);
-	    free(conc);
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 #ifdef Mod_DEBUG
-	printf("done reading arrays of length (%d).\n", n_peaks);
-	printf("allocating %d dimension(s) of %d...\n", 2, (int) dims[0]);
+	printf("allocating np-array with len (%d).\n", n_peaks);
 #endif
-	PyObject* oarr = PyArray_SimpleNew(2, dims, NPY_FLOAT);
+	float* masses = (float*) malloc(n_peaks * sizeof(float));
+	if (IcAPI_GetTraceMasses(ip, masses, n_peaks) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+		free(masses);
+		return NULL;
+	}
+	npy_intp dims[1] = { n_peaks };
 
-	float* p = (float*) PyArray_DATA(oarr);
-	memcpy(p, raw, sizeof(float) * n_peaks);
-    p += n_peaks;
-	memcpy(p, corr, sizeof(float) * n_peaks);
-    p += n_peaks;
-	memcpy(p, conc, sizeof(float) * n_peaks);
+	return PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, (void*)masses);
+}
 
-	free(raw);
-	free(corr);
-	free(conc);
+static inline PyObject *
+convert_IcTimingInfo(const IcTimingInfo* timing)
+{
+	PyObject* rel_cycle = PyLong_FromLong(timing->Cycle);
+	PyObject* abs_cycle = PyLong_FromLong(timing->CycleOverall);
+	PyObject* rel_time = PyFloat_FromDouble(timing->relTime);
+	PyObject* abs_time = PyFloat_FromDouble(timing->absTime);
 
-	return oarr;
+	Py_ssize_t n_objects = 4;
+	PyObject* rv = PyTuple_New(n_objects);
+	PyTuple_SetItem(rv, 0, rel_cycle);
+	PyTuple_SetItem(rv, 1, abs_cycle);
+	PyTuple_SetItem(rv, 2, rel_time);
+	PyTuple_SetItem(rv, 3, abs_time);
+
+	return rv;
+}
+
+static inline bool
+convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
+{
+	int32_t rel_cycle, abs_cycle;
+	double rel_time, abs_time;
+
+	if (!PyArg_ParseTuple(tc_tuple, "iidd", &rel_cycle, &abs_cycle, &rel_time, &abs_time))
+		return false;
+
+	out->Cycle = rel_cycle;
+	out->CycleOverall = abs_cycle;
+	out->relTime = rel_time;
+	out->absTime = abs_time;
+
+	return true;
+}
+
+static PyObject *
+icapi_SetTraceData(PyObject *self, PyObject *args)
+{
+	char* ip;
+	int32_t trace_type = 0;
+	PyObject* tc_tup;
+	PyObject* iarr;	
+	if (!PyArg_ParseTuple(args, "siOO", &ip, &trace_type, &tc_tup, &iarr))
+		return NULL;
+
+	if (!((0 <= trace_type) && (trace_type < 3)))
+	{
+		PyErr_SetString(PyExc_ValueError, "trace_type must be 0 <= x < 3");
+		return NULL;
+	}
+	npy_intp size = PyArray_Size(iarr);
+	npy_intp dim = PyArray_DIM(iarr, 0);
+	if (size != dim)
+	{
+		PyErr_SetString(PyExc_ValueError, "array must be 1-dimensional!");
+		return NULL;
+	}
+	int type = PyArray_TYPE(iarr);
+	if (type != NPY_FLOAT)
+	{
+		PyErr_SetString(PyExc_ValueError, "expected type np.float32!");
+		return NULL;
+	}
+#ifdef Mod_DEBUG
+	printf("received np-array with type (%d), dim (%d), size (%d).\n", (int)type, (int)dim, (int)size);
+#endif
+	float* data = (float*) PyArray_DATA(iarr);
+	IcTimingInfo timing;
+	if (!convert_tc_tuple(tc_tup, &timing))
+		return NULL;
+
+	if (IcAPI_SetTraceDataWithTimingInfo(ip, &timing, trace_type, data, (int32_t)dim) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+		return NULL;
+	}
+	return Py_None;
+}
+
+static PyObject *
+icapi_GetTraceData(PyObject *self, PyObject *args)
+{
+	char* ip;
+    int32_t timeout_ms = 1000;
+    int32_t trace_type = 0;
+	if (!PyArg_ParseTuple(args, "sii", &ip, &timeout_ms, &trace_type))
+		return NULL;
+
+	if (!((0 <= trace_type) && (trace_type < 3)))
+	{
+		PyErr_SetString(PyExc_ValueError, "trace_type must be 0 <= x < 3");
+		return NULL;
+	}
+	int32_t n_peaks = 0;
+	if (IcAPI_GetNumberOfPeaks(ip, 0, &n_peaks) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine: can't read # of peaks!");
+		return NULL;
+	}
+	IcTimingInfo timing;
+	float* data = (float*) malloc(3 * sizeof(float) * n_peaks);
+	IcReturnType err;
+	if ((err = IcAPI_GetTraceDataWithTimingInfo(ip, timeout_ms, &timing, trace_type, data, n_peaks)) != IcReturnType_ok)
+	{
+	    free(data);
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine: can't read trace-data!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+		return NULL;
+	}
+#ifdef Mod_DEBUG
+	printf("done reading arrays of length (%d).\n", (int)n_peaks);
+#endif
+	npy_intp dims[] = { n_peaks };
+	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, (void*)data);
+	PyObject* tc_tuple = convert_IcTimingInfo(&timing);
+
+	PyObject* rv = PyTuple_New(2);
+	PyTuple_SetItem(rv, 0, tc_tuple);
+	PyTuple_SetItem(rv, 1, oarr);
+
+	return rv;
 }
 
 static PyObject *
@@ -179,47 +319,78 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
     uint32_t timebins;
 	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	npy_intp dims[1] = { timebins };
-	int32_t len = dims[0];
-	size_t size = sizeof(float) * (size_t)len;
+	size_t size = sizeof(float) * (size_t)timebins;
 	float* raw_spec = (float*) malloc(size);
     IcTimingInfo timing;
 	float cal_pars[N_CAL_PARS] = { 0., 0. };
-	if (IcAPI_GetCurrentSpec(ip, raw_spec, &timing, cal_pars, len, N_CAL_PARS) != IcReturnType_ok)
+	if (IcAPI_GetCurrentSpec(ip, raw_spec, &timing, cal_pars, timebins, N_CAL_PARS) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 	    free(raw_spec);
 		return NULL;
 	}
 #ifdef Mod_DEBUG
-	printf("done reading arrays of length (%d) of size (%d)\n", len, (int) size);
-	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
+	printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
+	printf("allocating %d dimension(s) of %d...\n", 1, (int)dims[0]);
 #endif
-	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
+	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, raw_spec);
+	PyObject* tc_tup = convert_IcTimingInfo(&timing);
 
-	float* p = (float*) PyArray_DATA(oarr);
-	memcpy(p, raw_spec, sizeof(float) * dims[0]);
+	PyObject* rv = PyTuple_New(2);
+	PyTuple_SetItem(rv, 0, tc_tup);
+	PyTuple_SetItem(rv, 1, oarr);
 
+	return rv;
+}
+
+static PyObject *
+icapi_GetNextSpectrum(PyObject *self, PyObject *args)
+{
+	char* ip;
+	int32_t timeout_ms = 1000;
+	if (!PyArg_ParseTuple(args, "si", &ip, &timeout_ms))
+		return NULL;
+
+	/* define shape of output array */
+	uint32_t timebins;
+	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
+	{
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+		return NULL;
+	}
+	npy_intp dims[1] = { timebins };
+	size_t size = sizeof(float) * (size_t)timebins;
+	float* raw_spec = (float*) malloc(size);
+	IcTimingInfo timing;
+	float cal_pars[N_CAL_PARS] = { 0., 0. };
+	IcReturnType err;
+	if ((err = IcAPI_GetNextSpec(ip, timeout_ms, &timing, raw_spec, cal_pars, timebins, N_CAL_PARS)) != IcReturnType_ok)
+	{
+		free(raw_spec);
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+		return NULL;
+	}
 #ifdef Mod_DEBUG
-	puts("casting meta-data...");
+	printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
+	printf("allocating %d dimension(s) of %d...\n", 1, (int)dims[0]);
 #endif
-	PyObject* rel_cycle = PyLong_FromLong(timing.Cycle);
-	PyObject* abs_cycle = PyLong_FromLong(timing.CycleOverall);
-	PyObject* rel_time = PyFloat_FromDouble(timing.relTime);
-	PyObject* abs_time = PyFloat_FromDouble(timing.absTime);
+	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, raw_spec);
+	PyObject* tc_tup = convert_IcTimingInfo(&timing);
 
-	Py_ssize_t n_objects = 5;
-	PyObject* rv = PyTuple_New(n_objects);
-	PyTuple_SetItem(rv, 0, rel_cycle);
-	PyTuple_SetItem(rv, 1, abs_cycle);
-	PyTuple_SetItem(rv, 2, rel_time);
-	PyTuple_SetItem(rv, 3, abs_time);
-	PyTuple_SetItem(rv, 4, oarr);
-
-	free(raw_spec);
+	PyObject* rv = PyTuple_New(2);
+	PyTuple_SetItem(rv, 0, tc_tup);
+	PyTuple_SetItem(rv, 1, oarr);
 
 	return rv;
 }
@@ -384,55 +555,6 @@ icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
 //       return Py_None;
 //   }
 
-//   static PyObject*
-//   icapi_GetTraceMasses(PyObject* self, PyObject* args)
-//   {
-//       int32_t len;
-//       uint32_t size;
-//       ICAPI_GetNumberOfPeaks(&len);
-//   
-//       float* masses = (float*) malloc(len*sizeof(float));
-//   
-//       IcAPI_GetTraceMasses(masses, &size, len);
-//   #ifdef Mod_DEBUG
-//       printf("allocated %d masses, got %d masses, first mass: %f\n", len, size, masses[0]);
-//   #endif
-//       npy_intp dims[1];
-//       dims[0] = len;
-//   #ifdef Mod_DEBUG
-//   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-//   #endif
-//   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_FLOAT);
-//   	float* p = (float*) PyArray_DATA(oarr);
-//   	memcpy(p, masses, sizeof(float) * dims[0]);
-//   
-//       return oarr;
-//   }
-//   
-//   static PyObject*
-//   icapi_GetCurrentMasses(PyObject* self, PyObject* args)
-//   {
-//       int32_t len;
-//       ICAPI_GetNumberOfPeaks(&len);
-//   
-//       double* masses = (double*) malloc(len*sizeof(double));
-//   
-//       IcAPI_GetCurrentMasses(masses, len);
-//   #ifdef Mod_DEBUG
-//       printf("allocated %d masses, first mass: %f\n", len, masses[0]);
-//   #endif
-//       npy_intp dims[1];
-//       dims[0] = len;
-//   #ifdef Mod_DEBUG
-//   	printf("allocating %d dimension(s) of %d...\n", 1, (int) dims[0]);
-//   #endif
-//   	PyObject* oarr = PyArray_SimpleNew(1, dims, NPY_DOUBLE);
-//   	double* p = (double*) PyArray_DATA(oarr);
-//   	memcpy(p, masses, sizeof(double) * dims[0]);
-//   
-//       return oarr;
-//   }
-
 #define MAX_PATH_LEN 260
 static PyObject*
 icapi_GetCurrentDataFileName(PyObject* self, PyObject* args)
@@ -446,7 +568,7 @@ icapi_GetCurrentDataFileName(PyObject* self, PyObject* args)
     char file[MAX_PATH_LEN];
 	if (IcAPI_GetCurrentDataFileName(ip, raw_file, len) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "unknown error!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
     strncpy(file, raw_file, MAX_PATH_LEN);
@@ -495,26 +617,65 @@ static PyMethodDef Methods[] = {
 //        "to find the desired enum."},
 //	{"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
 //		"Returns number of peaks."},
+    {"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
+        "Returns the number of peaks in the IoniTOF peaktable.\n\n"
+		"DEPRECATED :: use GetTraceMasses(ip).size with the same effect!"
+	},
+	{"SetTraceMasses", icapi_SetTraceMasses, METH_VARARGS,
+		"Sets the masses of the current peaktable a numpy array.\n\n"
+	},
+	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
+		"Gets the masses of the current peaktable a numpy array.\n\n"
+	},
+	{"SetTraceData", icapi_SetTraceData, METH_VARARGS,
+		"Sets the current data of the given trace as a numpy array.\n\n"
+		"The size of the array should correspond to the mass-list,\n"
+		"see 'Get-/SetTraceMasses()'.\n\n"
+		"Arguments:\n"
+		"\tip\n"
+		"\ttrace_type: one of 0 (raw), 1 (corr), 2 (conc)\n"
+		"\ttc_tup: tuple with (rel-cycle, abs-cycle, rel-time, abs-time\n"
+		"\tinput-array: np.array(dtype=np.float32) with trace data\n"
+		"\n"
+		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
+	},
 	{"GetTraceData", icapi_GetTraceData, METH_VARARGS,
 		"Gets the current data of all traces as a numpy array.\n\n"
-        "The return value is a tuple containing meta-data: \n"
-        "(overall cycle, file cycle, timestamp, data), \n"
-        "where 'timestamp' is an array of 4 float values, the \n"
-        "first 2 describing the absolute time in seconds after \n"
-        "1st Jan 1904 and the latter the relative time since \n"
-        "starting the measurement."},
+		"The size of the array should correspond to the mass-list,\n"
+		"see 'Get-/SetTraceMasses()'.\n\n"
+		"Arguments:\n"
+		"\tip\n"
+		"\ttimeout_ms: timeout in milliseconds\n"
+		"\ttrace_type: one of 0 (raw), 1 (corr), 2 (conc)\n"
+		"\n"
+		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
+	},
 	{"GetCurrentSpectrum", icapi_GetCurrentSpectrum, METH_VARARGS,
-		"Returns the current spectrum as numpy array.\n\n"
-        "The return value is a tuple containing meta-data: \n"
-        "(overall cycle, file cycle, timestamp, data), \n"
-        "where 'timestamp' is an array of 4 float values, the \n"
-        "first 2 describing the absolute time in seconds after \n"
-        "1st Jan 1904 and the latter the relative time since \n"
-        "starting the measurement."},
+		"Returns the timestamp and current spectrum as numpy array.\n\n"
+        "The return value is a tuple (timing, spectrum), where the \n"
+        "timestamp is a tuple of 4 values: (rel-cycle, abs-cycle,\n"
+		"rel-time, abs-time), where the rel-cycle is relative to \n"
+		"the current file and the abs-time is a LabVIEW timestamp:\n"
+        "the absolute time in seconds after 1st Jan 1904.\n\n"
+		"Arguments:\n"
+		"\tip: every method of the icapi module takes an ip as first\n"
+		"\t    argument. May be 'localhost' for the current machine.\n"
+		"\n"
+		"Returns: a tuple with (timing, data)."
+	},
+	{"GetNextSpectrum", icapi_GetNextSpectrum, METH_VARARGS,
+		"Returns the timestamp and next available spectrum as numpy array.\n\n"
+		"This takes a 'timeout_ms' as a second parameter, which is\n"
+		"the time in milliseconds to wait for a new spectrum to arrive.\n"
+		"Raises a TimoutError if no new spectrum is read.\n\n"
+		"Arguments:\n"
+		"\tip\n"
+		"\ttimeout_ms: timeout in milliseconds\n"
+		"\n"
+		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
+	},
     {"GetCurrentDataFileName", icapi_GetCurrentDataFileName, METH_VARARGS,
         "Returns the current source file name."},
-    {"GetNumberOfPeaks", icapi_GetNumberOfPeaks, METH_VARARGS,
-        "Returns the number of peaks in the IoniTOF peaktable."},
 //	{"read_PTR_data", icapi_read_PTR_data, METH_VARARGS,
 //		"Returns the PTR data."},
 // 	{"write_PTR_data", icapi_write_PTR_data, METH_VARARGS,
@@ -522,10 +683,6 @@ static PyMethodDef Methods[] = {
 //         "Expects a tuple of key-value byte strings like (b'key:value',..), \n"
 //         "where `key` must be a valid PTR data name as returned \n"
 //         "by `read_PTR_data()`. The encoding is expected to be Latin1.\n"},
-//	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
-//		"Returns the GetTraceMasses data."},
-//	{"GetCurrentMasses", icapi_GetCurrentMasses, METH_VARARGS,
-//		"Returns the GetCurrentMasses data."},
 	{NULL, NULL, 0, NULL}  /* Sentinel */
 };
 

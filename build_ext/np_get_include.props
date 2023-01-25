@@ -5,8 +5,11 @@
   <PropertyGroup />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(LOCALAPPDATA)\pypoetry\Cache\virtualenvs\pytrms--GEF6d54-py3.8\lib\site-packages\numpy\core\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(LOCALAPPDATA)\pypoetry\Cache\virtualenvs\pytrms--GEF6d54-py3.8\lib\site-packages\numpy\core\include;$(ProgramFiles)\Python38\include;$(ProgramFiles)\Python38\include\cpython;$(ProgramFiles)\Python38\include\internal</AdditionalIncludeDirectories>
     </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>C:\Program Files\Python38\libs;</AdditionalLibraryDirectories>
+    </Link>
   </ItemDefinitionGroup>
   <ItemGroup />
 </Project>
