@@ -80,7 +80,10 @@ static PyObject *
 icapi_GetVersion(PyObject *self, PyObject *args)
 {
     double version;
-	IcAPI_GetVersion(&version);
+    char version_string[10];
+	IcAPI_GetVersion(&version, version_string, 10);
+
+	return PyUnicode_FromString(version_string);
 
 	return PyLong_FromDouble(version);
 }
@@ -197,6 +200,43 @@ convert_IcTimingInfo(const IcTimingInfo* timing)
 	return rv;
 }
 
+typedef Cluster5* TimeCycle_t;
+
+static inline PyObject *
+convert_IcTimingInfo2(const TimeCycle_t timing)
+{
+	PyObject* rel_cycle = PyLong_FromLong(timing->Cycle);
+	PyObject* abs_cycle = PyLong_FromLong(timing->OverallCycle);
+	PyObject* rel_time = PyFloat_FromDouble(timing->RelTime);
+	PyObject* abs_time = PyFloat_FromDouble(timing->AbsTime);
+
+	Py_ssize_t n_objects = 4;
+	PyObject* rv = PyTuple_New(n_objects);
+	PyTuple_SetItem(rv, 0, rel_cycle);
+	PyTuple_SetItem(rv, 1, abs_cycle);
+	PyTuple_SetItem(rv, 2, rel_time);
+	PyTuple_SetItem(rv, 3, abs_time);
+
+	return rv;
+}
+
+
+static const Py_ssize_t n_autos = 9;  // no constexpr in ANSI-C :(
+static_assert ( sizeof(Cluster19) == (9 * sizeof(int32_t)) , "Automation cluster has changed" );
+typedef Cluster19 Automation_t;
+
+static inline PyObject *
+convert_Automation(const Automation_t* automation)
+{
+	PyObject* rv = PyTuple_New(n_autos);
+	int32_t* p = automation;
+	for (size_t i = 0; i < n_autos; i++)
+	{
+		PyTuple_SetItem(rv, i, *(p+i));
+	}
+	return rv;
+}
+
 static inline bool
 convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
 {
@@ -212,6 +252,31 @@ convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
 	out->absTime = abs_time;
 
 	return true;
+}
+
+static PyObject *
+icapi_GetNextTimecycle(PyObject *self, PyObject *args)
+{
+	char* ip;
+	int32_t timeout = 1000;
+	if (!PyArg_ParseTuple(args, "si", &ip, &timeout))
+		return NULL;
+
+	IcTimingInfo timing;
+	IcReturnType err;
+	if ((err = IcAPI_GetNextTimecycle(ip, timeout, &timing)) != IcReturnType_ok)
+	{
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+		return NULL;
+	}
+	return convert_IcTimingInfo(&timing);
 }
 
 static PyObject *
@@ -275,7 +340,7 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 	int32_t n_peaks = 0;
 	if (IcAPI_GetNumberOfPeaks(ip, 0, &n_peaks) != IcReturnType_ok)
 	{
-		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine: can't read # of peaks!");
+		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
 	IcTimingInfo timing;
@@ -286,7 +351,7 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 	    free(data);
 		switch (err) {
 		case IcReturnType_error:
-			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine: can't read trace-data!");
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 			break;
 		case IcReturnType_timeout:
 			PyErr_SetString(PyExc_TimeoutError, "method timed out");
@@ -391,6 +456,67 @@ icapi_GetNextSpectrum(PyObject *self, PyObject *args)
 	PyObject* rv = PyTuple_New(2);
 	PyTuple_SetItem(rv, 0, tc_tup);
 	PyTuple_SetItem(rv, 1, oarr);
+
+	return rv;
+}
+
+static PyObject *
+convert_FloatArray(FloatArray arr)
+{
+	if ((arr == NULL) || (arr[0] < 100ul))
+	{
+		PyErr_SetString(PyExc_IOError, "empty FloatArray");
+		return NULL;
+	}
+	FloatArrayBase base = arr[0][0];
+	int32_t dims = base.dimSize;
+	float* source = base.Numeric;
+
+	PyObject* rv = PyArray_SimpleNew(1, dims, NPY_FLOAT);
+
+	memcpy(PyArray_DATA(rv), source, dims);
+
+	return rv;
+}
+
+static PyObject *
+icapi_GetFullCycledata(PyObject *self, PyObject *args)
+{
+	char* ip;
+	int32_t timeout_ms = 1000;
+	if (!PyArg_ParseTuple(args, "si", &ip, &timeout_ms))
+		return NULL;
+
+	uint32_t abs_cycle;
+	CommonTypes_TD_ACQ_FullCycleData data;
+	IcReturnType err;
+	if ((err = IcAPI_GetFullCycleData(ip, timeout_ms, &abs_cycle, &data)) != IcReturnType_ok)
+	{
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+		return NULL;
+	}
+#ifdef Mod_DEBUG
+	//printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
+#endif
+	PyObject* oarr;
+	if ((oarr = convert_FloatArray(data.SpecData._1D)) == NULL)
+	{
+		return NULL;
+	}
+	PyObject* tc_tup = convert_IcTimingInfo2(&data.SpecData.TimeCycle);
+	PyObject* auto_tup = convert_Automation(&data.Automation);
+
+	PyObject* rv = PyTuple_New(3);
+	PyTuple_SetItem(rv, 0, tc_tup);
+	PyTuple_SetItem(rv, 1, auto_tup);
+	PyTuple_SetItem(rv, 2, oarr);
 
 	return rv;
 }
@@ -627,6 +753,13 @@ static PyMethodDef Methods[] = {
 	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
 		"Gets the masses of the current peaktable a numpy array.\n\n"
 	},
+	{"GetNextTimecycle", icapi_GetNextTimecycle, METH_VARARGS,
+		"Wait for the next cycle and return rel-cycle and abs-cycle.\n\n"
+		"Arguments:\n"
+		"\tip\n"
+		"\ttimeout_ms: timeout in milliseconds\n"
+		"Returns: a timing-tuple, see 'GetCurrentSpectrum()'."
+	},
 	{"SetTraceData", icapi_SetTraceData, METH_VARARGS,
 		"Sets the current data of the given trace as a numpy array.\n\n"
 		"The size of the array should correspond to the mass-list,\n"
@@ -651,7 +784,7 @@ static PyMethodDef Methods[] = {
 		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
 	},
 	{"GetCurrentSpectrum", icapi_GetCurrentSpectrum, METH_VARARGS,
-		"Returns the timestamp and current spectrum as numpy array.\n\n"
+		"Gets the timestamp and current spectrum as numpy array.\n\n"
         "The return value is a tuple (timing, spectrum), where the \n"
         "timestamp is a tuple of 4 values: (rel-cycle, abs-cycle,\n"
 		"rel-time, abs-time), where the rel-cycle is relative to \n"
@@ -664,7 +797,19 @@ static PyMethodDef Methods[] = {
 		"Returns: a tuple with (timing, data)."
 	},
 	{"GetNextSpectrum", icapi_GetNextSpectrum, METH_VARARGS,
-		"Returns the timestamp and next available spectrum as numpy array.\n\n"
+		"Gets the timestamp and next available spectrum as numpy array.\n\n"
+		"This takes a 'timeout_ms' as a second parameter, which is\n"
+		"the time in milliseconds to wait for a new spectrum to arrive.\n"
+		"Raises a TimoutError if no new spectrum is read.\n\n"
+		"Arguments:\n"
+		"\tip\n"
+		"\ttimeout_ms: timeout in milliseconds\n"
+		"\n"
+		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
+	},
+	{"GetFullCycledata", icapi_GetFullCycledata, METH_VARARGS,
+		"Gets the timestamp and next available full-cycle data.\n\n"
+		"The full-cycle contains ... TODO :: will ich hier ALLES ausgeben??\n"
 		"This takes a 'timeout_ms' as a second parameter, which is\n"
 		"the time in milliseconds to wait for a new spectrum to arrive.\n"
 		"Raises a TimoutError if no new spectrum is read.\n\n"
@@ -675,7 +820,7 @@ static PyMethodDef Methods[] = {
 		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
 	},
     {"GetCurrentDataFileName", icapi_GetCurrentDataFileName, METH_VARARGS,
-        "Returns the current source file name."},
+        "Gets the current source file name."},
 //	{"read_PTR_data", icapi_read_PTR_data, METH_VARARGS,
 //		"Returns the PTR data."},
 // 	{"write_PTR_data", icapi_write_PTR_data, METH_VARARGS,
