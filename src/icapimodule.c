@@ -3,7 +3,6 @@
  * (see also <https://docs.scipy.org/doc/numpy-1.15.0/user/c-info.how-to-extend.html>) */
 #include "numpy/npy_math.h"  // defines NPY_NAN
 #include "numpy/ndarrayobject.h"
-//#define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -104,6 +103,12 @@ icapi_GetVersion(PyObject *self, PyObject *args)
 //       return Py_None;
 //   }
 
+/*****************************************************************/
+/**                                                             **/
+/**                    mass-list functions                      **/
+/**                                                             **/
+/*****************************************************************/
+
 static PyObject *
 icapi_GetNumberOfPeaks(PyObject *self, PyObject *args)
 {
@@ -142,7 +147,7 @@ icapi_SetTraceMasses(PyObject *self, PyObject *args)
 		return NULL;
 	}
 #ifdef Mod_DEBUG
-	printf("received np-array with type (%d), dim (%d), size (%d).\n", (int)type, (int)dim, (int)size);
+	printf("received np-array with type (%d), dim (%d), size (%d).\n", type, dim, size);
 #endif
 	float* masses = (float*) PyArray_DATA(iarr);
 	int32_t len = (int32_t)size;
@@ -182,6 +187,12 @@ icapi_GetTraceMasses(PyObject *self, PyObject *args)
 	return PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, (void*)masses);
 }
 
+/*****************************************************************/
+/**                                                             **/
+/**                   conversion functions                      **/
+/**                                                             **/
+/*****************************************************************/
+
 static inline PyObject *
 convert_IcTimingInfo(const IcTimingInfo* timing)
 {
@@ -200,39 +211,18 @@ convert_IcTimingInfo(const IcTimingInfo* timing)
 	return rv;
 }
 
-typedef Cluster5* TimeCycle_t;
-
-static inline PyObject *
-convert_IcTimingInfo2(const TimeCycle_t timing)
-{
-	PyObject* rel_cycle = PyLong_FromLong(timing->Cycle);
-	PyObject* abs_cycle = PyLong_FromLong(timing->OverallCycle);
-	PyObject* rel_time = PyFloat_FromDouble(timing->RelTime);
-	PyObject* abs_time = PyFloat_FromDouble(timing->AbsTime);
-
-	Py_ssize_t n_objects = 4;
-	PyObject* rv = PyTuple_New(n_objects);
-	PyTuple_SetItem(rv, 0, rel_cycle);
-	PyTuple_SetItem(rv, 1, abs_cycle);
-	PyTuple_SetItem(rv, 2, rel_time);
-	PyTuple_SetItem(rv, 3, abs_time);
-
-	return rv;
-}
-
-
 static const Py_ssize_t n_autos = 9;  // no constexpr in ANSI-C :(
-static_assert ( sizeof(Cluster19) == (9 * sizeof(int32_t)) , "Automation cluster has changed" );
-typedef Cluster19 Automation_t;
+static_assert ( sizeof(IcAutomation) == (9 * sizeof(int32_t)) , "Automation cluster has changed" );
 
 static inline PyObject *
-convert_Automation(const Automation_t* automation)
+convert_Automation(const IcAutomation* automation)
 {
-	PyObject* rv = PyTuple_New(n_autos);
-	int32_t* p = automation;
+	PyObject* item, * rv = PyTuple_New(n_autos);
+	int32_t* p = (int32_t*)automation;
 	for (size_t i = 0; i < n_autos; i++)
 	{
-		PyTuple_SetItem(rv, i, *(p+i));
+		item = PyLong_FromLong(p[i]);
+		PyTuple_SetItem(rv, i, item);
 	}
 	return rv;
 }
@@ -253,6 +243,39 @@ convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
 
 	return true;
 }
+
+static PyObject *
+convert_FloatArray(FloatArray arr)
+{
+	if ((arr == NULL) || (arr[0] < 100ul))
+	{
+		PyErr_SetString(PyExc_IOError, "empty FloatArray");
+		return NULL;
+	}
+	npy_intp dims[1] = { arr[0]->dimSize };
+	float* source = (float*)arr[0]->Numeric;
+
+	const int fortran_order = 0;
+	PyObject* rv;
+	if ((rv = PyArray_EMPTY(1, dims, NPY_FLOAT, fortran_order)) == NULL)
+	{
+		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
+		return NULL;
+	}
+	float* data = (float*) PyArray_DATA(rv);
+#ifdef Mod_DEBUG
+	printf("starting to copy (%d) float-vals...\n", dims[0]);
+#endif
+	memcpy(data, source, sizeof(float) * dims[0]);
+
+	return rv;
+}
+
+/*****************************************************************/
+/**                                                             **/
+/**             sync'n'subscribe functions                      **/
+/**                                                             **/
+/*****************************************************************/
 
 static PyObject *
 icapi_GetNextTimecycle(PyObject *self, PyObject *args)
@@ -278,6 +301,86 @@ icapi_GetNextTimecycle(PyObject *self, PyObject *args)
 	}
 	return convert_IcTimingInfo(&timing);
 }
+
+static PyObject *
+icapi_GetNextSpectrum(PyObject *self, PyObject *args)
+{
+	char* ip;
+	int32_t timeout_ms = 1000;
+	int32_t n_timebins = -1;  // TODO :: make optional, in which case we have to use one more API call..
+	if (!PyArg_ParseTuple(args, "sii", &ip, &timeout_ms, &n_timebins))
+		return NULL;
+
+	/** TODO :: (see above)
+	* 
+	* more TODO :: wenn man ein np.array uebergeben wuerde, muesste man nichts allokieren... ?? naja...
+	* 
+	uint32_t timebins;
+	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
+	{
+	PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+	return NULL;
+	}
+	**/
+
+	npy_intp dims[1] = { n_timebins };
+	IcAutomation auto_numbers;
+	IcTimingInfo timing;
+	double calpars[N_CAL_PARS];
+
+	const int fortran_order = 0;
+	PyObject* oarr;
+	if ((oarr = PyArray_EMPTY(1, dims, NPY_FLOAT, fortran_order)) == NULL)
+	{
+		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
+		return NULL;
+	}
+	float* spec_p = (float*) PyArray_DATA(oarr);
+
+	IcReturnType err;
+	if ((err = IcAPI_GetNextSpectrum(ip, timeout_ms, &auto_numbers, &timing, 
+		calpars, spec_p, N_CAL_PARS, n_timebins)) != IcReturnType_ok)
+	{
+#ifdef Mod_DEBUG
+		printf("IcAPI call returned error (%d). freeing memory..\n", err);
+#endif
+		PyObject_Free(oarr);
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+		return NULL;
+	}
+	PyObject* tc_tup = convert_IcTimingInfo(&timing);
+	PyObject* auto_tup = convert_Automation(&auto_numbers);
+
+	PyObject* cp_tup = PyTuple_New(N_CAL_PARS);
+	PyTuple_SetItem(cp_tup, 0, PyFloat_FromDouble(calpars[0]));
+	PyTuple_SetItem(cp_tup, 1, PyFloat_FromDouble(calpars[1]));
+
+	PyObject* rv = PyTuple_New(4);
+	PyTuple_SetItem(rv, 0, tc_tup);
+	PyTuple_SetItem(rv, 1, auto_tup);
+	PyTuple_SetItem(rv, 2, oarr);
+	PyTuple_SetItem(rv, 3, cp_tup);
+#ifdef Mod_DEBUG
+	printf("packed tuple of (%d) with lens (%d, %d, %d)\n", 
+		PyTuple_Size(rv), 
+		PyTuple_Size(tc_tup), PyTuple_Size(auto_tup), 
+		PyArray_Size(oarr), PyTuple_Size(cp_tup));
+#endif
+	return rv;
+}
+
+/*****************************************************************/
+/**                                                             **/
+/**                    tracedata functions                      **/
+/**                                                             **/
+/*****************************************************************/
 
 static PyObject *
 icapi_SetTraceData(PyObject *self, PyObject *args)
@@ -308,7 +411,7 @@ icapi_SetTraceData(PyObject *self, PyObject *args)
 		return NULL;
 	}
 #ifdef Mod_DEBUG
-	printf("received np-array with type (%d), dim (%d), size (%d).\n", (int)type, (int)dim, (int)size);
+	printf("received np-array with type (%d), dim (%d), size (%d).\n", type, dim, size);
 #endif
 	float* data = (float*) PyArray_DATA(iarr);
 	IcTimingInfo timing;
@@ -360,7 +463,7 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 		return NULL;
 	}
 #ifdef Mod_DEBUG
-	printf("done reading arrays of length (%d).\n", (int)n_peaks);
+	printf("done reading arrays of length (%d).\n", n_peaks);
 #endif
 	npy_intp dims[] = { n_peaks };
 	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, (void*)data);
@@ -369,154 +472,6 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 	PyObject* rv = PyTuple_New(2);
 	PyTuple_SetItem(rv, 0, tc_tuple);
 	PyTuple_SetItem(rv, 1, oarr);
-
-	return rv;
-}
-
-static PyObject *
-icapi_GetCurrentSpectrum(PyObject *self, PyObject *args)
-{
-	char* ip;
-	if (!PyArg_ParseTuple(args, "s", &ip))
-		return NULL;
-
-	/* define shape of output array */
-    uint32_t timebins;
-	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
-	{
-		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
-		return NULL;
-	}
-	npy_intp dims[1] = { timebins };
-	size_t size = sizeof(float) * (size_t)timebins;
-	float* raw_spec = (float*) malloc(size);
-    IcTimingInfo timing;
-	float cal_pars[N_CAL_PARS] = { 0., 0. };
-	if (IcAPI_GetCurrentSpec(ip, raw_spec, &timing, cal_pars, timebins, N_CAL_PARS) != IcReturnType_ok)
-	{
-		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
-	    free(raw_spec);
-		return NULL;
-	}
-#ifdef Mod_DEBUG
-	printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
-	printf("allocating %d dimension(s) of %d...\n", 1, (int)dims[0]);
-#endif
-	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, raw_spec);
-	PyObject* tc_tup = convert_IcTimingInfo(&timing);
-
-	PyObject* rv = PyTuple_New(2);
-	PyTuple_SetItem(rv, 0, tc_tup);
-	PyTuple_SetItem(rv, 1, oarr);
-
-	return rv;
-}
-
-static PyObject *
-icapi_GetNextSpectrum(PyObject *self, PyObject *args)
-{
-	char* ip;
-	int32_t timeout_ms = 1000;
-	if (!PyArg_ParseTuple(args, "si", &ip, &timeout_ms))
-		return NULL;
-
-	/* define shape of output array */
-	uint32_t timebins;
-	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
-	{
-		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
-		return NULL;
-	}
-	npy_intp dims[1] = { timebins };
-	size_t size = sizeof(float) * (size_t)timebins;
-	float* raw_spec = (float*) malloc(size);
-	IcTimingInfo timing;
-	float cal_pars[N_CAL_PARS] = { 0., 0. };
-	IcReturnType err;
-	if ((err = IcAPI_GetNextSpec(ip, timeout_ms, &timing, raw_spec, cal_pars, timebins, N_CAL_PARS)) != IcReturnType_ok)
-	{
-		free(raw_spec);
-		switch (err) {
-		case IcReturnType_error:
-			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
-			break;
-		case IcReturnType_timeout:
-			PyErr_SetString(PyExc_TimeoutError, "method timed out");
-			break;
-		}
-		return NULL;
-	}
-#ifdef Mod_DEBUG
-	printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
-	printf("allocating %d dimension(s) of %d...\n", 1, (int)dims[0]);
-#endif
-	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, raw_spec);
-	PyObject* tc_tup = convert_IcTimingInfo(&timing);
-
-	PyObject* rv = PyTuple_New(2);
-	PyTuple_SetItem(rv, 0, tc_tup);
-	PyTuple_SetItem(rv, 1, oarr);
-
-	return rv;
-}
-
-static PyObject *
-convert_FloatArray(FloatArray arr)
-{
-	if ((arr == NULL) || (arr[0] < 100ul))
-	{
-		PyErr_SetString(PyExc_IOError, "empty FloatArray");
-		return NULL;
-	}
-	FloatArrayBase base = arr[0][0];
-	int32_t dims = base.dimSize;
-	float* source = base.Numeric;
-
-	PyObject* rv = PyArray_SimpleNew(1, dims, NPY_FLOAT);
-
-	memcpy(PyArray_DATA(rv), source, dims);
-
-	return rv;
-}
-
-static PyObject *
-icapi_GetFullCycledata(PyObject *self, PyObject *args)
-{
-	char* ip;
-	int32_t timeout_ms = 1000;
-	if (!PyArg_ParseTuple(args, "si", &ip, &timeout_ms))
-		return NULL;
-
-	uint32_t abs_cycle;
-	CommonTypes_TD_ACQ_FullCycleData data;
-	IcReturnType err;
-	if ((err = IcAPI_GetFullCycleData(ip, timeout_ms, &abs_cycle, &data)) != IcReturnType_ok)
-	{
-		switch (err) {
-		case IcReturnType_error:
-			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
-			break;
-		case IcReturnType_timeout:
-			PyErr_SetString(PyExc_TimeoutError, "method timed out");
-			break;
-		}
-		return NULL;
-	}
-#ifdef Mod_DEBUG
-	//printf("done reading arrays of length (%d) of size (%d)\n", (int)timebins, (int)size);
-#endif
-	PyObject* oarr;
-	if ((oarr = convert_FloatArray(data.SpecData._1D)) == NULL)
-	{
-		return NULL;
-	}
-	PyObject* tc_tup = convert_IcTimingInfo2(&data.SpecData.TimeCycle);
-	PyObject* auto_tup = convert_Automation(&data.Automation);
-
-	PyObject* rv = PyTuple_New(3);
-	PyTuple_SetItem(rv, 0, tc_tup);
-	PyTuple_SetItem(rv, 1, auto_tup);
-	PyTuple_SetItem(rv, 2, oarr);
 
 	return rv;
 }
@@ -534,7 +489,7 @@ icapi_GetFullCycledata(PyObject *self, PyObject *args)
 //       if (sh_arr == NULL) {
 //           char err_msg[100];
 //           sprintf(err_msg, "in read_PTR_data :: unable to allocate LStrHandleArray "
-//                            "with dims %dx%d!", (int) dims[0], (int) dims[1]);
+//                            "with dims %dx%d!",  dims[0],  dims[1]);
 //   		PyErr_SetString(PyExc_IOError, err_msg);
 //   		return NULL;
 //       }
@@ -760,6 +715,25 @@ static PyMethodDef Methods[] = {
 		"\ttimeout_ms: timeout in milliseconds\n"
 		"Returns: a timing-tuple, see 'GetCurrentSpectrum()'."
 	},
+	{"GetNextSpectrum", icapi_GetNextSpectrum, METH_VARARGS,
+	"Gets the timestamp and next available spectrum as numpy array.\n\n"
+	"This takes a 'timeout_ms' as a second parameter, which is\n"
+	"the time in milliseconds to wait for a new spectrum to arrive.\n\n"
+	"Raises a TimoutError if no new spectrum is read.\n\n"
+	"The return value is a tuple (timing, #auto, calpars, spectrum),\n"
+	"where the timestamp is a tuple of 4 values: \n"
+	"(rel-cycle, abs-cycle, rel-time, abs-time).\n"
+	"The rel-cycle is relative to the current file and the abs-time is \n"
+	"a LabVIEW timestamp:\n"
+	"the absolute time in seconds after 1st Jan 1904.\n\n"
+	"Arguments:\n"
+	"\tip: every method of the icapi module takes an ip as first\n"
+	"\t    argument. May be 'localhost' for the current machine.\n"
+	"\ttimeout_ms: timeout in milliseconds\n"
+	"\tn_timebins: (optional) the length of the spectrum\n"
+	"\n"
+	"Returns: a tuple (see description)."
+	},
 	{"SetTraceData", icapi_SetTraceData, METH_VARARGS,
 		"Sets the current data of the given trace as a numpy array.\n\n"
 		"The size of the array should correspond to the mass-list,\n"
@@ -780,42 +754,6 @@ static PyMethodDef Methods[] = {
 		"\tip\n"
 		"\ttimeout_ms: timeout in milliseconds\n"
 		"\ttrace_type: one of 0 (raw), 1 (corr), 2 (conc)\n"
-		"\n"
-		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
-	},
-	{"GetCurrentSpectrum", icapi_GetCurrentSpectrum, METH_VARARGS,
-		"Gets the timestamp and current spectrum as numpy array.\n\n"
-        "The return value is a tuple (timing, spectrum), where the \n"
-        "timestamp is a tuple of 4 values: (rel-cycle, abs-cycle,\n"
-		"rel-time, abs-time), where the rel-cycle is relative to \n"
-		"the current file and the abs-time is a LabVIEW timestamp:\n"
-        "the absolute time in seconds after 1st Jan 1904.\n\n"
-		"Arguments:\n"
-		"\tip: every method of the icapi module takes an ip as first\n"
-		"\t    argument. May be 'localhost' for the current machine.\n"
-		"\n"
-		"Returns: a tuple with (timing, data)."
-	},
-	{"GetNextSpectrum", icapi_GetNextSpectrum, METH_VARARGS,
-		"Gets the timestamp and next available spectrum as numpy array.\n\n"
-		"This takes a 'timeout_ms' as a second parameter, which is\n"
-		"the time in milliseconds to wait for a new spectrum to arrive.\n"
-		"Raises a TimoutError if no new spectrum is read.\n\n"
-		"Arguments:\n"
-		"\tip\n"
-		"\ttimeout_ms: timeout in milliseconds\n"
-		"\n"
-		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
-	},
-	{"GetFullCycledata", icapi_GetFullCycledata, METH_VARARGS,
-		"Gets the timestamp and next available full-cycle data.\n\n"
-		"The full-cycle contains ... TODO :: will ich hier ALLES ausgeben??\n"
-		"This takes a 'timeout_ms' as a second parameter, which is\n"
-		"the time in milliseconds to wait for a new spectrum to arrive.\n"
-		"Raises a TimoutError if no new spectrum is read.\n\n"
-		"Arguments:\n"
-		"\tip\n"
-		"\ttimeout_ms: timeout in milliseconds\n"
 		"\n"
 		"Returns: a tuple with (timing, data), see 'GetCurrentSpectrum()'."
 	},
