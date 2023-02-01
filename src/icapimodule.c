@@ -1,3 +1,9 @@
+/** 
+For all # variants of formats (s#, y#, etc.), the macro PY_SSIZE_T_CLEAN must be defined 
+before including Python.h. On Python 3.9 and older, the type of the length argument is 
+Py_ssize_t if the PY_SSIZE_T_CLEAN macro is defined, or int otherwise.
+(from the documentation) **/
+#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 /* numpy extension: 
  * (see also <https://docs.scipy.org/doc/numpy-1.15.0/user/c-info.how-to-extend.html>) */
@@ -35,19 +41,12 @@
 static inline PyObject *
 convert_IcTimingInfo(const IcTimingInfo* timing)
 {
-	PyObject* rel_cycle = PyLong_FromLong(timing->Cycle);
-	PyObject* abs_cycle = PyLong_FromLong(timing->CycleOverall);
-	PyObject* rel_time = PyFloat_FromDouble(timing->relTime);
-	PyObject* abs_time = PyFloat_FromDouble(timing->absTime);
-
-	Py_ssize_t n_objects = 4;
-	PyObject* rv = PyTuple_New(n_objects);
-	PyTuple_SetItem(rv, 0, rel_cycle);
-	PyTuple_SetItem(rv, 1, abs_cycle);
-	PyTuple_SetItem(rv, 2, rel_time);
-	PyTuple_SetItem(rv, 3, abs_time);
-
-	return rv;
+	return Py_BuildValue("(iidd)", 
+		timing->Cycle,
+		timing->CycleOverall,
+		timing->relTime,
+		timing->absTime
+	);
 }
 
 static const Py_ssize_t n_autos = 9;  // no constexpr in ANSI-C :(
@@ -84,80 +83,48 @@ convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
 }
 
 static PyObject *
-convert_FloatArray(FloatArray lv_arr)
+convert_LVArrayBase(void* lv_arr_base_p, int dtype)
 {
-	int dtype = NPY_FLOAT;
-
-	npy_intp dims[1];
-	if ((lv_arr == NULL) || (lv_arr[0] < 100ul))
+	if ((lv_arr_base_p == NULL))
 	{
-		dims[0] = 0;
+		PyErr_SetString(PyExc_RuntimeError, "empty data handle");
+		return NULL;
 	}
-	else
+	// that's the same signature as DoubleArrayBase:
+	FloatArrayBase* lv_arr = (FloatArrayBase*) lv_arr_base_p;
+	size_t elm_size;
+	switch (dtype)
 	{
-		dims[0] = lv_arr[0]->dimSize;
+	case NPY_FLOAT:
+		elm_size = sizeof(float);
+		break;
+	case NPY_DOUBLE:
+		elm_size = sizeof(double);
+		break;
+	default:
+		PyErr_SetString(PyExc_RuntimeError, "can't convert dtype (%d)", dtype);
+		return NULL;
+		break;
 	}
+	npy_intp dims[1] = { lv_arr->dimSize };
 #ifdef Mod_DEBUG
-	printf("allocate np.array(%d, dtype=np.float32)...\n", dims[0]);
+	printf("allocate np.array(%d, dtype=np.%s)...\n", dims[0], (dtype == NPY_FLOAT) ? "float32" : "float64");
 #endif
 	PyObject* rv;
 	const int fortran_order = 0;
 	if ((rv = PyArray_EMPTY(1, dims, dtype, fortran_order)) == NULL)
 	{
-		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
+		PyErr_SetString(PyExc_RuntimeError, "couldn't allocate np array");
 		return NULL;
 	}
-	if (dims[0])
-	{
 #ifdef Mod_DEBUG
-		printf("starting to copy (%d) float-vals...\n", PyArray_Size(rv));
+	printf("starting to copy (%d) float-vals...\n", PyArray_Size(rv));
 #endif
-		memcpy_s(PyArray_DATA(rv),
-			PyArray_Size(rv),
-			lv_arr[0]->Numeric,
-			lv_arr[0]->dimSize
-		);
-	}
-	return rv;
-}
-
-static PyObject *
-convert_DoubleArray(DoubleArray lv_arr)
-{
-	int dtype = NPY_DOUBLE;
-
-	/** rest is duplicated from convert_FloatArray() **/
-
-	npy_intp dims[1];
-	if ((lv_arr == NULL) || (lv_arr[0] < 100ul))
-	{
-		dims[0] = 0;
-	}
-	else
-	{
-		dims[0] = lv_arr[0]->dimSize;
-	}
-#ifdef Mod_DEBUG
-	printf("allocate np.array(%d, dtype=np.float32)...\n", dims[0]);
-#endif
-	PyObject* rv;
-	const int fortran_order = 0;
-	if ((rv = PyArray_EMPTY(1, dims, dtype, fortran_order)) == NULL)
-	{
-		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
-		return NULL;
-	}
-	if (dims[0])
-	{
-#ifdef Mod_DEBUG
-		printf("starting to copy (%d) float-vals...\n", PyArray_Size(rv));
-#endif
-		memcpy_s(PyArray_DATA(rv),
-			PyArray_Size(rv),
-			lv_arr[0]->Numeric,
-			lv_arr[0]->dimSize
-		);
-	}
+	memcpy_s(PyArray_DATA(rv),
+		PyArray_NBYTES(rv),
+		lv_arr->Numeric,
+		lv_arr->dimSize * elm_size
+	);
 	return rv;
 }
 
@@ -246,8 +213,6 @@ icapi_GetVersion(PyObject *self, PyObject *args)
 	IcAPI_GetVersion(&version, version_string, 10);
 
 	return PyUnicode_FromString(version_string);
-
-	return PyLong_FromDouble(version);
 }
 
 //   static PyObject*
@@ -352,6 +317,116 @@ icapi_GetTraceMasses(PyObject *self, PyObject *args)
 
 /*****************************************************************/
 /**                                                             **/
+/**                  calc conc-info functions                   **/
+/**                                                             **/
+/*****************************************************************/
+
+static PyObject *
+icapi_GetCurrentPrimaryIon(PyObject *self, PyObject *args)
+{
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
+
+	PyObject* rv = NULL;
+	PyObject* mass_arr = NULL;
+	PyObject* mult_arr = NULL;
+	IcPrimaryIon pion;
+	pion.Masses = AllocateFloatArray(10);
+	pion.Multiplier = AllocateFloatArray(10);
+	LStrHandleArray name_harr = AllocateLStrHandleArray(1);  /* is there any better way to do this?? */
+	pion.SettingName = name_harr[0]->String[0];
+
+	IcReturnType err;
+	if ((err = IcAPI_GetCurrentPrimaryIon(ip, &pion)) != IcReturnType_ok)
+	{
+#ifdef Mod_DEBUG
+		printf("IcAPI call returned error (%d). freeing memory..\n", err);
+#endif
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+	}
+	else
+	{
+		mass_arr = convert_LVArrayBase(*pion.Masses, NPY_FLOAT);
+		mult_arr = convert_LVArrayBase(*pion.Multiplier, NPY_FLOAT);
+	}
+	if (pion.SettingName == NULL || pion.SettingName[0] == NULL || mass_arr == NULL || mult_arr == NULL)
+	{
+		PyErr_SetString(PyExc_RuntimeError, "no data received");
+	}
+	else if (PyErr_Occurred() == NULL)
+	{
+		LStrPtr name_h = pion.SettingName[0];
+		rv = Py_BuildValue("s#OO", name_h->str, name_h->cnt, mass_arr, mult_arr);
+	}
+	DeAllocateFloatArray(&pion.Masses);
+	DeAllocateFloatArray(&pion.Multiplier);
+	DeAllocateLStrHandleArray(&name_harr);
+
+	return rv;
+}
+
+static PyObject *
+icapi_GetCurrentTransmission(PyObject *self, PyObject *args)
+{
+	char* ip;
+	if (!PyArg_ParseTuple(args, "s", &ip))
+		return NULL;
+
+	PyObject* rv = NULL;
+	PyObject* mass_arr = NULL;
+	PyObject* trans_arr = NULL;
+	IcTransmission trans;
+	trans.Mass = AllocateFloatArray(0);
+	trans.Trans = AllocateFloatArray(0);
+	LStrHandleArray name_harr = AllocateLStrHandleArray(1);  /* is there any better way to do this?? */
+	trans.Name = name_harr[0]->String[0];
+
+	IcReturnType err;
+	if ((err = IcAPI_GetCurrentTransmission(ip, &trans)) != IcReturnType_ok)
+	{
+#ifdef Mod_DEBUG
+		printf("IcAPI call returned error (%d). freeing memory..\n", err);
+#endif
+		switch (err) {
+		case IcReturnType_error:
+			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
+			break;
+		case IcReturnType_timeout:
+			PyErr_SetString(PyExc_TimeoutError, "method timed out");
+			break;
+		}
+	}
+	else
+	{
+		mass_arr = convert_LVArrayBase(*trans.Mass, NPY_FLOAT);
+		trans_arr = convert_LVArrayBase(*trans.Trans, NPY_FLOAT);
+	} 
+	if (trans.Name == NULL || trans.Name[0] == NULL || mass_arr == NULL || trans_arr == NULL)
+	{
+		PyErr_SetString(PyExc_RuntimeError, "no data received");
+	}
+	else if (PyErr_Occurred() == NULL)
+	{
+		LStrPtr name_h = trans.Name[0];
+		rv = Py_BuildValue("s#OOf", name_h->str, name_h->cnt, mass_arr, trans_arr, trans.Voltage);
+	}
+	DeAllocateFloatArray(&trans.Mass);
+	DeAllocateFloatArray(&trans.Trans);
+	DeAllocateLStrHandleArray(&name_harr);
+
+	return rv;
+}
+
+/*****************************************************************/
+/**                                                             **/
 /**             sync'n'subscribe functions                      **/
 /**                                                             **/
 /*****************************************************************/
@@ -378,7 +453,7 @@ icapi_GetNextTimecycle(PyObject *self, PyObject *args)
 		}
 		return NULL;
 	}
-	return convert_IcTimingInfo(&timing);
+	return Py_BuildValue("(ii)", timing.Cycle, timing.CycleOverall);
 }
 
 static PyObject *
@@ -431,25 +506,16 @@ icapi_GetNextSpectrum(PyObject *self, PyObject *args)
 	}
 	PyObject* tc_tup = convert_IcTimingInfo(&timing);
 	PyObject* auto_tup = convert_Automation(&auto_numbers);
-
-	PyObject* cp_tup = PyTuple_New(N_CAL_PARS);
-	PyTuple_SetItem(cp_tup, 0, PyFloat_FromDouble(calpars[0]));
-	PyTuple_SetItem(cp_tup, 1, PyFloat_FromDouble(calpars[1]));
-
-	PyObject* rv = PyTuple_New(4);
-	PyTuple_SetItem(rv, 0, tc_tup);
-	PyTuple_SetItem(rv, 1, auto_tup);
-	PyTuple_SetItem(rv, 2, s_arr);
-	PyTuple_SetItem(rv, 3, cp_tup);
-#ifdef Mod_DEBUG
-	printf("ref-counts, should all be (1): rv (%d); tc_tup (%d); auto_tup (%d); s_arr (%d); cp_tup (%d)\n", 
-		Py_REFCNT(rv),
-		Py_REFCNT(tc_tup),
-		Py_REFCNT(auto_tup),
-		Py_REFCNT(s_arr),
-		Py_REFCNT(cp_tup));
-#endif
-
+	PyObject* cp_tup = Py_BuildValue("(dd)",
+		calpars[0],
+		calpars[1]
+	);
+	PyObject* rv = Py_BuildValue("(OOOO)",
+		tc_tup,
+		auto_tup,
+		s_arr,
+		cp_tup
+	);
 	return rv;
 }
 
@@ -484,14 +550,14 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 		return NULL;
 	}
 	PyObject* s_arr;
-	if ((s_arr = convert_FloatArray(data.Spectrum)) == NULL)
+	if ((s_arr = convert_LVArrayBase(*data.Spectrum, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
 		return NULL;
 	}
 	PyObject* add_data_arr;
-	if ((add_data_arr = convert_FloatArray(data.AddData.Data)) == NULL)
+	if ((add_data_arr = convert_LVArrayBase(*data.AddData.Data, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
@@ -515,7 +581,7 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 	PyObject* auto_tup = convert_Automation(&data.Automation);
 
 	PyObject* cp_arr;
-	if ((cp_arr = convert_DoubleArray(data.CalPara)) == NULL)
+	if ((cp_arr = convert_LVArrayBase(*data.CalPara, NPY_DOUBLE)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
@@ -525,22 +591,13 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 	/** finally :: free LabVIEW struct and  build return value **/
 	free_IcFullcycle(&data);
 
-	PyObject* rv = PyTuple_New(5);
-	PyTuple_SetItem(rv, 0, tc_tup);
-	PyTuple_SetItem(rv, 1, auto_tup);
-	PyTuple_SetItem(rv, 2, s_arr);
-	PyTuple_SetItem(rv, 3, cp_arr);
-	PyTuple_SetItem(rv, 4, add_list);
-#ifdef Mod_DEBUG
-	printf("ref-counts, should all be (1): rv (%d); tc_tup (%d); auto_tup (%d); oarr (%d); cp_arr (%d); add_list (%d)\n", 
-		Py_REFCNT(rv),
-		Py_REFCNT(tc_tup),
-		Py_REFCNT(auto_tup),
-		Py_REFCNT(s_arr),
-		Py_REFCNT(cp_arr),
-		Py_REFCNT(add_list));
-#endif
-
+	PyObject* rv = Py_BuildValue("(OOOOO)",
+		tc_tup,
+		auto_tup,
+		s_arr,
+		cp_arr,
+		add_list
+	);
 	return rv;
 }
 
@@ -637,10 +694,10 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 	PyObject* oarr = PyArray_SimpleNewFromData(1, dims, NPY_FLOAT, (void*)data);
 	PyObject* tc_tuple = convert_IcTimingInfo(&timing);
 
-	PyObject* rv = PyTuple_New(2);
-	PyTuple_SetItem(rv, 0, tc_tuple);
-	PyTuple_SetItem(rv, 1, oarr);
-
+	PyObject* rv = Py_BuildValue("(OO)",
+		tc_tuple,
+		oarr
+	);
 	return rv;
 }
 
@@ -812,17 +869,15 @@ icapi_GetCurrentDataFileName(PyObject* self, PyObject* args)
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
-    int32_t len = MAX_PATH_LEN;
-    char raw_file[MAX_PATH_LEN];
-    char file[MAX_PATH_LEN];
-	if (IcAPI_GetCurrentDataFileName(ip, raw_file, len) != IcReturnType_ok)
+    char s_file[MAX_PATH_LEN];
+	if (IcAPI_GetCurrentDataFileName(ip, s_file, MAX_PATH_LEN) != IcReturnType_ok)
 	{
 		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
 		return NULL;
 	}
-    strncpy(file, raw_file, MAX_PATH_LEN);
+	size_t s_len = (strlen(s_file) < MAX_PATH_LEN) ? strlen(s_file) : MAX_PATH_LEN;
     const char errors[] = "strict";  /* raise ValueError on decoding error */
-    PyObject* rv = PyUnicode_DecodeLatin1(file, len, errors);
+    PyObject* rv = PyUnicode_DecodeLatin1(s_file, s_len, errors);
 
     return rv;
 }
@@ -875,6 +930,12 @@ static PyMethodDef Methods[] = {
 	},
 	{"GetTraceMasses", icapi_GetTraceMasses, METH_VARARGS,
 		"Gets the masses of the current peaktable a numpy array.\n\n"
+	},
+	{"GetCurrentPrimaryIon", icapi_GetCurrentPrimaryIon, METH_VARARGS,
+		"Gets the current primary ion and info as a tuple.\n\n"
+	},
+	{"GetCurrentTransmission", icapi_GetCurrentTransmission, METH_VARARGS,
+		"Gets the current transmission info as a tuple.\n\n"
 	},
 	{"GetNextTimecycle", icapi_GetNextTimecycle, METH_VARARGS,
 		"Wait for the next cycle and return rel-cycle and abs-cycle.\n\n"
