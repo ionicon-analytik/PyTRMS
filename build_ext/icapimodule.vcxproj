@@ -80,7 +80,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\deps\icapi\lib;C:\Program Files\Python38\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\icapi\lib;C:\Program Files\Python38\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>IcAPI.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
@@ -103,7 +103,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\deps\icapi\lib;C:\Program Files\Python38\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\icapi\lib;C:\Program Files\Python38\libs;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>IcAPI.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <PostBuildEvent>
@@ -125,7 +125,7 @@
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>$(SolutionDir)..\deps\icapi\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)..\icapi\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>IcAPI.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
@@ -140,15 +140,15 @@
     <Text Include="README.md" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\deps\icapi\include\extcode.h" />
-    <ClInclude Include="..\deps\icapi\include\fundtypes.h" />
-    <ClInclude Include="..\deps\icapi\include\hosttype.h" />
-    <ClInclude Include="..\deps\icapi\include\IcAPI.h" />
-    <ClInclude Include="..\deps\icapi\include\ILVDataInterface.h" />
-    <ClInclude Include="..\deps\icapi\include\ILVTypeInterface.h" />
-    <ClInclude Include="..\deps\icapi\include\lv_epilog.h" />
-    <ClInclude Include="..\deps\icapi\include\lv_prolog.h" />
-    <ClInclude Include="..\deps\icapi\include\platdefines.h" />
+    <ClInclude Include="..\icapi\include\extcode.h" />
+    <ClInclude Include="..\icapi\include\fundtypes.h" />
+    <ClInclude Include="..\icapi\include\hosttype.h" />
+    <ClInclude Include="..\icapi\include\IcAPI.h" />
+    <ClInclude Include="..\icapi\include\ILVDataInterface.h" />
+    <ClInclude Include="..\icapi\include\ILVTypeInterface.h" />
+    <ClInclude Include="..\icapi\include\lv_epilog.h" />
+    <ClInclude Include="..\icapi\include\lv_prolog.h" />
+    <ClInclude Include="..\icapi\include\platdefines.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

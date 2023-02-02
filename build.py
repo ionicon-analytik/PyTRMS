@@ -26,10 +26,10 @@ extensions=[
             'IcAPI'
         ],
         library_dirs=[
-            'deps/icapi/lib/'
+            'icapi/lib/'
         ],
         include_dirs=[
-            'deps/icapi/include',
+            'icapi/include',
             np_get_include(),
         ],
         extra_compile_args=[

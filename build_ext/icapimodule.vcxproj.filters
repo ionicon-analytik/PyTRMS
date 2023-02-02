@@ -19,31 +19,31 @@
     <Text Include="README.md" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\deps\icapi\include\extcode.h">
+    <ClInclude Include="..\icapi\include\extcode.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\fundtypes.h">
+    <ClInclude Include="..\icapi\include\fundtypes.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\hosttype.h">
+    <ClInclude Include="..\icapi\include\hosttype.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\IcAPI.h">
+    <ClInclude Include="..\icapi\include\IcAPI.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\ILVDataInterface.h">
+    <ClInclude Include="..\icapi\include\ILVDataInterface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\ILVTypeInterface.h">
+    <ClInclude Include="..\icapi\include\ILVTypeInterface.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\lv_epilog.h">
+    <ClInclude Include="..\icapi\include\lv_epilog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\lv_prolog.h">
+    <ClInclude Include="..\icapi\include\lv_prolog.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\deps\icapi\include\platdefines.h">
+    <ClInclude Include="..\icapi\include\platdefines.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

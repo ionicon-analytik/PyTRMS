@@ -15,7 +15,7 @@ Py_ssize_t if the PY_SSIZE_T_CLEAN macro is defined, or int otherwise.
 #include <stdbool.h>
 
 //#include <IcAPI.h>
-#include "../deps/icapi/include/IcAPI.h"
+#include "../icapi/include/IcAPI.h"
 
 #define RAW 0
 #define CORR 1
