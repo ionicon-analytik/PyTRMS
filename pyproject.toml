@@ -9,6 +9,7 @@ include = [
     "pytrms/data/IoniTofPrefs.ini",
     "*.pyd",
     "*.dll",
+    "data/*.lvlibp",
 ]
 
 [tool.poetry.dependencies]
