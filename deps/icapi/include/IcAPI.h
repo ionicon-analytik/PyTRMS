@@ -78,224 +78,6 @@ typedef struct {
 } LStrHandleArrayBase;
 typedef LStrHandleArrayBase **LStrHandleArray;
 typedef struct {
-	int32_t dimSize;
-	float Numeric[1];
-} FloatArrayBase;
-typedef FloatArrayBase **FloatArray;
-typedef struct {
-	LStrHandle PriIonSetName;
-	FloatArray PriIonSetMasses;
-	FloatArray PriIonSetMultiplier;
-} Cluster;
-typedef struct {
-	int32_t dimSize;
-	Cluster PrimIonSgl[1];
-} ClusterArrayBase;
-typedef ClusterArrayBase **ClusterArray;
-typedef struct {
-	uint8_t Last_PiSetIdx;
-	uint8_t Current_PiSetIdx;
-	ClusterArray PiSets;
-} Cluster1;
-typedef struct {
-	int32_t CurrIdx;
-	LStrHandleArray Names;
-} Cluster2;
-typedef struct {
-	LStrHandle Name;
-	int16_t Voltage;
-	FloatArray Mass;
-	FloatArray Trans;
-} Cluster3;
-typedef struct {
-	int32_t dimSize;
-	Cluster3 TransElement[1];
-} Cluster3ArrayBase;
-typedef Cluster3ArrayBase **Cluster3Array;
-typedef struct {
-	uint8_t Last_Idx;
-	uint8_t Current_Idx;
-	Cluster3Array Transsets;
-} Cluster4;
-typedef struct {
-	LStrHandle Inst_Mode_and_Paras;
-	Cluster1 PISets;
-	Cluster2 Presets;
-	Cluster4 TransSets;
-} CommonTypes_TDef_Calc_ConzInfo;
-typedef struct {
-	double Cycle;
-	double OverallCycle;
-	double AbsTime;
-	double RelTime;
-	double Run;
-	double CntsPerExtract;
-} Cluster5;
-typedef struct {
-	int32_t dimSizes[2];
-	float Numeric[1];
-} FloatArray1Base;
-typedef FloatArray1Base **FloatArray1;
-typedef struct {
-	Cluster5 TimeCycle;
-	FloatArray _1D;
-	FloatArray SumIntensities;
-	FloatArray1 MonitorPeaks;
-} Cluster6;
-typedef struct {
-	int32_t dimSize;
-	LVBoolean Boolean[1];
-} LVBooleanArrayBase;
-typedef LVBooleanArrayBase **LVBooleanArray;
-typedef struct {
-	LStrHandle GroupName;
-	LStrHandleArray Desc;
-	LStrHandleArray Units;
-	FloatArray Data;
-	LVBooleanArray View;
-	HWAVES Timestamp;
-} Cluster7;
-typedef struct {
-	int32_t dimSize;
-	Cluster7 notification[1];
-} Cluster7ArrayBase;
-typedef Cluster7ArrayBase **Cluster7Array;
-typedef struct {
-	Cluster5 TimeCycle;
-	FloatArray1 _2d_Raw;
-	FloatArray Sum_Raw;
-	FloatArray Sum_Corr;
-	FloatArray Sum_Conz;
-	FloatArray CalcTraces;
-	LStrHandleArray CalcTracesNames;
-	FloatArray PeakCenters;
-	Cluster7Array AddDataQ;
-} Cluster8;
-typedef struct {
-	int32_t dimSize;
-	double Numeric[1];
-} DoubleArrayBase;
-typedef DoubleArrayBase **DoubleArray;
-typedef struct {
-	DoubleArray Mass;
-	DoubleArray Tbin;
-} Cluster9;
-typedef struct {
-	Cluster9 CalList;
-	DoubleArray CalPara;
-} Cluster10;
-typedef uint16_t  Enum;
-#define Enum_NotAvailable 0
-#define Enum_Good 1
-#define Enum_ComError 2
-typedef struct {
-	float Lat;
-	LStrHandle NorthingInd;
-	float Lon;
-	LStrHandle EastingInd;
-	LStrHandle UTC;
-	LStrHandle Status;
-	LStrHandle Mode;
-} Cluster11;
-typedef struct {
-	LStrHandle UTC;
-	LStrHandle Status;
-	float Lat;
-	LStrHandle NorthingInd;
-	float Lon;
-	LStrHandle EastingInd;
-	float Speedinknots;
-	float Course;
-	LStrHandle Date;
-	float Magneticvariation;
-	LStrHandle Mode;
-	LStrHandle MagVar;
-} Cluster12;
-typedef struct {
-	float Speed_knots;
-	float COG_true;
-	LStrHandle COG_true_Unit;
-	float COG_magnetic;
-	LStrHandle COG_magnetic_Unit;
-	LStrHandle SpeedinknotsN;
-	float Speed_kmh;
-	LStrHandle Speed_kmH_Unit;
-	LStrHandle Mode;
-} Cluster13;
-typedef struct {
-	LStrHandle UTC;
-	float Lat;
-	LStrHandle NorthingInd;
-	float Lon;
-	LStrHandle EastingInd;
-	int32_t Status;
-	int32_t SVsUsed;
-	float HDOP;
-	float Alt_MSL;
-	LStrHandle Unit_Alt;
-	float GeoidSep;
-	LStrHandle UnitGeoidSep;
-	float AgeofDGPSCorr;
-	LStrHandle DGPSRefStation;
-} Cluster14;
-typedef struct {
-	int32_t dimSize;
-	float PDOP[1];
-} FloatArray2Base;
-typedef FloatArray2Base **FloatArray2;
-typedef struct {
-	LStrHandle OPMode;
-	int32_t NavMode;
-	FloatArray2 SVID;
-	int32_t SVsUsed;
-	float PDOP;
-	float HDOP;
-	float VDOP;
-} Cluster15;
-typedef struct {
-	float SVID;
-	float El;
-	float Az;
-	float C_NO;
-} Cluster16;
-typedef struct {
-	int32_t dimSize;
-	Cluster16 SatInfo[1];
-} Cluster16ArrayBase;
-typedef Cluster16ArrayBase **Cluster16Array;
-typedef struct {
-	int32_t SVsTracked;
-	Cluster16Array SVInfo;
-} Cluster17;
-typedef struct {
-	Enum State;
-	Cluster11 GxGLL;
-	Cluster12 GxRMC;
-	Cluster13 GxVTG;
-	Cluster14 GxGGA;
-	Cluster15 GxGSA;
-	Cluster17 GPGSV;
-	Cluster17 GLGSV;
-} Cluster18;
-typedef struct {
-	int32_t AUTO_StepNumber;
-	int32_t AUTO_RunNumber;
-	int32_t AUTO_UseMean;
-	int32_t AUTO_StartCycleMean;
-	int32_t AUTO_StopCycleMean;
-	int32_t AME_ActionNumber;
-	int32_t AME_UserNumber;
-	int32_t AME_StepNumber;
-	int32_t AME_RunNumber;
-} Cluster19;
-typedef struct {
-	Cluster6 SpecData;
-	Cluster8 TraceData;
-	Cluster10 MassCal;
-	Cluster18 GPSData;
-	Cluster19 Automation;
-} CommonTypes_TD_ACQ_FullCycleData;
-typedef struct {
 	int32_t AUTO_StepNumber;
 	int32_t AUTO_RunNumber;
 	int32_t AUTO_UseMean;
@@ -306,6 +88,39 @@ typedef struct {
 	int32_t AME_StepNumber;
 	int32_t AME_RunNumber;
 } IcAutomation;
+typedef struct {
+	int32_t dimSize;
+	float Numeric[1];
+} FloatArrayBase;
+typedef FloatArrayBase **FloatArray;
+typedef struct {
+	LStrHandleArray Desc;
+	FloatArray Data;
+	LStrHandleArray Group;
+} IcAddData;
+typedef struct {
+	int32_t dimSize;
+	double Numeric[1];
+} DoubleArrayBase;
+typedef DoubleArrayBase **DoubleArray;
+typedef struct {
+	FloatArray Spectrum;
+	IcAddData AddData;
+	IcAutomation Automation;
+	DoubleArray CalPara;
+	IcTimingInfo TimingInfo;
+} IcFullcycle;
+typedef struct {
+	LStrHandle SettingName;
+	FloatArray Masses;
+	FloatArray Multiplier;
+} IcPrimaryIon;
+typedef struct {
+	LStrHandle Name;
+	float Voltage;
+	FloatArray Mass;
+	FloatArray Trans;
+} IcTransmission;
 
 /*!
  * IcAPI_GetMeasureState
@@ -539,35 +354,40 @@ IcReturnType __cdecl IcAPI_ADD_SetUnit(char Servername[],
 IcReturnType __cdecl IcAPI_ADD_SetUnitAsByte(char Servername[], 
 	uint8_t Units[], int32_t len);
 /*!
- * IcAPI_GetConcInfo
- */
-IcReturnType __cdecl IcAPI_GetConcInfo(char IP[], int32_t timeoutMs, 
-	CommonTypes_TDef_Calc_ConzInfo *data);
-/*!
  * IcAPI_GetConcInfoJson
  */
 IcReturnType __cdecl IcAPI_GetConcInfoJson(char IP[], int32_t timeoutMs, 
 	char dataAsString[], int32_t len);
-/*!
- * IcAPI_GetFullCycleData
- */
-IcReturnType __cdecl IcAPI_GetFullCycleData(char IP[], int32_t timeoutMs, 
-	uint32_t *OverallCycle, CommonTypes_TD_ACQ_FullCycleData *data);
 /*!
  * IcAPI_GetFullCycleDataJson
  */
 IcReturnType __cdecl IcAPI_GetFullCycleDataJson(char IP[], int32_t timeoutMs, 
 	uint32_t *OverallCycle, char dataAsString[], int32_t len);
 /*!
- * IcAPI_SharedLib_IcAPI_GetNextSpec
+ * IcAPI_GetNextSpec
  */
-IcReturnType __cdecl IcAPI_SharedLib_IcAPI_GetNextSpec(char IP[], 
-	int32_t timeoutMs, IcAutomation *Automation, IcTimingInfo *TimingInfo, 
-	double CalPara[], float Spectrum[], int32_t len, int32_t len2);
+IcReturnType __cdecl IcAPI_GetNextSpec(char IP[], int32_t timeoutMs, 
+	IcAutomation *Automation, IcTimingInfo *TimingInfo, double CalPara[], 
+	float Spectrum[], int32_t len, int32_t len2);
 /*!
- * IcAPI_SharedLib_IcAPI_SetParametersScheduled
+ * IcAPI_GetNextFullCycle
  */
-IcReturnType __cdecl IcAPI_SharedLib_IcAPI_SetParametersScheduled(char IP[], 
+IcReturnType __cdecl IcAPI_GetNextFullCycle(char IP[], int32_t timeoutMs, 
+	IcFullcycle *IcFullcycle);
+/*!
+ * IcAPI_GetCurrentPrimaryIon
+ */
+IcReturnType __cdecl IcAPI_GetCurrentPrimaryIon(char IP[], 
+	IcPrimaryIon *pion);
+/*!
+ * IcAPI_GetCurrentTransmission
+ */
+IcReturnType __cdecl IcAPI_GetCurrentTransmission(char IP[], 
+	IcTransmission *Transm);
+/*!
+ * IcAPI_SetParametersScheduled
+ */
+IcReturnType __cdecl IcAPI_SetParametersScheduled(char IP[], 
 	LStrHandleArray *pars);
 
 MgErr __cdecl LVDLLStatus(char *errStr, int errStrLen, void *module);
@@ -580,13 +400,6 @@ MgErr __cdecl ResizeLStrHandleArray (LStrHandleArray *hdlPtr, int32 elmtCount);
 MgErr __cdecl DeAllocateLStrHandleArray (LStrHandleArray *hdlPtr);
 
 /*
-* Memory Allocation/Resize/Deallocation APIs for type 'ClusterArray'
-*/
-ClusterArray __cdecl AllocateClusterArray (int32 elmtCount);
-MgErr __cdecl ResizeClusterArray (ClusterArray *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateClusterArray (ClusterArray *hdlPtr);
-
-/*
 * Memory Allocation/Resize/Deallocation APIs for type 'FloatArray'
 */
 FloatArray __cdecl AllocateFloatArray (int32 elmtCount);
@@ -594,53 +407,11 @@ MgErr __cdecl ResizeFloatArray (FloatArray *hdlPtr, int32 elmtCount);
 MgErr __cdecl DeAllocateFloatArray (FloatArray *hdlPtr);
 
 /*
-* Memory Allocation/Resize/Deallocation APIs for type 'Cluster3Array'
-*/
-Cluster3Array __cdecl AllocateCluster3Array (int32 elmtCount);
-MgErr __cdecl ResizeCluster3Array (Cluster3Array *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateCluster3Array (Cluster3Array *hdlPtr);
-
-/*
-* Memory Allocation/Resize/Deallocation APIs for type 'FloatArray1'
-*/
-FloatArray1 __cdecl AllocateFloatArray1 (int32 *dimSizeArr);
-MgErr __cdecl ResizeFloatArray1 (FloatArray1 *hdlPtr, int32 *dimSizeArr);
-MgErr __cdecl DeAllocateFloatArray1 (FloatArray1 *hdlPtr);
-
-/*
-* Memory Allocation/Resize/Deallocation APIs for type 'Cluster7Array'
-*/
-Cluster7Array __cdecl AllocateCluster7Array (int32 elmtCount);
-MgErr __cdecl ResizeCluster7Array (Cluster7Array *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateCluster7Array (Cluster7Array *hdlPtr);
-
-/*
-* Memory Allocation/Resize/Deallocation APIs for type 'LVBooleanArray'
-*/
-LVBooleanArray __cdecl AllocateLVBooleanArray (int32 elmtCount);
-MgErr __cdecl ResizeLVBooleanArray (LVBooleanArray *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateLVBooleanArray (LVBooleanArray *hdlPtr);
-
-/*
 * Memory Allocation/Resize/Deallocation APIs for type 'DoubleArray'
 */
 DoubleArray __cdecl AllocateDoubleArray (int32 elmtCount);
 MgErr __cdecl ResizeDoubleArray (DoubleArray *hdlPtr, int32 elmtCount);
 MgErr __cdecl DeAllocateDoubleArray (DoubleArray *hdlPtr);
-
-/*
-* Memory Allocation/Resize/Deallocation APIs for type 'FloatArray2'
-*/
-FloatArray2 __cdecl AllocateFloatArray2 (int32 elmtCount);
-MgErr __cdecl ResizeFloatArray2 (FloatArray2 *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateFloatArray2 (FloatArray2 *hdlPtr);
-
-/*
-* Memory Allocation/Resize/Deallocation APIs for type 'Cluster16Array'
-*/
-Cluster16Array __cdecl AllocateCluster16Array (int32 elmtCount);
-MgErr __cdecl ResizeCluster16Array (Cluster16Array *hdlPtr, int32 elmtCount);
-MgErr __cdecl DeAllocateCluster16Array (Cluster16Array *hdlPtr);
 
 void __cdecl SetExecuteVIsInPrivateExecutionSystem(Bool32 value);
 

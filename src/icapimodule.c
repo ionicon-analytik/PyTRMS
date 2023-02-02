@@ -83,16 +83,11 @@ convert_tc_tuple(PyObject* tc_tuple, IcTimingInfo* out)
 }
 
 static PyObject *
-convert_LVArrayBase(void* lv_arr_base_p, int dtype)
+convert_LVArrayBase(void** lv_arr_base_handle, int dtype)
 {
-	if ((lv_arr_base_p == NULL))
-	{
-		PyErr_SetString(PyExc_RuntimeError, "empty data handle");
-		return NULL;
-	}
-	// that's the same signature as DoubleArrayBase:
-	FloatArrayBase* lv_arr = (FloatArrayBase*) lv_arr_base_p;
+	const int fortran_order = 0;
 	size_t elm_size;
+	npy_intp dims[1] = { 0 };
 	switch (dtype)
 	{
 	case NPY_FLOAT:
@@ -106,12 +101,20 @@ convert_LVArrayBase(void* lv_arr_base_p, int dtype)
 		return NULL;
 		break;
 	}
-	npy_intp dims[1] = { lv_arr->dimSize };
+	if ((lv_arr_base_handle == NULL || *lv_arr_base_handle == NULL))
+	{
+#ifdef Mod_DEBUG
+		printf("empty LVArray handle, return empty np.array\n");
+#endif
+		return PyArray_EMPTY(1, dims, dtype, fortran_order);
+	}
+	// that's the same signature as DoubleArrayBase:
+	FloatArrayBase* lv_arr = (FloatArrayBase*) *lv_arr_base_handle;
 #ifdef Mod_DEBUG
 	printf("allocate np.array(%d, dtype=np.%s)...\n", dims[0], (dtype == NPY_FLOAT) ? "float32" : "float64");
 #endif
+	dims[0] = lv_arr->dimSize;
 	PyObject* rv;
-	const int fortran_order = 0;
 	if ((rv = PyArray_EMPTY(1, dims, dtype, fortran_order)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "couldn't allocate np array");
@@ -354,8 +357,8 @@ icapi_GetCurrentPrimaryIon(PyObject *self, PyObject *args)
 	}
 	else
 	{
-		mass_arr = convert_LVArrayBase(*pion.Masses, NPY_FLOAT);
-		mult_arr = convert_LVArrayBase(*pion.Multiplier, NPY_FLOAT);
+		mass_arr = convert_LVArrayBase(pion.Masses, NPY_FLOAT);
+		mult_arr = convert_LVArrayBase(pion.Multiplier, NPY_FLOAT);
 	}
 	if (pion.SettingName == NULL || pion.SettingName[0] == NULL || mass_arr == NULL || mult_arr == NULL)
 	{
@@ -406,8 +409,8 @@ icapi_GetCurrentTransmission(PyObject *self, PyObject *args)
 	}
 	else
 	{
-		mass_arr = convert_LVArrayBase(*trans.Mass, NPY_FLOAT);
-		trans_arr = convert_LVArrayBase(*trans.Trans, NPY_FLOAT);
+		mass_arr = convert_LVArrayBase(trans.Mass, NPY_FLOAT);
+		trans_arr = convert_LVArrayBase(trans.Trans, NPY_FLOAT);
 	} 
 	if (trans.Name == NULL || trans.Name[0] == NULL || mass_arr == NULL || trans_arr == NULL)
 	{
@@ -477,6 +480,9 @@ icapi_GetNextSpectrum(PyObject *self, PyObject *args)
 	IcAutomation auto_numbers;
 	IcTimingInfo timing;
 	double calpars[N_CAL_PARS];
+
+	memset(&auto_numbers, 0, sizeof(IcAutomation));
+	memset(&timing, 0, sizeof(IcTimingInfo));
 
 	const int fortran_order = 0;
 	PyObject* s_arr;
@@ -550,14 +556,14 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 		return NULL;
 	}
 	PyObject* s_arr;
-	if ((s_arr = convert_LVArrayBase(*data.Spectrum, NPY_FLOAT)) == NULL)
+	if ((s_arr = convert_LVArrayBase(data.Spectrum, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
 		return NULL;
 	}
 	PyObject* add_data_arr;
-	if ((add_data_arr = convert_LVArrayBase(*data.AddData.Data, NPY_FLOAT)) == NULL)
+	if ((add_data_arr = convert_LVArrayBase(data.AddData.Data, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
@@ -581,7 +587,7 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 	PyObject* auto_tup = convert_Automation(&data.Automation);
 
 	PyObject* cp_arr;
-	if ((cp_arr = convert_LVArrayBase(*data.CalPara, NPY_DOUBLE)) == NULL)
+	if ((cp_arr = convert_LVArrayBase(data.CalPara, NPY_DOUBLE)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
 		free_IcFullcycle(&data);
