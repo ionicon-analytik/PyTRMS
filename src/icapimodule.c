@@ -57,7 +57,7 @@ convert_Automation(const IcAutomation* automation)
 {
 	PyObject* item, * rv = PyTuple_New(n_autos);
 	int32_t* p = (int32_t*)automation;
-	for (size_t i = 0; i < n_autos; i++)
+	for (ssize_t i = 0; i < n_autos; i++)
 	{
 		item = PyLong_FromLong(p[i]);
 		PyTuple_SetItem(rv, i, item);
@@ -97,7 +97,9 @@ convert_LVArrayBase(void** lv_arr_base_handle, int dtype)
 		elm_size = sizeof(double);
 		break;
 	default:
-		PyErr_SetString(PyExc_RuntimeError, "can't convert dtype (%d)", dtype);
+		char buffer[256];
+		sprintf(buffer, "can't convert dtype (%d)", dtype);
+		PyErr_SetString(PyExc_RuntimeError, buffer);
 		return NULL;
 		break;
 	}
@@ -167,7 +169,7 @@ icapi_GetNumberOfTimebins(PyObject* self, PyObject* args)
 	if (!PyArg_ParseTuple(args, "s", &ip))
 		return NULL;
 
-    uint32_t timebins;
+    int32_t timebins;
 	if (IcAPI_GetNumberOfTimebins(ip, &timebins) != IcReturnType_ok)
 	{
 		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
@@ -569,7 +571,7 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 		free_IcFullcycle(&data);
 		return NULL;
 	}
-	n_add_data = PyArray_Size(add_data_arr);
+	n_add_data = (int32_t)PyArray_Size(add_data_arr);
 	PyObject* add_list = PyList_New(n_add_data);
 	PyObject* list_item;
 	float dat;
@@ -671,7 +673,7 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 		PyErr_SetString(PyExc_ValueError, "trace_type must be 0 <= x < 3");
 		return NULL;
 	}
-	int32_t n_peaks = 0;
+	uint32_t n_peaks = 0;
 	if (IcAPI_GetNumberOfPeaks(ip, 0, &n_peaks) != IcReturnType_ok)
 	{
 		PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
