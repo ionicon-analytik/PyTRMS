@@ -3,7 +3,7 @@ For all # variants of formats (s#, y#, etc.), the macro PY_SSIZE_T_CLEAN must be
 before including Python.h. On Python 3.9 and older, the type of the length argument is 
 Py_ssize_t if the PY_SSIZE_T_CLEAN macro is defined, or int otherwise.
 (from the documentation) **/
-#define PY_SSIZE_T_CLEAN
+//#define PY_SSIZE_T_CLEAN
 #include "Python.h"
 /* numpy extension: 
  * (see also <https://docs.scipy.org/doc/numpy-1.15.0/user/c-info.how-to-extend.html>) */
@@ -97,11 +97,10 @@ convert_LVArrayBase(void** lv_arr_base_handle, int dtype)
 		elm_size = sizeof(double);
 		break;
 	default:
-		char buffer[256];
+		char buffer[40];
 		sprintf(buffer, "can't convert dtype (%d)", dtype);
 		PyErr_SetString(PyExc_RuntimeError, buffer);
 		return NULL;
-		break;
 	}
 	if ((lv_arr_base_handle == NULL || *lv_arr_base_handle == NULL))
 	{
@@ -131,6 +130,28 @@ convert_LVArrayBase(void** lv_arr_base_handle, int dtype)
 		lv_arr->dimSize * elm_size
 	);
 	return rv;
+}
+
+static inline PyObject *
+convert_LStrHandle(LStrHandle s_hdl)
+{
+	if (s_hdl == NULL || *s_hdl == NULL || (*s_hdl)->cnt < 0 || (*s_hdl)->str == NULL) {
+		return PyUnicode_FromString("");
+	}
+	Py_ssize_t s_len = (*s_hdl)->cnt;
+	const char* s_p = (char*)(*s_hdl)->str;
+
+	/* tell PyUnicode_DecodeLatin1 to raise */
+	/* a ValueError on decoding error:      */
+	const char errors[] = "strict";
+	/* here lay the cause for a nasty error: The PyUnicode_New() raised an exception
+	* like this:
+	* ... unicode error: can't decode byte 0xb0 in position 0 ...
+	*
+	* Byte 0xB0 is the degree-sign and this is not expected in utf-8, where all
+	* special characters are encoded with 2-4 bytes and the degree sign is 0x00B0.
+	* The unit is now decoded into a temporary Python unicode object: */
+	return PyUnicode_DecodeLatin1(s_p, s_len, errors);
 }
 
 static inline void
@@ -368,8 +389,11 @@ icapi_GetCurrentPrimaryIon(PyObject *self, PyObject *args)
 	}
 	else if (PyErr_Occurred() == NULL)
 	{
-		LStrPtr name_h = pion.SettingName[0];
-		rv = Py_BuildValue("s#OO", name_h->str, name_h->cnt, mass_arr, mult_arr);
+		PyObject* name = convert_LStrHandle(pion.SettingName);
+		rv = Py_BuildValue("(OOO)", name, mass_arr, mult_arr);
+		Py_DecRef(name);
+		Py_DecRef(mass_arr);
+		Py_DecRef(mult_arr);
 	}
 	DeAllocateFloatArray(&pion.Masses);
 	DeAllocateFloatArray(&pion.Multiplier);
@@ -420,8 +444,11 @@ icapi_GetCurrentTransmission(PyObject *self, PyObject *args)
 	}
 	else if (PyErr_Occurred() == NULL)
 	{
-		LStrPtr name_h = trans.Name[0];
-		rv = Py_BuildValue("s#OOf", name_h->str, name_h->cnt, mass_arr, trans_arr, trans.Voltage);
+		PyObject* name = convert_LStrHandle(trans.Name);
+		rv = Py_BuildValue("(OOOf)", name, mass_arr, trans_arr, trans.Voltage);
+		Py_DecRef(name);
+		Py_DecRef(mass_arr);
+		Py_DecRef(trans_arr);
 	}
 	DeAllocateFloatArray(&trans.Mass);
 	DeAllocateFloatArray(&trans.Trans);
@@ -524,6 +551,11 @@ icapi_GetNextSpectrum(PyObject *self, PyObject *args)
 		s_arr,
 		cp_tup
 	);
+	Py_DecRef(tc_tup);
+	Py_DecRef(auto_tup);
+	Py_DecRef(s_arr);
+	Py_DecRef(cp_tup);
+
 	return rv;
 }
 
@@ -544,9 +576,8 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 	if ((err = IcAPI_GetNextFullCycle(ip, timeout_ms, &data)) != IcReturnType_ok)
 	{
 #ifdef Mod_DEBUG
-		printf("IcAPI call returned error (%d). freeing memory..\n", err);
+		printf("IcAPI call returned error (%d)\n", err);
 #endif
-		free_IcFullcycle(&data);
 		switch (err) {
 		case IcReturnType_error:
 			PyErr_SetString(PyExc_IOError, "error in LabVIEW NSV engine!");
@@ -555,57 +586,61 @@ icapi_GetNextFullcycle(PyObject *self, PyObject *args)
 			PyErr_SetString(PyExc_TimeoutError, "method timed out");
 			break;
 		}
-		return NULL;
 	}
 	PyObject* s_arr;
 	if ((s_arr = convert_LVArrayBase(data.Spectrum, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
-		free_IcFullcycle(&data);
-		return NULL;
 	}
 	PyObject* add_data_arr;
 	if ((add_data_arr = convert_LVArrayBase(data.AddData.Data, NPY_FLOAT)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
-		free_IcFullcycle(&data);
-		return NULL;
 	}
 	n_add_data = (int32_t)PyArray_Size(add_data_arr);
 	PyObject* add_list = PyList_New(n_add_data);
 	PyObject* list_item;
-	float dat;
-	LStrHandle desc_s, group_s;
+	float value;
+	PyObject* desc_o, * group_o;
 	for (size_t i = 0; i < n_add_data; i++)
 	{
-		dat = data.AddData.Data[0]->Numeric[i];
-		desc_s = data.AddData.Desc[0]->String[i];
-		group_s = data.AddData.Group[0]->String[i];
-		list_item = Py_BuildValue("fs#s#", dat, (*desc_s)->str, (*desc_s)->cnt, (*group_s)->str, (*group_s)->cnt);
-		PyList_Insert(add_list, i, list_item);
+		value = data.AddData.Data[0]->Numeric[i];
+		desc_o = convert_LStrHandle(data.AddData.Desc[0]->String[i]);
+		group_o = convert_LStrHandle(data.AddData.Group[0]->String[i]);
+		list_item = Py_BuildValue("fOO", value, desc_o, group_o);
+		Py_DecRef(desc_o);
+		Py_DecRef(group_o);
+		PyList_SET_ITEM(add_list, i, list_item);
+		// Note: This function “steals” a reference to list_item
+		//  and therefore we don't decrement the ref-count..
 	}
-
 	PyObject* tc_tup = convert_IcTimingInfo(&data.TimingInfo);
 	PyObject* auto_tup = convert_Automation(&data.Automation);
-
 	PyObject* cp_arr;
 	if ((cp_arr = convert_LVArrayBase(data.CalPara, NPY_DOUBLE)) == NULL)
 	{
 		PyErr_SetString(PyExc_RuntimeError, "can't allocate np array");
-		free_IcFullcycle(&data);
-		return NULL;
 	}
-	
-	/** finally :: free LabVIEW struct and  build return value **/
+	PyObject* rv = NULL;
+	if (PyErr_Occurred() == NULL)
+	{
+		rv = Py_BuildValue("(OOOOO)",
+			tc_tup,
+			auto_tup,
+			s_arr,
+			cp_arr,
+			add_list
+		);
+	}
+	/** finally :: free LabVIEW struct and temporary PyObjects **/
+	Py_DecRef(tc_tup);
+	Py_DecRef(auto_tup);
+	Py_DecRef(s_arr);
+	Py_DecRef(cp_arr);
+	Py_DecRef(add_list);
+
 	free_IcFullcycle(&data);
 
-	PyObject* rv = Py_BuildValue("(OOOOO)",
-		tc_tup,
-		auto_tup,
-		s_arr,
-		cp_arr,
-		add_list
-	);
 	return rv;
 }
 
@@ -706,6 +741,9 @@ icapi_GetTraceData(PyObject *self, PyObject *args)
 		tc_tuple,
 		oarr
 	);
+	Py_DecRef(tc_tuple);
+	Py_DecRef(oarr);
+
 	return rv;
 }
 
