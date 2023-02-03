@@ -1,17 +1,28 @@
+# ignore IDEs
 .idea
+.vs
+*.user
+
+# ignore caches
 .cache
 .pytest_cache
 .tox
 /**/__pycache__
 
+# please do not ignore the lock-file!
+# this is useful for reproducible builds:
+#poetry.lock
+
 *.png
 *.pdf
 
+# ignore Vim files
 *.swp
 *~
 .~*
 **/.tmp
 
+# ignore generated files from builds
 **/build
 **/dist
 **/doc/_build
@@ -19,15 +30,14 @@
 .eggs
 _build
 _testdata
+/**/x64
+/**/x86
 
 report.html
 
 .coverage
 .coveragerc
 
-poetry.lock
-
 examples/**/*.tsv
 examples/**/*.jpg
 
-**/MAKEFILE
