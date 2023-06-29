@@ -152,7 +152,11 @@ class H5Reader(Iterable):
 
     @lru_cache
     def get_all(self, kind='raw', index='abs_cycle', force_original=False):
-        frame = pd.concat([self.get_traces(kind, force_original), self.get_addtraces()], axis='columns')
+        addtraces = self.get_addtraces()
+        # de-duplicate trace-columns to prevent issues...
+        addtraces = addtraces.loc[:, ~addtraces.columns.duplicated()]
+        # ...and throw it all together:
+        frame = pd.concat([self.get_traces(kind, force_original), addtraces], axis='columns')
         frame.index = self.get_index(index)
 
         return frame
