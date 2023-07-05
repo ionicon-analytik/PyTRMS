@@ -7,9 +7,7 @@ log = logging.getLogger()
 
 import requests
 
-ionitof_host = str(os.environ.get('IONITOF_HOST', '127.0.0.1'))
-ionitof_port = int(os.environ.get('IONITOF_PORT', 8002))
-ionitof_url = f'http://{ionitof_host}:{ionitof_port}'
+from . import ionitof_url
 
 
 class Template:
