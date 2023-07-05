@@ -3,7 +3,8 @@ _version = '0.2.1'
 
 import logging
 
-#logging.basicConfig(#)
+#logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(format='[%(levelname)s]\t%(message)s')
 log = logging.getLogger()
 
 __all__ = ['log']
