@@ -24,7 +24,7 @@ class H5Reader(Iterable):
 
     def __init__(self, path):
         self.path = path
-        self.hf = h5py.File(path, 'r')
+        self.hf = h5py.File(path, 'r', swmr=True)
 
     def __iter__(self):
         # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen

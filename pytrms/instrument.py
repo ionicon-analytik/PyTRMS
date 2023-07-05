@@ -1,5 +1,5 @@
-import time
 import os.path
+import time
 
 
 class Instrument:
@@ -35,7 +35,7 @@ class Instrument:
             buffer.daemon = True
             buffer.start()
         # ..and synchronize the PTR-instrument state with this Python object:
-        Instrument._new_state(inst, BusyInstrument)
+        Instrument._new_state(inst, IdleInstrument)
         try:
             buffer.wait_for_connection(timeout=3)  # may raise PTRConnectionError!
         except:
@@ -55,6 +55,7 @@ class Instrument:
         self._buffer = buffer
         self._client = buffer.client
 
+    @property
     def is_local(self):
         """Returns True if files are written to the local machine."""
         host = self._client.host
@@ -139,7 +140,7 @@ class IdleInstrument(Instrument):
         # open a dialog and "hang" (which I'd very much like to avoid).
         # the safest way is to not send a path at all and start a 'Quick' measurement.
         # but if the server is the local machine, we do our best to verify the path:
-        if path and self.is_local():
+        if path and self.is_local:
             home = os.path.dirname(path)
             os.makedirs(home, exist_ok=True)
             base = os.path.basename(path)
@@ -150,9 +151,10 @@ class IdleInstrument(Instrument):
             if os.path.exists(path):
                 raise RuntimeError(f'path exists and cannot be overwritten')
 
-        self._new_state(BusyInstrument)
         self._client.start_measurement(path)
-        self.start(path)
+        self._new_state(RunningInstrument)
+
+        return Measurement(path)
 
     def stop(self):
         raise RuntimeError('instrument is not running')
@@ -164,20 +166,6 @@ class RunningInstrument(Instrument):
         raise RuntimeError('instrument is already running')
 
     def stop(self):
-        self._new_state(BusyInstrument)
         self._client.stop_measurement()
-        self.stop()
-
-
-class BusyInstrument(Instrument):
-
-    def start(self, path=''):
-        while self._buffer.is_idle:
-            time.sleep(0.01)
-        self._new_state(RunningInstrument)
-
-    def stop(self):
-        while not self._buffer.is_idle:
-            time.sleep(0.01)
         self._new_state(IdleInstrument)
 
