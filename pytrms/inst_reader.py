@@ -12,7 +12,7 @@ __all__ = ['Instrument']
 log = logging.getLogger(__name__)
 
 
-class Instrument(TPSAdapter):
+class InstReader(TPSAdapter):
     """Analogue for a real-world IoniTOF instrument.
 
     """

@@ -1,6 +1,11 @@
 import os.path
+import logging
 from abc import abstractmethod
 from collections.abc import Iterable
+
+from .reader import H5Reader
+
+log = logging.getLogger()
 
 
 class Measurement(Iterable):
@@ -19,52 +24,15 @@ class Measurement(Iterable):
         return os.path.exists(self.filename)
 
     def __init__(self, filename):
-        self._filename = filename
+        self.h5 = H5Reader(filename)
 
     @property
     def filename(self):
-        return self._filename
+        return self.h5.path
     
     @property
-    @abstractmethod
     def timezero(self):
-        raise NotImplementedError()
-
-    @property
-    @abstractmethod
-    def traces(self):
-        raise NotImplementedError()
-
-
-class OnlineMeasurement(Measurement):
-
-    # TODO :: ausbauen oder abreissen....
-    def __init__(self, instrument):
-        super().__init__(filename)
-        self.instrument = instrument
-
-    @property
-    def timezero(self):
-        return 0
-
-    @property
-    def traces(self):
-        pass
-
-    def __iter__(self):
-        while issubclass(self.__class__, RunningMeasurement):
-            yield self.instrument.buffer.queue.get()
-
-
-class OfflineMeasurement(Measurement):
-
-    def __init__(self, h5reader):
-        super().__init__(h5reader.path)
-        self.hr = h5reader
-
-    @property
-    def timezero(self):
-        return self.hr.timezero
+        return self.h5.timezero
 
     @property
     def traces(self):
@@ -83,8 +51,8 @@ class OfflineMeasurement(Measurement):
         If the traces have been post-processed in the Ionicon Viewer, those will be used,
         unless `force_original=True`.
         """
-        return self.hr.get_all(kind, index, force_original)
+        return self.h5.get_all(kind, index, force_original)
 
     def __iter__(self):
-        return iter(self.hr)
+        return iter(self.h5)
 
