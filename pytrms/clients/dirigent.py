@@ -3,11 +3,11 @@ import json
 from contextlib import contextmanager
 import logging
 
-log = logging.getLogger()
-
 import requests
 
 from . import ionitof_url
+
+log = logging.getLogger()
 
 
 class Template:
@@ -25,15 +25,14 @@ class Template:
 
     default_template = {
             "data": [
-                 { "name": "ParaID", "value": "AME_RunNumber", "prompt": "the parameter ID" },
-                 { "name": "ValAsString", "value": "5.000000", "prompt": "the new value" },
+                 {"name": "ParaID", "value": "AME_RunNumber", "prompt": "the parameter ID"},
+                 {"name": "ValAsString", "value": "5.000000", "prompt": "the new value"},
              ]
          }
 
     @staticmethod
     def download(url=ionitof_url, endpoint='/api/schedule'):
-        r = requests.get(url + endpoint,
-                headers={'accept': 'application/vnd.collection+json'})
+        r = requests.get(url + endpoint, headers={'accept': 'application/vnd.collection+json'})
         r.raise_for_status()
         j = r.json()
 
@@ -57,11 +56,11 @@ class Template:
         parID_insert = dict(self._inserts["parID"])
         value_insert = dict(self._inserts["value"])
 
-        parID_insert.update(value=parID),
+        parID_insert.update(value=str(parID)),
         value_insert.update(value=str(value)),
 
-        return json.dumps(
-            { "template": dict(data=[
+        return json.dumps({
+            "template": dict(data=[
                 parID_insert,
                 value_insert,
             ])}
@@ -69,7 +68,7 @@ class Template:
 
     def render_many(self, new_values):
         for key, value in new_values.items():
-            yield render(key, value)
+            yield self.render(key, value)
 
 
 class Dirigent:
@@ -92,12 +91,13 @@ class Dirigent:
         
         uri = self.url + '/api/schedule/' + str(int(future_cycle))
         payload = self.template.render(parID, new_value)
-        r = session.request(self.method, uri, data=payload,
-                headers={'content-type': 'application/vnd.collection+json'})
-        log.debug(f'got [{r.status_code}]')
+        r = session.request(self.method, uri, data=payload, headers={
+            'content-type': 'application/vnd.collection+json'
+        })
+        log.debug(f"request to <{uri}> returned [{r.status_code}]")
         if not r.ok:
             log.error(payload)
-        r.raise_for_status()
+            r.raise_for_status()
 
     def wait_until(self, future_cycle):
         if self._session is None:
@@ -107,13 +107,13 @@ class Dirigent:
 
         r = session.get(self.url + '/api/timing/' + str(int(future_cycle)))
         # ...
-        if (r.status_code == 410):
+        if r.status_code == 410:
             # 410 Client Error: Gone 
-            log.warn("we're late, better return immediately!")
+            log.warning("we're late, better return immediately!")
             return
     
         r.raise_for_status()
-        log.debug(str(r.json()["TimeCycle"]))
+        log.debug(f"waited until {r.json()['TimeCycle']}")
 
     @contextmanager
     def open_session(self):
@@ -121,7 +121,6 @@ class Dirigent:
         if self._session is None:
             self._session = requests.Session()
         try:
-            # ready to accept more input..
             yield self
         finally:
             self._session.close()

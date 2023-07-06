@@ -1,6 +1,11 @@
 import os.path
+import logging
 from abc import abstractmethod
 from collections.abc import Iterable
+
+from .reader import H5Reader
+
+log = logging.getLogger()
 
 
 class Measurement(Iterable):
