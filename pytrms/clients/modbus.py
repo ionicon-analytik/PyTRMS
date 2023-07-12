@@ -305,6 +305,43 @@ class IoniconModbus:
             int(self._read_reg(*self.address['user_number'])),
         )
 
+    _ame_mean = namedtuple('ame_mean_info', [
+        'data_ok',
+        'mod_time',
+        'start_cycle',
+        'stop_cycle',
+        'mean_values',
+        'std_error',
+    ])
+
+    def read_ame_mean(self, step_number=None):
+        self.open()
+        data_ok = int(self._read_reg(26000, '>f'))
+        if not data_ok:
+            return IoniconModbus._ame_mean(data_ok, 0, 0, 0, [], [])
+
+        n_masses = int(self._read_reg(26006, '>f'))
+        n_steps = int(self._read_reg(26008, '>f'))
+
+        if step_number is None:
+            step_number = int(self._read_reg(*self.address['step_number']))
+        elif not (0 < step_number <= n_steps):
+            raise IndexError(f"step_number [{step_number}] out of bounds: 0 < step <= [{n_steps}]")
+
+        datablock_size = 1 + 1 + n_masses + n_masses
+        start_addr = (26010
+                + n_masses * 2  # skip the masses, same as everywhere
+                + (step_number-1) * datablock_size * 2)  # select datablock
+
+        return IoniconModbus._ame_mean(
+            data_ok,
+            self._read_reg(26002, '>d'),
+            self._read_reg(start_addr + 0, '>f'),
+            self._read_reg(start_addr + 2, '>f'),
+            self._read_reg_multi(start_addr + 4, '>f', n_masses),
+            self._read_reg_multi(start_addr + 4 + n_masses * 2, '>f', n_masses),
+        )
+
     def _read_reg(self, addr, c_format):
         n_bytes, c_format, reg_format = _get_fmt(c_format)
         input_reg = self.mc.read_input_registers(addr, n_bytes)
