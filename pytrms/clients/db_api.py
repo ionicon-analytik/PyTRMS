@@ -29,24 +29,24 @@ class IoniConnect:
         self.current_avg_endpoint = None
         self.comp_dict = dict()
 
-    def refresh_comp_dict():
+    def refresh_comp_dict(self):
         r = self.session.get(self.url + '/api/components',
                     headers={'content-type': 'application/hal+json'})
         r.raise_for_status()
         j = r.json()
-        comp_dict = {component["shortName"]: component
+        self.comp_dict = {component["shortName"]: component
             for component in j["_embedded"]["components"]}
     
-    def get_component(short_name):
-        if not len(comp_dict):
-            refresh_comp_dict()
+    def get_component(self, short_name):
+        if not len(self.comp_dict):
+            self.refresh_comp_dict()
     
-        return comp_dict[short_name]
+        return self.comp_dict[short_name]
 
     def create_component(self, short_name):
-        payload = json.dumps({
+        payload = {
             "shortName": short_name
-        })
+        }
         self._create_object('/api/components', payload)
         self.refresh_comp_dict()
 
@@ -65,9 +65,11 @@ class IoniConnect:
                     "AME_RunNumber": int(run),
                 }
             }
+        }
         self.current_avg_endpoint = self._create_object('/api/averages', payload)
 
-    def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time, sourcefile_path, automation):
+    def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time,
+            sourcefile_path, automation):
         self._create_object('/api/times', payload={
             "RelCycle": int(rel_cycle),
             "AbsCycle": int(abs_cycle),
@@ -81,19 +83,20 @@ class IoniConnect:
             }
         })
 
-    def save_component_values(new_values):
+    def save_component_values(self, new_values):
         if self.current_avg_endpoint is None:
             raise Exception("create average first")
     
-        payload = json.dumps({
+        payload = {
             "quantities": [
                 {
-                    "componentID": comp_dict[name]["componentID"],
+                    "componentID": self.get_component(name)["componentID"],
                     "value": value
                 } for name, value in new_values.items()
             ]
-        })
-        self._create_object(self.current_avg_endpoint, payload, method='put')
+        }
+        endpoint = self.current_avg_endpoint + '/component_traces'
+        self._create_object(endpoint, payload, method='put')
 
     def _create_object(self, endpoint, payload, method='post'):
         data = json.dumps(payload)
