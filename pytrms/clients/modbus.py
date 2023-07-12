@@ -131,6 +131,7 @@ class IoniconModbus:
         self.mc = client.ModbusClient(host=host, port=port)
         if not self.mc.open():
             raise IOError("Cannot connect to modbus socket @ %s:%d!" % (str(host), port))
+
         self._addresses = {}
 
     def open(self):

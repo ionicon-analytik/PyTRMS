@@ -1,0 +1,108 @@
+import os
+import json
+from contextlib import contextmanager
+import logging
+
+import requests
+
+from . import database_url
+
+log = logging.getLogger()
+
+# TODO :: sowas waer auch ganz cool: die DBAPI bietes sich geradezu an,
+#  da mehr object-oriented zu arbeiten:
+
+#   currentVariable = get_component(currentComponentNameAction, ds)
+#   currentVariable.save_value({'value': currentValue})
+
+class IoniConnect:
+
+    def __init__(self, url='', session=None):
+        if not url:
+            url = database_url
+
+        if session is None:
+            session = requests.sessions.Session()
+
+        self.url = url
+        self.session = session
+        self.current_avg_endpoint = None
+        self.comp_dict = dict()
+
+    def refresh_comp_dict():
+        r = self.session.get(self.url + '/api/components',
+                    headers={'content-type': 'application/hal+json'})
+        r.raise_for_status()
+        j = r.json()
+        comp_dict = {component["shortName"]: component
+            for component in j["_embedded"]["components"]}
+    
+    def get_component(short_name):
+        if not len(comp_dict):
+            refresh_comp_dict()
+    
+        return comp_dict[short_name]
+
+    def create_component(self, short_name):
+        payload = json.dumps({
+            "shortName": short_name
+        })
+        self._create_object('/api/components', payload)
+        self.refresh_comp_dict()
+
+    def create_average(self, run, step, action=0, use_mean=True):
+        payload = {
+            "_embedded": {
+                "automation": {
+                    "AUTO_StepNumber": 0,
+                    "AUTO_RunNumber": 0,
+                    "AUTO_UseMean": bool(use_mean),
+                    "AUTO_StartCycleMean": 0,
+                    "AUTO_StopCycleMean": 0,
+                    "AME_ActionNumber": int(action),
+                    "AME_UserNumber": 0,
+                    "AME_StepNumber": int(step),
+                    "AME_RunNumber": int(run),
+                }
+            }
+        self.current_avg_endpoint = self._create_object('/api/averages', payload)
+
+    def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time, sourcefile_path, automation):
+        self._create_object('/api/times', payload={
+            "RelCycle": int(rel_cycle),
+            "AbsCycle": int(abs_cycle),
+            "AbsTime": float(abs_time),
+            "RelTime": float(rel_time),
+            "_embedded": {
+                "sourcefile": {
+                    "path": str(sourcefile_path),
+                },
+                "automation": dict(automation)
+            }
+        })
+
+    def save_component_values(new_values):
+        if self.current_avg_endpoint is None:
+            raise Exception("create average first")
+    
+        payload = json.dumps({
+            "quantities": [
+                {
+                    "componentID": comp_dict[name]["componentID"],
+                    "value": value
+                } for name, value in new_values.items()
+            ]
+        })
+        self._create_object(self.current_avg_endpoint, payload, method='put')
+
+    def _create_object(self, endpoint, payload, method='post'):
+        data = json.dumps(payload)
+        r = self.session.request(method, self.url + endpoint, data=data,
+            headers={'content-type': 'application/hal+json'})
+        if not r.ok:
+            log.error(f"POST {endpoint}\n{data}\n\n"
+                      f"returned [{r.status_code}]: {r.content}")
+            r.raise_for_status()
+
+        return r.headers.get('Location')
+
