@@ -7,6 +7,7 @@ import time
 import logging
 from collections import namedtuple
 from functools import lru_cache
+from itertools import tee
 
 from pyModbusTCP import client
 
@@ -36,7 +37,8 @@ _fmts = dict([
 ])
 
 _register = namedtuple('register_info', ['n_registers', 'c_format', 'reg_format'])
-_parameter = namedtuple('Parameter', ('Set', 'Act', 'Id', 'State'))
+_timecycle = namedtuple('timecycle_info', ('rel_cycle', 'abs_cycle', 'abs_time', 'rel_time'))
+_parameter = namedtuple('parameter_info', ('set', 'act', 'par_id', 'state'))
 
 
 def _get_fmt(c_format):
@@ -59,17 +61,15 @@ def _unpack(registers, format='>f'):
     >>> _unpack([17448, 0], 'float')
     672.
 
-
-        assert _unpack([17446, 32768], 'float') == 666.
-        assert _unpack([16875, 61191, 54426, 37896], 'double') == 3749199524.83057
-        assert _unpack([16875, 61191, 54426, 37896], 'long') == 4750153048903029768
-
-    def test_unpack_fails_with_nonsensical_arguments(self):
-        with pytest.raises(struct.error):
-            _unpack([16875, 61191, 54426, 37896], 'float')
-
-        with pytest.raises(struct.error):
-            _unpack([17446, 32768], 'long')
+    >>> _unpack([17446, 32768], 'float')
+    666.
+    
+    >>> _unpack([16875, 61191, 54426, 37896], 'double')
+    3749199524.83057
+    
+    >>> _unpack([16875, 61191, 54426, 37896], 'long')
+    4750153048903029768
+    
     """
     n, c_format, reg_format = _get_fmt(format)
     assert n == len(registers), f"c_format '{c_format}' needs [{n}] registers (got [{len(registers)}])"
@@ -83,7 +83,7 @@ def _pack(value, format='>f'):
     8-bit registers, for 2-byte (single) and 4-byte (double)
     representation, respectively.
     """
-    n, c_format, reg_format = _get_fmt(format)
+    _, c_format, reg_format = _get_fmt(format)
 
     return struct.unpack(reg_format, struct.pack(c_format, value))
 
@@ -98,20 +98,18 @@ class IoniconModbus:
         ('n_parameters', (2000, '>H')),
         ('n_raw', (4000, '>f')),
         ('n_conc', (6000, '>f')),
-        # ('n_corr', (7000, '>i')),  # not implemented?
         ('n_masses', (8000, '>f')),
+        # ('n_corr', (7000, '>i')),       # not implemented?
+        ('ame_data', (10014, '>f')),
         ('user_number', (13900, '>i')),
         ('step_number', (13902, '>i')),
         ('run_number', (13904, '>i')),
         ('use_mean', (13906, '>i')),
         ('action_number', (13912, '>i')),
-        ('ame_state', (13914, '>i')),     # Running 0=Off; 1=On
+        ('ame_state', (13914, '>i')),     # Running 0=Off; 1=On (not implemented!)
         ('n_components', (14000, '>f')),
+        ('component_names', (14002, '>f')),
     ])
-
-    _ame_parameter = namedtuple('ame_parameter',
-        ['user_number', 'step_number', 'run_number', 'use_mean', 'action_number', 'ame_state']
-    )
 
     @property
     def is_alive(self):
@@ -161,7 +159,19 @@ class IoniconModbus:
     def n_components(self):
         return int(self._read_reg(*self.address['n_components']))
 
-    def read_parameters(self):
+    def read_parameter(self, par_name):
+        """Read any previously loaded parameter by name.
+
+        For example, after calling `.read_components()`, one can call
+        `.read_parameter('DPS_Udrift')` to get only this value with no overhead.
+        """
+        self.open()
+        try:
+            return self._read_reg(*self.address[par_name])
+        except KeyError as exc:
+            raise KeyError("did you call one of .read_instrument_data(), .read_traces(), et.c. first?")
+
+    def read_instrument_data(self):
         self.open()
 
         # Each block consists of 6 registers:
@@ -176,7 +186,6 @@ class IoniconModbus:
         rv = dict()
         # read 20 parameters at once to save transmission..
         for superblock in range(0, blocksize*self.n_parameters, superblocksize):
-            print(superblock)
             input_regs = self.mc.read_input_registers(
                 start_register + superblock, superblocksize)
             # ..and handle one block per parameter:
@@ -201,42 +210,61 @@ class IoniconModbus:
         return rv
 
     @lru_cache
-    def read_masses(self):
+    def read_masses(self, update_address_at=None, with_format='>f'):
         self.open()
         start_reg, _ = self.address['n_masses']
         start_reg += 2  # number of components as float..
-        value_start_reg = 6014  # conc data (skipping timing info)
 
-        rv = []
-        for index in range(self.n_masses):
-            mass = self._read_reg(start_reg + index * 2, '>f')
-            mass_key = "{0:.4}".format(mass)
-            self.address[mass_key] = value_start_reg + index * 2
-            rv.append(mass)
+        masses = self._read_reg_multi(start_reg, '>f', self.n_masses)
 
-        return rv
+        if update_address_at:
+            n_bytes, c_fmt, _ = _get_fmt(with_format)
+            self.address.update({
+                "{0:.4}".format(mass): (update_address_at + i * n_bytes, c_fmt)
+                for i, mass in enumerate(masses)
+            })
+
+        return masses
 
     def read_traces(self, kind='conc'):
+        """Returns the current traces, where `kind` is one of 'conc', 'raw', 'components'.
+        """
         self.open()
         start_reg, _ = self.address['n_' + kind]
-        info_regs = 14  # timecycle_width
+        start_reg += 14  # skipping timecycles..
 
-        # Note: the look-up-table .address is not so useful here,
-        #  because of the different kinds (conc, raw [,corr]):
+        # update the address-space with the current kind
+        #  for later calls to `.read_parameter()`:
+        masses = self.read_masses(update_address_at=start_reg)
+        values = self._read_reg_multi(start_reg, '>f', self.n_masses)
+
         return dict(zip(
-            ("{0:.4}".format(mass) for mass in self.read_masses()),
-            (self._read_reg(start_reg + info_regs + offset, '>f')
-                for offset in range(0, self.n_masses * 2, 2))
+            ("{0:.4}".format(mass) for mass in masses), values
         ))
+
+    def read_timecycle(self, kind='conc'):
+        """Returns the current timecycle, where `kind` is one of 'conc', 'raw', 'components'.
+
+        Absolute time as double (8 bytes), seconds since 01.01.1904, 01:00 am.
+        Relative time as double (8 bytes) in seconds since measurement start.
+        """
+        self.open()
+        start_reg, _ = self.address['n_' + kind]
+
+        return _timecycle(
+            int(self._read_reg(start_reg + 2, '>f')),
+            int(self._read_reg(start_reg + 4, '>f')),
+            float(self._read_reg(start_reg + 6, '>d')),
+            float(self._read_reg(start_reg + 10, '>d')),
+        )
 
     @lru_cache
     def read_component_names(self):
+        self.open()
         # 14002 ff: Component Names (maximum length per name:
         # 32 chars (=16 registers), e.g. 14018 to 14033: "Isoprene")
-        self.open()
-        start_reg, _ = self.address['n_components']
-        start_reg += 2  # number of components as float..
-        value_start_reg = 10014  # AME data (skipping timing info)
+        start_reg, _ = self.address['component_names']
+        value_start_reg, c_fmt = self.address['ame_data']
 
         rv = []
         for index in range(self.n_components):
@@ -244,47 +272,37 @@ class IoniconModbus:
             input_reg = self.mc.read_input_registers(start_reg + index * 16, n_bytes)
             chars = struct.pack(reg_format, *input_reg)
             decoded = chars.decode('latin-1').strip('\x00')
-            self.address[decoded] = (value_start_reg + index * 2, '>f')
+            self.address[decoded] = (value_start_reg + index * 2, c_fmt)
             rv.append(decoded)
 
         return rv
 
     def read_components(self):
         self.open()
-        return dict((name, self._read_reg(*self.address[name])) for name in self.read_component_names())
+        start_reg = 10014  # AME Data (skipping timecycles)
+        values = self._read_reg_multi(start_reg, '>f', self.n_components)
 
-    def read_parameter(self, par_name):
-        """Read any previously loaded parameter by name.
+        return dict(zip(self.read_component_names(), values))
 
-        For example, after calling `.read_components()`, one can call
-        `.read_parameter('DPS_Udrift')` to get only this value with no overhead.
-        """
-        self.open()
-        try:
-            return self._read_reg(*self.address[par_name])
-        except KeyError as exc:
-            raise KeyError("did you call one of .read_parameters(), .read_traces(), et.c. first?")
+    def read_ame_timecycle(self):
+        return self.read_timecycle(kind='components')
 
-    def read_timecycle(self):
-        ## TODO odbus register 10000-11999: AME Data
-        # Register 10000-10001: Number of AME compounds plus 6 SGL Values for Timing Info
-        # Register 10002-10013: AME timing info (10002-10003: Cycle   AS FLOAT ! '>f'
-        # , 10004-10005: Overall cycle, 10006 to
-        # 10009: Absolute time as double (8 bytes), seconds since 01.01.1904, 01:00 am, 10010 to 10013:
-        # Relative time as double (8 bytes) in seconds since measurement start )
-        # Register 10014-11999: AME data (the Simulation Server only fills only 2 FLOAT values , so the first 4
-        # U16 registers). Reg. 10014-10015: Value Acetone, Reg. 10016-10017: Value Isoprene
-        pass
+    _ame_parameter = namedtuple('ame_parameter', [
+        'step_number',
+        'run_number',
+        'use_mean',
+        'action_number',
+        'user_number'
+    ])
 
-    def read_ame_parameters(self):
+    def read_ame_numbers(self):
         self.open()
         return IoniconModbus._ame_parameter(
-            int(self._read_reg(*self.address['user_number'])),
             int(self._read_reg(*self.address['step_number'])),
             int(self._read_reg(*self.address['run_number'])),
             int(self._read_reg(*self.address['use_mean'])),
             int(self._read_reg(*self.address['action_number'])),
-            int(self._read_reg(*self.address['ame_state']))
+            int(self._read_reg(*self.address['user_number'])),
         )
 
     def _read_reg(self, addr, c_format):
@@ -296,3 +314,36 @@ class IoniconModbus:
             raise IOError("trying to read from closed Modbus-connection")
 
         return _unpack(input_reg, c_format)
+
+    def _read_reg_multi(self, addr, c_format, n_values):
+        rv = []
+        if not n_values > 0:
+            return rv
+
+        n_bytes, c_format, reg_format = _get_fmt(c_format)
+        n_regs = n_bytes * n_values
+
+        # Note: there seems to be a limitation of modbus that
+        #  the limits the number of registers to 125, so we
+        #  read input-registers in blocks of 120:
+        blocks = ((addr + block, min(120, n_regs - block))
+                    for block in range(0, n_regs, 120))
+
+        for block in blocks:
+            input_reg = self.mc.read_input_registers(*block)
+            if input_reg is None and self.is_open:
+                raise IOError(f"unable to read ({block[1]}) registers at [{block[0]}] from connection")
+            elif input_reg is None and not self.is_open:
+                raise IOError("trying to read from closed Modbus-connection")
+
+            # group the register-values by n_bytes, e.g. [1,2,3,4,..] ~> [(1,2),(3,4),..]
+            # this is a trick from the itertools-recipes, see
+            # https://docs.python.org/3.8/library/itertools.html?highlight=itertools#itertools-recipes
+            # note, that the iterator is cloned n-times and therefore 
+            # all clones advance in parallel and can be zipped below:
+            batches = [iter(input_reg)] * n_bytes
+
+            rv += [_unpack(reg, c_format) for reg in zip(*batches)]
+
+        return rv
+
