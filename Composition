@@ -1,14 +1,11 @@
-{
-  "start_step": "H60",
-  "steps": [
+[
     {
       "name": "H60",
       "set_values": {
         "DPS_Udrift": 600
       },
       "duration": 10,
-      "start_delay": 2,
-      "post_step": "H40"
+      "start_delay": 2
     },
     {
       "name": "H40",
@@ -16,8 +13,7 @@
         "DPS_Udrift": 400
       },
       "duration": 15,
-      "start_delay": 5,
-      "post_step": "N30"
+      "start_delay": 5
     },
     {
       "name": "N30",
@@ -25,8 +21,7 @@
         "DPS_Udrift": 300
       },
       "duration": 25,
-      "start_delay": 5,
-      "post_step": "H60"
+      "start_delay": 5
     }
-  ]
-}
+]
+
