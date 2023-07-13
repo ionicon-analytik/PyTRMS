@@ -96,11 +96,11 @@ class IoniconModbus:
         ('instrument_state', (4, '>f')),  # 0: Not Ok, 1: Ok, 2: Error, 3: Warning
         ('alive_counter', (6, '>H')),     # (updated every 500 ms)
         ('n_parameters', (2000, '>H')),
-        ('n_raw', (4000, '>f')),
-        ('n_conc', (6000, '>f')),
+        ('tc_raw', (4000, '>f')),
+        ('tc_conc', (6000, '>f')),
         ('n_masses', (8000, '>f')),
         # ('n_corr', (7000, '>i')),       # not implemented?
-        ('ame_data', (10014, '>f')),
+        ('tc_components', (10000, '>f')),
         ('user_number', (13900, '>i')),
         ('step_number', (13902, '>i')),
         ('run_number', (13904, '>i')),
@@ -231,7 +231,7 @@ class IoniconModbus:
         """Returns the current traces, where `kind` is one of 'conc', 'raw', 'components'.
         """
         self.open()
-        start_reg, _ = self.address['n_' + kind]
+        start_reg, _ = self.address['tc_' + kind]
         start_reg += 14  # skipping timecycles..
 
         # update the address-space with the current kind
@@ -244,13 +244,13 @@ class IoniconModbus:
         ))
 
     def read_timecycle(self, kind='conc'):
-        """Returns the current timecycle, where `kind` is one of 'conc', 'raw', 'components'.
+        """Returns the current timecycle, where `kind` is one of conc|raw|components.
 
         Absolute time as double (8 bytes), seconds since 01.01.1904, 01:00 am.
         Relative time as double (8 bytes) in seconds since measurement start.
         """
         self.open()
-        start_reg, _ = self.address['n_' + kind]
+        start_reg, _ = self.address['tc_' + kind]
 
         return _timecycle(
             int(self._read_reg(start_reg + 2, '>f')),
@@ -265,7 +265,8 @@ class IoniconModbus:
         # 14002 ff: Component Names (maximum length per name:
         # 32 chars (=16 registers), e.g. 14018 to 14033: "Isoprene")
         start_reg, _ = self.address['component_names']
-        value_start_reg, c_fmt = self.address['ame_data']
+        value_start_reg, c_fmt = self.address['tc_components']
+        value_start_reg += 14  # skip timecycle info..
 
         rv = []
         for index in range(self.n_components):
