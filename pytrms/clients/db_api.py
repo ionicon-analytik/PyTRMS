@@ -29,11 +29,36 @@ class IoniConnect:
         self.current_avg_endpoint = None
         self.comp_dict = dict()
 
-    def refresh_comp_dict(self):
-        r = self.session.get(self.url + '/api/components',
-                    headers={'content-type': 'application/hal+json'})
+    def get(self, endpoint):
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+
+        headers={'content-type': 'application/hal+json'}
+
+        r = self.session.get(self.url + endpoint, headers=headers)
         r.raise_for_status()
-        j = r.json()
+        
+        return r.json()
+
+    def post(self, endpoint, payload):
+        return self._create_object(endpoint, payload, 'post')
+
+    def put(self, endpoint, payload):
+        return self._create_object(endpoint, payload, 'put')
+
+    def _create_object(self, endpoint, payload, method='post'):
+        data = json.dumps(payload)
+        r = self.session.request(method, self.url + endpoint, data=data,
+            headers={'content-type': 'application/hal+json'})
+        if not r.ok:
+            log.error(f"POST {endpoint}\n{data}\n\n"
+                      f"returned [{r.status_code}]: {r.content}")
+            r.raise_for_status()
+
+        return r.headers.get('Location')
+
+    def refresh_comp_dict(self):
+        j = self.get('/api/components')
         self.comp_dict = {component["shortName"]: component
             for component in j["_embedded"]["components"]}
     
@@ -47,7 +72,7 @@ class IoniConnect:
         payload = {
             "shortName": short_name
         }
-        self._create_object('/api/components', payload)
+        self.post('/api/components', payload)
         self.refresh_comp_dict()
 
     def create_average(self, run, step, action=0, use_mean=True):
@@ -66,11 +91,11 @@ class IoniConnect:
                 }
             }
         }
-        self.current_avg_endpoint = self._create_object('/api/averages', payload)
+        self.current_avg_endpoint = self.post('/api/averages', payload)
 
     def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time,
             sourcefile_path, automation):
-        self._create_object('/api/times', payload={
+        self.post('/api/times', payload={
             "RelCycle": int(rel_cycle),
             "AbsCycle": int(abs_cycle),
             "AbsTime": float(abs_time),
@@ -96,7 +121,7 @@ class IoniConnect:
             ]
         }
         endpoint = self.current_avg_endpoint + '/component_traces'
-        self._create_object(endpoint, payload, method='put')
+        self.put(endpoint, payload)
 
     def save_instrument_values(self, new_instrument_values):
         # 13.07.: SCHNELL, SCHNELL (es ist 17 Uhr 57 und ich will die Modbus-instrument
@@ -115,16 +140,5 @@ class IoniConnect:
             ]
         }
         endpoint = self.current_avg_endpoint + '/parameter_traces'  # on the DB it's called parameter... :\
-        self._create_object(endpoint, payload, method='put')
-
-    def _create_object(self, endpoint, payload, method='post'):
-        data = json.dumps(payload)
-        r = self.session.request(method, self.url + endpoint, data=data,
-            headers={'content-type': 'application/hal+json'})
-        if not r.ok:
-            log.error(f"POST {endpoint}\n{data}\n\n"
-                      f"returned [{r.status_code}]: {r.content}")
-            r.raise_for_status()
-
-        return r.headers.get('Location')
+        self.put(endpoint, payload)
 
