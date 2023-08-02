@@ -35,18 +35,12 @@
 # ALTERNATIVE: CLI-mode (the source is passed as a command-line argument):
 #
 # >> py source2par.py -s "hdf://D:/foo/bar.h5:320:321" -s "hdf://D:/foo/zoom.h5:1:23"
+import re
 from collections import namedtuple
 
 import numpy as np
 import pandas as pd
 import h5py
-
-from pytrms.clients.db_api import IoniConnect
-from pytrms.clients.ssevent import SSEventListener
-
-from pytrms.clients import ionitof_url
-from pytrms.clients import database_url
-
 
 print(h5py.version.info)
 
@@ -60,34 +54,13 @@ print(h5py.version.info)
 
 ########
 
-_trace = namedtuple('Trace', ['set', 'act'])
+from io_utils import datainfo2df
 
-def datainfo2df(h5group, selection=slice(None)):
-    """
-    Split a Data-Info-group into `pd.DataFrame`s for set- and act-values, respectively.
+##########
 
-    Note, that the column names are inferred from the Info-dataset and that
-     the columns of act- and set-dataframe need not overlap!
+from decorators import *
 
-    `h5group`   - a HDF5-group containing datasets "Data" and "Info"
-    `selection` - [slice, optional] load only a part of the TimeCycle-data
-    """
-    names = (info.decode('latin-1') for info in h5group['Info'][0])
-    units = (info.decode('latin-1') for info in h5group['Info'][1])
-
-    df = pd.DataFrame(h5group['Data'][selection], columns=names)
-
-    set_cols = [col for col in df.columns if col.endswith('_Set')]
-    act_cols = [col for col in df.columns if col.endswith('_Act')]
-
-    set_values = df[set_cols]
-    act_values = df[act_cols]
-
-    set_values.columns = [col.replace('_Set', '') for col in set_values.columns]
-    act_values.columns = [col.replace('_Act', '') for col in act_values.columns]
-
-    return _trace(set_values, act_values)
-    
+##########
 
 def parse_source_string(source):
     try:
@@ -103,6 +76,7 @@ def parse_source_string(source):
     except ValueError as exc:
         raise Exception("parsing error while parsing source string") from exc
 
+##########
 
 def collect(sources):
     # collect parameters from sources...
@@ -135,7 +109,17 @@ def collect(sources):
 
     return set_df, act_df
 
+#######
 
+@eventinit
+def initialize(db_api):
+    j = db_api.get('/api/parameters')
+    parname2id = {par["name"]: par["parameterID"] for par in j["_embedded"]["parameters"]}
+
+    return parname2id
+
+
+@eventhook('average')
 def run_the_thing(db_api, sources, current_avg_endpoint):
 
     set_df, act_df = collect(sources)
@@ -145,7 +129,7 @@ def run_the_thing(db_api, sources, current_avg_endpoint):
     j = db_api.get('/api/parameters')
     parname2id = {par["name"]: par["parameterID"] for par in j["_embedded"]["parameters"]}
     
-    common_names = list(set(set_df.columns) & parname2id.keys())<F5>
+    common_names = list(set(set_df.columns) & parname2id.keys())
     set_df = set_df[common_names]
     
     common_names = list(set(act_df.columns) & parname2id.keys())
@@ -170,48 +154,8 @@ def run_the_thing(db_api, sources, current_avg_endpoint):
     db_api.put(endpoint, payload)
 
 
+#api_object = j = db_api.get(current_avg_endpoint + '/sources')
+#sources = j["_embedded"]["sources"]
 
-## TODO :: captain hook !
-#
-#    hier kommt ein "executor" hin!
-#
-#     lade hook-funktionen aus Python module
-#     ..markiert mit gewuenschtem event
-#     ..und die werden dann ausgefuerht
-#     ..ganz genau wie die AME plugins (nur in Python)
-#    => das ist dann die Blaupause fuer die AME-execution!
-#
-#   und man kann alle moeglichen hook-skripte in einen Ordner schmeissen und draus laden..
-#   ..oder dann eben gesammelt auf eine ganze reihe von averages ausfuehren!
-#
-#  so stell ich mir das vor.
-##
-
-def main(args):
-
-    if len(args) > 1:
-        database_url = str(args[1])
-
-    db_api = IoniConnect(database_url)
-    sse = SSEventListener(database_url + '/api/events')
-    
-    print("listening to average events...")
-    sse.subscribe('new average')
-
-    for event in sse:
-        current_avg_endpoint = event
-
-        print('got:', current_avg_endpoint)
-
-        j = db_api.get(current_avg_endpoint + '/sources')
-
-        sources = j["_embedded"]["sources"]
-
-        run_the_thing(db_api, sources, current_avg_endpoint)
-
-
-
-if __name__ == '__main__':
-    import sys
-    main(sys.args)
+#run_the_thing(db_api, sources, current_avg_endpoint)
 
