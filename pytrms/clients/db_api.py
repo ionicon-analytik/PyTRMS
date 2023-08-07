@@ -109,6 +109,11 @@ class IoniConnect:
         })
 
     def save_component_values(self, new_values):
+        """
+        Post Components to the database.
+
+        `new_values`    dictionary {name~>value}
+        """
         if self.current_avg_endpoint is None:
             raise Exception("create average first")
     
@@ -123,7 +128,12 @@ class IoniConnect:
         endpoint = self.current_avg_endpoint + '/component_traces'
         self.put(endpoint, payload)
 
-    def save_instrument_values(self, new_instrument_values):
+    def save_instrument_values(self, new_values):
+        """
+        Post Parameters to the database.
+
+        `new_values`    dictionary {name~>value}
+        """
         # 13.07.: SCHNELL, SCHNELL (es ist 17 Uhr 57 und ich will die Modbus-instrument
         #  daten noch hochladen):
         #  this expects a namedtuple as defined in Modbus client: .set, .act, .par_id
@@ -136,7 +146,7 @@ class IoniConnect:
                     "parameterID": item.par_id,
                     "setValue": item.set,
                     "actMean": item.act
-                } for name, item in new_instrument_values.items()
+                } for name, item in new_values.items()
             ]
         }
         endpoint = self.current_avg_endpoint + '/parameter_traces'  # on the DB it's called parameter... :\

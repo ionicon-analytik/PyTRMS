@@ -5,14 +5,25 @@ from decorators import *
 def example_init(db_api):
     print('initializing example...')
 
-    return db_api.get('/api/parameters/32')
+    return dict(foo='bars')  # db_api.get('/api/parameters/32')
 
 
 @eventhook('average')
 def example_hook(db_api, json_object, initial_state):
     print('executing example...')
+    
+    avg = json_object
 
-    print(db_api.get('/api/times/last'))
-    print(json_object)
-    print(initial_state)
+    for k, v in initial_state.items():
+        print(f'initially: a {k} that {v}')
+
+    href = avg["_links"]["self"]["href"]
+    print('got:', href)
+
+    j = db_api.get(href + '/sources')
+
+    print(j["count"])
+
+    for source in j["_embedded"]["sources"]:
+        source["path"]
 

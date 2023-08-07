@@ -26,7 +26,7 @@ import logging
 from itertools import chain
 
 # NOTE: must be called *before* any loggers in upcoming imports are defined:
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.WARN)
 
 from pytrms.clients.db_api import IoniConnect
 from pytrms.clients.ssevent import SSEventListener
@@ -70,16 +70,32 @@ for mod_file in iglob('example_hooks/*.py'):
 print(eventhooks, eventinits)
 
 
-def main(args):
 
-    if len(args) > 1:
-        url = str(args[1])
-    else:
-        url = database_url
+print(database_url)  # set DATABASE_HOST=
 
-    print(url)
+db_api = IoniConnect() #url)
 
-    db_api = IoniConnect(url)
+def generate_averages():
+
+    j = db_api.get('/api/averages')
+
+    hrefs = (item["href"] for item in j["_links"]["item"])  # wtf ???
+
+    topic = "average"  # behave as if SSE ...
+    for href in hrefs:
+        yield topic, href
+
+def make_sse_listener(subscribe_to_topics):
+
+    sse = SSEventListener(url + '/api/events')
+
+    for topic in subscribe_to_topics:
+        sse.subscribe(topic)
+
+    return sse.items()
+
+
+def main():
 
     print('initializing...')
 
@@ -90,25 +106,15 @@ def main(args):
 
     print("listening to average events...")
 
-    sse = SSEventListener(url + '/api/events')
-    
-    print('subscribing to topics...')
-
-    all_hooks = chain.from_iterable(eventhooks.values())
-    for topic in [e._topic for e in all_hooks]:
-        sse.subscribe(topic) ##'new average')  # TODO :: allow reg-ex and None in Listener!!
-
-    for topic, endpoint in sse.items():
-
-        print('got:', topic)
-
-        current_avg_endpoint = endpoint
+    if False:
+        topics = {e._topic for e in chain.from_iterable(eventhooks.values())}
+        gen = make_sse_listener(topics)
+    else:
+        gen = generate_averages()
 
 
-        print('got:', current_avg_endpoint)
-
+    for topic, endpoint in gen:
         # load whatever is behind the endpoint...
-
         try:
             api_object = db_api.get(endpoint)
         except Exception as e:
@@ -116,12 +122,10 @@ def main(args):
             continue  # can't GET /api/averages/xx/parameter_traces ???!??!?!
 
         # ...and execute all matching hooks:
-        print(' ...and execute all matching hooks:')
 
         for mod, e_hooks in eventhooks.items():
-            print('scanning module', mod)
             for e_hook in e_hooks:
-                print('checking', e_hook, 'with', e_hook._topic)
+                log.debug(f"executing {e_hook.__name__}() [if '{e_hook._topic}' matches '{topic}']")
                 if e_hook._topic_re.match(topic):
                     e_hook(db_api, api_object, initial_values.get(mod))
 
@@ -129,5 +133,13 @@ def main(args):
 
 if __name__ == '__main__':
     import sys
-    main(sys.argv)
+    if len(sys.argv) > 1:
+        url = str(sys.argv[1])
+    else:
+        url = database_url
+
+    if len(sys.argv) > 1 and sys.argv[1] == '--verbose':
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    main() #sys.argv)
 

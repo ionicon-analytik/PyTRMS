@@ -46,13 +46,6 @@ print(h5py.version.info)
 
 ########
 
-#sources = [
-#        r"hdf://D:\Temp\__2023_06_05__15_34_55\AME_Data___2023_06_05__15_34_55_MaxCycle_003.h5:9700:"
-#]
-#
-#current_avg_endpoint = '/api/averages/11'
-
-########
 
 from io_utils import datainfo2df
 
@@ -63,6 +56,12 @@ from decorators import *
 ##########
 
 def parse_source_string(source):
+    """
+    Extract a source-dictionary from a formatted source string.
+
+    >>> parse_source_string(r"hdf://D:\AME_Data\_2023_06_05__15_34_55.h5:9700:")
+    {'path': D:\AME_Data\_2023_06_05__15_34_55.h5, 'begin': 9700, 'end': -1}
+    """
     try:
         scheme, *path, begin, end = source.split(':')
         if scheme != 'hdf':
@@ -101,11 +100,13 @@ def collect(sources):
         set_ptr, act_ptr = datainfo2df(hf['/AddTraces/PTR-Instrument'], source['selection'])
         set_tps, act_tps = datainfo2df(hf['/AddTraces/TOFSupply'], source['selection'])
     
-        set_all += [set_ptr, set_tps]
-        act_all += [act_ptr, act_tps]
+        set_all.append(pd.concat([set_ptr, set_tps], axis='columns'))
+        act_all.append(pd.concat([act_ptr, act_tps], axis='columns'))
 
-    set_df = pd.concat(set_all)
-    act_df = pd.concat(act_all)
+        print(set(set_ptr.index)) # ^ set(set_tps.columns))
+
+    set_df = pd.concat(set_all, axis='index')
+    act_df = pd.concat(act_all, axis='index')
 
     return set_df, act_df
 
@@ -114,27 +115,41 @@ def collect(sources):
 @eventinit
 def initialize(db_api):
     j = db_api.get('/api/parameters')
-    parname2id = {par["name"]: par["parameterID"] for par in j["_embedded"]["parameters"]}
+
+    parname2id = dict()
+    for par in j["_embedded"]["parameters"]:
+        pid = par["parameterID"] 
+        name = par["name"]
+        pname = par["prettyName"]
+        parname2id[name] = pid
+        if pname is not None and pname not in parname2id:
+            # don't overwrite DPS_Udrift with PTR_DCS_Udrift O_o
+            parname2id[pname] = pid
+            # TODO ...ist aber letztlich UNMOEGLICH zuzuordnen, muss man warten
+
+    for name in sorted(parname2id):
+        print(name, '~>', parname2id[name])
 
     return parname2id
 
 
 @eventhook('average')
-def run_the_thing(db_api, sources, current_avg_endpoint):
+def run_the_thing(db_api, avg, parname2id):
+
+    avg_link = avg["_links"]["self"]["href"]
+
+    j = db_api.get(avg_link + '/sources')
+    sources = j["_embedded"]["sources"]
 
     set_df, act_df = collect(sources)
 
     # negotiate common parameter names...
-    
-    j = db_api.get('/api/parameters')
-    parname2id = {par["name"]: par["parameterID"] for par in j["_embedded"]["parameters"]}
     
     common_names = list(set(set_df.columns) & parname2id.keys())
     set_df = set_df[common_names]
     
     common_names = list(set(act_df.columns) & parname2id.keys())
     act_df = act_df[common_names]
-    
     
     # compute averages and construct payload...
     
@@ -150,12 +165,7 @@ def run_the_thing(db_api, sources, current_avg_endpoint):
         ]
     }
 
-    endpoint = current_avg_endpoint + '/parameter_traces'
+    endpoint = avg_link + '/parameter_traces'
     db_api.put(endpoint, payload)
 
-
-#api_object = j = db_api.get(current_avg_endpoint + '/sources')
-#sources = j["_embedded"]["sources"]
-
-#run_the_thing(db_api, sources, current_avg_endpoint)
 
