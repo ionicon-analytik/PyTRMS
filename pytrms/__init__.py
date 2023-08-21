@@ -1,52 +1,14 @@
 _version = '0.2.1'
 
-
 import logging
 
-#logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+logging.TRACE = 0  # overwrites logging.NOTSET
 logging.basicConfig(format='[%(levelname)s]\t%(message)s')
-log = logging.getLogger()
 
-__all__ = ['log']
 
 from .plotting import plot_marker
 
-__all__ += ['plot_marker']
-
-
-from functools import lru_cache
-
-@lru_cache
-def make_client(host, port=None, method='webapi'):
-    '''Client factory.
-
-    'method' is the preferred connection, either 'webapi' (default) or 'modbus'.
-    '''
-    if method.lower() == 'webapi':
-        from .clients.ioniclient import IoniClient
-        if port is not None:
-            return IoniClient(host, port)
-        return IoniClient(host)
-
-    if method.lower() == 'modbus':
-        from .modbus import IoniconModbus
-        if port is not None:
-            return IoniconModbus(host, port)
-        return IoniconModbus(host)
-
-    raise NotImplementedError(str(method))
-
-@lru_cache
-def make_buffer(host, port=None, method='webapi'):
-    '''TraceBuffer factory.
-
-    'method' is the preferred connection, either 'webapi' (default) or 'modbus'.
-    '''
-    from .tracebuffer import TraceBuffer
-
-    c = make_client(host, port, method)
-
-    return TraceBuffer(c)
+__all__ = ['plot_marker', 'load', 'connect']
 
 
 def load(path):
@@ -62,25 +24,34 @@ def load(path):
     return OfflineMeasurement(reader)
 
 
-def connect(host='localhost', method='webAPI', port=None):
+def connect(host=None, method='webapi'):
     '''Connect a client to a running measurement server.
+
+    'method' is the preferred connection, either 'webapi' (default) or 'modbus'.
 
     returns an `Instrument` if connected successfully.
     '''
-    from .factory import make_client, make_buffer
     from .instrument import Instrument
     from .helpers import PTRConnectionError
 
-    _buffer = make_buffer(host, port, method='webAPI')
+    if method.lower() == 'webapi':
+        from .clients.ioniclient import IoniClient
+        return IoniClient(host)
 
-    try:
-        inst = Instrument(_buffer)
-    except PTRConnectionError as exc:
-        log.error(exc)
-        raise
+    if method.lower() == 'modbus':
+        from .modbus import IoniconModbus
+        return IoniconModbus(host)
 
-    return inst
+    raise NotImplementedError(str(method))
 
 
-__all__ += ['load', 'connect']
+    #try:
+    #    inst = Instrument(_buffer)
+    #except PTRConnectionError as exc:
+    #    log = logging.getLogger('pytrms')
+    #    log.error(exc)
+    #    raise
+
+    #return inst
+
 

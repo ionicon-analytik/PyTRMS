@@ -166,6 +166,6 @@ def run_the_thing(db_api, avg, parname2id):
     }
 
     endpoint = avg_link + '/parameter_traces'
-    db_api.put(endpoint, payload)
+    db_api.post(endpoint, payload)
 
 

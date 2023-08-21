@@ -106,7 +106,7 @@ def main():
 
     print("listening to average events...")
 
-    if False:
+    if True:
         topics = {e._topic for e in chain.from_iterable(eventhooks.values())}
         gen = make_sse_listener(topics)
     else:

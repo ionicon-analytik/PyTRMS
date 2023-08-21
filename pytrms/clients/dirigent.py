@@ -11,7 +11,7 @@ log = logging.getLogger()
 
 
 class Template:
-    '''A template for updloading a collection item.
+    '''A template for uploading a collection item.
 
     >>> t = Template()
     >>> t.template == Template.default_template
