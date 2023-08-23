@@ -210,6 +210,39 @@ class IoniconModbus:
 
         return rv
 
+    def write_instrument_data(self, par_id, new_value, timeout_s=10):
+        self.open()
+
+        # Each command-block consists of 3 registers:
+        # Register 1: Parameter ID
+        # Register 2-3: Parameter Set Value as float(real)
+        start_register = 40000
+        blocksize = 3
+
+        if isinstance(par_id, str):
+            try:
+                par_id = next(k for k, v in _id_to_descr.items() if v == par_id)
+            except StopIteration as exc:
+                raise KeyError(str(par_id))
+        par_id = int(par_id)
+        if par_id not in _id_to_descr:
+            raise IndexError(str(par_id))
+
+        start_register += blocksize * par_id
+
+        retry_time = 0
+        while retry_time < timeout_s:
+            # a value of 0 indicates ready-to-write:
+            if self.mc.read_holding_registers(start_register) == [0]:
+                break
+            retry_time += 0.5
+            time.sleep(0.5)
+        else:
+            raise TimeoutError(f'register {start_register} timed out after {timeout_s}s')
+
+        reg_values = [start_register] + list(_pack(new_value))
+        self.mc.write_multiple_registers(start_register, reg_values)
+
     @lru_cache
     def read_masses(self, update_address_at=None, with_format='>f'):
         self.open()
