@@ -29,13 +29,14 @@ class IoniConnect:
         self.current_avg_endpoint = None
         self.comp_dict = dict()
 
-    def get(self, endpoint):
+    def get(self, endpoint, params=None):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
+        if params is None:
+            params = dict()
 
-        headers={'content-type': 'application/hal+json'}
-
-        r = self.session.get(self.url + endpoint, headers=headers)
+        r = self.session.get(self.url + endpoint, params=params,
+            headers={'content-type': 'application/hal+json'})
         r.raise_for_status()
         
         return r.json()
@@ -76,22 +77,13 @@ class IoniConnect:
         self.refresh_comp_dict()
 
     def create_average(self, run, step, action=0, use_mean=True):
-        payload = {
-            "_embedded": {
-                "automation": {
-                    "AUTO_StepNumber": 0,
-                    "AUTO_RunNumber": 0,
-                    "AUTO_UseMean": bool(use_mean),
-                    "AUTO_StartCycleMean": 0,
-                    "AUTO_StopCycleMean": 0,
-                    "AME_ActionNumber": int(action),
-                    "AME_UserNumber": 0,
-                    "AME_StepNumber": int(step),
-                    "AME_RunNumber": int(run),
-                }
-            }
-        }
-        self.current_avg_endpoint = self.post('/api/averages', payload)
+
+        params = {'run': int(run), 'step': int(step), 'usemean': bool(use_mean)}
+        if (action != 0):
+            params['action'] = int(action)
+
+        timecycles = self.get('/api/times', params)
+        self.current_avg_endpoint = self.post('/api/averages', timecycles)
 
     def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time,
             sourcefile_path, automation):
