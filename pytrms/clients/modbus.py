@@ -209,8 +209,9 @@ class IoniconModbus:
         rv = dict()
         # read 20 parameters at once to save transmission..
         for superblock in range(0, blocksize*self.n_parameters, superblocksize):
-            offset = start_register + superblock, superblocksize
-            input_regs = self.mc.read_input_registers(offset)  # input_register
+            offset = start_register + superblock
+            # always using input_register
+            input_regs = self.mc.read_input_registers(offset, superblocksize)
             # ..and handle one block per parameter:
             for block in range(0, superblocksize, blocksize):
                 par_id, set1, set2, act1, act2, state = input_regs[block:block+6]
@@ -268,11 +269,9 @@ class IoniconModbus:
     @lru_cache
     def read_masses(self, update_address_at=None, with_format='>f'):
         self.open()
-        start_reg, _ = self.address['n_masses']
+        start_reg, c_fmt, _ = self.address['n_masses']
         start_reg += 2  # number of components as float..
-
-        masses = self._read_reg_multi(start_reg, '>f', self.n_masses)  # input_register
-
+        masses = self._read_reg_multi(start_reg, c_fmt, self.n_masses)  # input_register
         if update_address_at:
             n_bytes, c_fmt, _ = _get_fmt(with_format)
             self.address.update({
@@ -286,13 +285,13 @@ class IoniconModbus:
         """Returns the current traces, where `kind` is one of 'conc', 'raw', 'components'.
         """
         self.open()
-        start_reg, _ = self.address['tc_' + kind]
+        start_reg, c_fmt, _is_holding = self.address['tc_' + kind]
         start_reg += 14  # skipping timecycles..
 
         # update the address-space with the current kind
         #  for later calls to `.read_parameter()`:
         masses = self.read_masses(update_address_at=start_reg)
-        values = self._read_reg_multi(start_reg, '>f', self.n_masses)  # input_register
+        values = self._read_reg_multi(start_reg, c_fmt, self.n_masses, _is_holding)
 
         return dict(zip(
             ("{0:.4}".format(mass) for mass in masses), values
