@@ -27,6 +27,7 @@ class Template:
             "data": [
                  {"name": "ParaID", "value": "AME_RunNumber", "prompt": "the parameter ID"},
                  {"name": "ValAsString", "value": "5.000000", "prompt": "the new value"},
+                 {"name": "DataType", "value": "", "prompt": "datatype (int, float, string)"},
              ]
          }
 
@@ -49,20 +50,30 @@ class Template:
                 self._inserts["parID"] = insert
             if 'set' in insert["name"].lower() or 'value' in insert["prompt"]:
                 self._inserts["value"] = insert
+            if 'typ' in insert["name"].lower() or 'datatype' in insert["prompt"]:
+                self._inserts["dtype"] = insert
 
-        assert len(self._inserts) == 2, "missing or unknown name in template"
+        assert len(self._inserts) == 3, "missing or unknown name in template"
 
     def render(self, parID, value):
+        """Prepare a request for uploading."""
+        dtype = 'float'
+        if isinstance(value, int): dtype = 'int'
+        if isinstance(value, str): dtype = 'string'
+
         parID_insert = dict(self._inserts["parID"])
         value_insert = dict(self._inserts["value"])
+        dtype_insert = dict(self._inserts["dtype"])
 
         parID_insert.update(value=str(parID)),
         value_insert.update(value=str(value)),
+        dtype_insert.update(value=str(dtype)),
 
         return json.dumps({
             "template": dict(data=[
                 parID_insert,
                 value_insert,
+                dtype_insert,
             ])}
         )
 
@@ -73,31 +84,54 @@ class Template:
 
 class Dirigent:
 
-    method = 'PUT'
-
     def __init__(self, url=ionitof_url, template=None):
         if template is None:
             template = Template.download(url)
 
         self.url = url
         self.template = template
-        self._session = None
+        self._session = None  # TODO :: ?
 
     def push(self, parID, new_value, future_cycle):
+        uri = self.url + '/api/schedule/' + str(int(future_cycle))
+        payload = self.template.render(parID, new_value)
+        r = self._make_request('PUT', uri, payload=payload)
+
+        return r.status_code
+
+    def push_filename(self, path, future_cycle):
+        return self.push('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle - 2)
+
+    def find_scheduled(self, parID):
+        uri = self.url + '/api/schedule/search'
+        r = self._make_request('GET', uri, params={'name': str(parID)})
+        j = r.json()
+
+        return [item['href'].split('/')[-1] for item in j['collection']['items']]
+
+    def _make_request(self, method, uri, params=None, payload=None):
         if self._session is None:
             session = requests  # not using a session..
         else:
             session = self._session
-        
-        uri = self.url + '/api/schedule/' + str(int(future_cycle))
-        payload = self.template.render(parID, new_value)
-        r = session.request(self.method, uri, data=payload, headers={
-            'content-type': 'application/vnd.collection+json'
-        })
+
+        try:
+            r = session.request(method, uri, params=params, data=payload, headers={
+                'content-type': 'application/vnd.collection+json'
+            })
+        except requests.exceptions.ConnectionError as exc:
+            # Note: the LabVIEW-webservice seems to implement a weird HTTP:
+            #  we may get a [85] Custom Error (Bad status line) from urllib3
+            #  even though we just mis-spelled a parameter-ID ?!
+            log.error(exc)
+            raise KeyError(str(params, payload))
+
         log.debug(f"request to <{uri}> returned [{r.status_code}]")
-        if not r.ok:
+        if not r.ok and payload:
             log.error(payload)
-            r.raise_for_status()
+        r.raise_for_status()
+
+        return r
 
     def wait_until(self, future_cycle):
         if self._session is None:
@@ -110,10 +144,12 @@ class Dirigent:
         if r.status_code == 410:
             # 410 Client Error: Gone 
             log.warning("we're late, better return immediately!")
-            return
+            return r.status_code
     
         r.raise_for_status()
         log.debug(f"waited until {r.json()['TimeCycle']}")
+
+        return r.status_code
 
     @contextmanager
     def open_session(self):
