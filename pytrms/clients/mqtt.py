@@ -60,11 +60,20 @@ def _build_command(parID, value, future_cycle=None):
 
 def on_connect(client, userdata, flags, rc):
     log.info("connected: " + str(rc))
+    default_qos = 1
     # Note: ensure subscription after re-connecting,
     #  wildcards are '+' (one level), '#' (all levels):
-    client.subscribe("IC_Command/Write/Scheduled")
-    client.subscribe("DataCollection/Act/ACQ_SRV_CurrentState")
-    client.subscribe("DataCollection/Act/ACQ_SRV_CurrentTraceData")
+    rc, mid = client.subscribe([
+        ("DataCollection/Act/ACQ_SRV_OverallCycle",               2),
+        ("IC_Command/Write/Scheduled",                  default_qos),
+        ("DataCollection/Act/ACQ_SRV_CurrentState",     default_qos),
+        ("DataCollection/Act/ACQ_SRV_CurrentTraceData", default_qos),
+        ("DataCollection/Set/#", default_qos),
+    ])
+    print("subscribed (rc) @mid [{}]".format(rc, mid))
+
+def on_subscribe(client, userdata, mid, granted_qos):
+    print("subscribed ({}) with QoS: {}".format(mid, granted_qos))
 
 def on_publish(client, userdata, mid):
     log.debug("published: " + str(mid))
@@ -75,6 +84,7 @@ def follow_schedule(client, userdata, msg):
     commands.extend(payload["CMDs"])
     
 def follow_state(client, userdata, msg):
+    print("retained?", msg.retain)
     payload = json.loads(msg.payload.decode())
     state = payload["DataElement"]["Value"]
     log.info("new server-state: " + str(state))
@@ -85,9 +95,18 @@ def follow_state(client, userdata, msg):
     if state == "ACQ_JustStopped":
         commands.clear()
 
+def follow_set(client, userdata, msg):
+    print("retained?", msg.retain)
+    try:
+        payload = json.loads(msg.payload.decode())
+        state = payload["DataElement"]["Value"]
+        print(msg.topic, state)
+    except json.decoder.JSONDecodeError:
+        print(msg.payload.decode())
+
 def follow_tc(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
-    tc = payload["DataElement"]["Value"]["TimeCycle"]
+    tc.update({"OverallCycle": int(payload["DataElement"]["Value"])})
     log.debug("new timecycle " + str(tc))
     # replace the current timecycle with the new element:
     timecycle.append(tc)
@@ -99,7 +118,7 @@ def follow_tc(client, userdata, msg):
     # manually delete the outdated requests..
     outdated = []
     for cmd in commands:
-        current =    tc[cmd["SchedMode"]]
+        current =    tc["OverallCycle"]
         future  = float(cmd["Schedule"])
         if current >= future:
             outdated.append(cmd)
@@ -110,6 +129,10 @@ def follow_tc(client, userdata, msg):
 class MqttClient:
 
     QoS_level = 1  # "at least once"
+
+    @property
+    def is_connected(self):
+        return self.client.is_connected()
 
     @property
     def current_schedule(self):
@@ -134,10 +157,12 @@ class MqttClient:
         self.client = mqtt.Client()
         #self.client.user_data_set(commands)  # this ain't working..
         self.client.on_connect = on_connect
+        self.client.on_subscribe = on_subscribe
         self.client.on_publish = on_publish
         self.client.message_callback_add("IC_Command/Write/Scheduled", follow_schedule)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState", follow_state)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentTraceData", follow_tc)
+        self.client.message_callback_add("DataCollection/Set/#", follow_set)
+        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle", follow_tc)
         # ..and connect to the server:
         self.connect()
 
@@ -160,7 +185,7 @@ class MqttClient:
             "CMDs": [ cmd, ]
         }
         return self.client.publish("IC_Command/Write/Direct", json.dumps(payload),
-                qos=self.QoS_level)
+                qos=self.QoS_level, retain=False)
 
     def schedule(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
