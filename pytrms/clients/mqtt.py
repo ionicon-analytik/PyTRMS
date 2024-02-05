@@ -3,20 +3,63 @@ import time
 import logging
 import json
 from collections import deque
+from threading import Condition
 from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
 
-from . import ionitof_url
+from . import ionitof_host
 
 log = logging.getLogger()
 
-set_vals = deque([], maxlen=1000)
-tc = dict()
-ss = deque(["<unknown>"], maxlen=1)
+__all__ = ['MqttClient']
+
+commands     = deque([], maxlen=1000)
+server_state = deque(["<unknown>"], maxlen=1)
+timecycle    = deque([], maxlen=1)  # never empty!
+_tc_queue    = deque([], maxlen=1)  # maybe empty!
+_tc_lock     = Condition()
+
+def _build_header():
+    ts = dt.now()
+    header = {
+        "TimeStamp": {
+            "Str": ts.isoformat(),
+            "sec": ts.timestamp() + 2082844800,  # convert to LabVIEW time
+        },
+    }
+    return header
+
+def _build_command(parID, value, future_cycle=None):
+    cmd = {
+        "ParaID": str(parID),
+        "Value": str(value),
+        "Datatype": "",
+        "CMDMode": "Set",
+        "Index": -1,
+    }
+    if future_cycle is not None:
+        cmd.update({
+            "SchedMode": "OverallCycle",
+            "Schedule": str(future_cycle),
+        })
+    if isinstance(value, bool):
+        # Note: True is also instance of int!
+        cmd.update({"Datatype": "BOOL", "Value": str(value).lower()})
+    elif isinstance(value, str):
+        cmd.update({"Datatype": "STR"})
+    elif isinstance(value, int):
+        cmd.update({"Datatype": "I32"})
+    elif isinstance(value, float):
+        cmd.update({"Datatype": "DBL"})
+    else:
+        raise NotImplemented("unknown datatype")
+
+    return cmd
+
 
 def on_connect(client, userdata, flags, rc):
-    print("connected:", str(rc))
+    log.info("connected: " + str(rc))
     # Note: ensure subscription after re-connecting,
     #  wildcards are '+' (one level), '#' (all levels):
     client.subscribe("IC_Command/Write/Scheduled")
@@ -24,63 +67,79 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe("DataCollection/Act/ACQ_SRV_CurrentTraceData")
 
 def on_publish(client, userdata, mid):
-    print("published:", mid)
+    log.debug("published: " + str(mid))
 
-def on_message(client, userdata, msg):
-    print("received:", msg.topic, "QoS:", str(msg.qos))
+def follow_schedule(client, userdata, msg):
+    log.debug(f"received: {msg.topic} | QoS: {msg.qos}")
     payload = json.loads(msg.payload.decode())
-    set_vals.extend(payload["CMDs"])
+    commands.extend(payload["CMDs"])
     
 def follow_state(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
     state = payload["DataElement"]["Value"]
-    ss.append(state)
-    print("new server-state:", state)
+    log.info("new server-state: " + str(state))
+    # replace the current state with the new element:
+    server_state.append(state)
     if state == "ACQ_JustStarted":
-        tc.clear()
+        _tc_queue.clear()
     if state == "ACQ_JustStopped":
-        set_vals.clear()
+        commands.clear()
 
 def follow_tc(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
-    tc.update(payload["DataElement"]["Value"]["TimeCycle"])
-    print(tc)
+    tc = payload["DataElement"]["Value"]["TimeCycle"]
+    log.debug("new timecycle " + str(tc))
+    # replace the current timecycle with the new element:
+    timecycle.append(tc)
+    # Note: this is the thread-safe variant for ONE thread
+    #  waiting for the _tc_queue to be filled (may be empty):
+    with _tc_lock:
+        _tc_queue.append(tc)
+        _tc_lock.notify()
     # manually delete the outdated requests..
     outdated = []
-    for elm in set_vals:
-        current = tc[elm["SchedMode"]]
-        future = float(elm["Schedule"])
+    for cmd in commands:
+        current =    tc[cmd["SchedMode"]]
+        future  = float(cmd["Schedule"])
         if current >= future:
-            outdated.append(elm)
-    for elm in outdated:
-        set_vals.remove(elm)
+            outdated.append(cmd)
+    for cmd in outdated:
+        commands.remove(cmd)
 
 
-class MQTTScheduler:
+class MqttClient:
+
+    QoS_level = 1  # "at least once"
 
     @property
     def current_schedule(self):
-        return sorted(set_vals, key=lambda x: float(x["Schedule"]))
+        return sorted(commands, key=lambda x: float(x["Schedule"]))
 
     @property
     def current_server_state(self):
-        return ss[0]
+        return server_state[0]
 
     @property
     def current_timecycle(self):
-        return tc
+        return timecycle[0]
 
-    def __init__(self, host="localhost"):
-        set_vals.clear()
-        tc.clear()
+    @property
+    def is_running(self):
+        return current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
+
+    def __init__(self, host=ionitof_host):
+        commands.clear()
+        timecycle.append({ "Cycle": 0, "OverallCycle": 0, "RelTime": 0, "AbsTime": 0 })
         self.host = host
         self.client = mqtt.Client()
-        self.client.user_data_set(set_vals)
+        #self.client.user_data_set(commands)  # this ain't working..
         self.client.on_connect = on_connect
         self.client.on_publish = on_publish
-        self.client.message_callback_add("IC_Command/Write/Scheduled", on_message)
+        self.client.message_callback_add("IC_Command/Write/Scheduled", follow_schedule)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState", follow_state)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentTraceData", follow_tc)
+        # ..and connect to the server:
+        self.connect()
 
     def connect(self):
         self.client.connect(self.host, 1883, 60)
@@ -93,52 +152,70 @@ class MQTTScheduler:
     def __del__(self):
         self.disconnect()
 
-    def _make_header(self):
-        ts = dt.now()
-        header = {
-            "TimeStamp": {
-                "Str": ts.isoformat(),
-                "sec": ts.timestamp() + 2082844800,
-            },
-        }
-        return header
-
-    def push(self, parID, new_value, future_cycle):
-        cmd = {
-            "ParaID": str(parID),
-            "Value": str(new_value),
-            "Datatype": "DBL",
-            "CMDMode": "Set",
-            "SchedMode": "OverallCycle",
-            "Schedule": str(future_cycle),
-            "Index": -1,
-        }
-        if isinstance(new_value, bool):
-            # Note: True is also instance of int!
-            cmd.update({"Datatype": "BOOL", "Value": str(new_value).lower()})
-        elif isinstance(new_value, str):
-            cmd.update({"Datatype": "STR"})
-        elif isinstance(new_value, int):
-            cmd.update({"Datatype": "I32"})
-        elif isinstance(new_value, float):
-            cmd.update({"Datatype": "DBL"})
+    def write(self, parID, new_value):
+        '''Write a 'new_value' to 'parID' directly.'''
+        cmd = _build_command(parID, new_value)
         payload = {
-            "Header": self._make_header(),
+            "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        self.client.publish("IC_Command/Write/Scheduled", json.dumps(payload))
+        return self.client.publish("IC_Command/Write/Direct", json.dumps(payload),
+                qos=self.QoS_level)
 
-    def push_filename(self, path, future_cycle):
+    def schedule(self, parID, new_value, future_cycle):
+        '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
+        if future_cycle is None:
+            return self.write(parID, new_value)
+
+        cmd = _build_command(parID, new_value, future_cycle)
+        payload = {
+            "Header": _build_header(),
+            "CMDs": [ cmd, ]
+        }
+        return self.client.publish("IC_Command/Write/Scheduled", json.dumps(payload),
+                qos=self.QoS_level)
+
+    def schedule_filename(self, path, future_cycle):
+        '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
         grace_time = 0  # how much time does IoniTOF need??
-        return self.push('ACQ_SRV_SetFullStorageFile',
-                path.replace('/', '\\'),
+        return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'),
                 future_cycle - grace_time)
 
+    def start_measurement(self, path=None):
+        '''Start a new measurement.
+
+        If 'path' is not None, write to this .h5 file.'''
+        if path is None:
+            return self.write('ACQ_SRV_Start_Meas_Quick', True)
+        else:
+            return self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+
+    def stop_measurement(self, future_cycle=None):
+        '''Stop the current measurement.
+
+        If 'future_cycle' is not None, schedule the stop command.'''
+        return self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
+
     def find_scheduled(self, parID):
-        matches = [cmd for cmd in set_vals if cmd["ParaID"] == str(parID)]
+        matches = [cmd for cmd in commands if cmd["ParaID"] == str(parID)]
         return sorted(matches, key=lambda x: float(x["Schedule"]))
 
     def block_until(self, future_cycle):
-        while len(tc) and tc["OverallCycle"] < int(future_cycle):
+        '''Blocks the current thread until 'future_cycle' or the end of the measurement.'''
+        while self.is_running:
+            if timecycle[0]["OverallCycle"] >= int(future_cycle):
+                return True
             time.sleep(.1)
+        return False
+
+    def iter_timecycles(self):
+        '''Returns an iterator over the current TimeCycle/Automation.
+
+        Calling next on the iterator will block until the next timecycle is available.
+        '''
+        while self.is_running:
+            with _tc_lock:
+                while not len(_tc_queue):
+                    _tc_lock.wait()
+                yield _tc_queue.pop()
 
