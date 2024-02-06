@@ -16,7 +16,7 @@ __all__ = ['MqttClient']
 
 commands     = deque([], maxlen=1000)
 server_state = deque(["<unknown>"], maxlen=1)
-timecycle    = deque([], maxlen=1)  # never empty!
+overallcycle = deque([], maxlen=1)  # never empty!
 _tc_queue    = deque([], maxlen=1)  # maybe empty!
 _tc_lock     = Condition()
 
@@ -47,7 +47,7 @@ def _build_command(parID, value, future_cycle=None):
         # Note: True is also instance of int!
         cmd.update({"Datatype": "BOOL", "Value": str(value).lower()})
     elif isinstance(value, str):
-        cmd.update({"Datatype": "STR"})
+        cmd.update({"Datatype": "STRING"})
     elif isinstance(value, int):
         cmd.update({"Datatype": "I32"})
     elif isinstance(value, float):
@@ -65,7 +65,8 @@ def on_connect(client, userdata, flags, rc):
     #  wildcards are '+' (one level), '#' (all levels):
     rc, mid = client.subscribe([
         ("DataCollection/Act/ACQ_SRV_OverallCycle",               2),
-        ("IC_Command/Write/Scheduled",                  default_qos),
+        ("IC_Command/Write/Scheduled",                            2),
+        ("IC_Command/Write/Direct",                               2),
         ("DataCollection/Act/ACQ_SRV_CurrentState",     default_qos),
         ("DataCollection/Act/ACQ_SRV_CurrentTraceData", default_qos),
         ("DataCollection/Set/#", default_qos),
@@ -79,9 +80,10 @@ def on_publish(client, userdata, mid):
     log.debug("published: " + str(mid))
 
 def follow_schedule(client, userdata, msg):
-    log.debug(f"received: {msg.topic} | QoS: {msg.qos}")
-    payload = json.loads(msg.payload.decode())
-    commands.extend(payload["CMDs"])
+    log.info(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
+    if msg.topic.split('/')[-1] == "Scheduled":
+        payload = json.loads(msg.payload.decode())
+        commands.extend(payload["CMDs"])
     
 def follow_state(client, userdata, msg):
     print("retained?", msg.retain)
@@ -106,19 +108,18 @@ def follow_set(client, userdata, msg):
 
 def follow_tc(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
-    tc.update({"OverallCycle": int(payload["DataElement"]["Value"])})
-    log.debug("new timecycle " + str(tc))
+    current = int(payload["DataElement"]["Value"])
+    log.debug("new timecycle " + str(current))
     # replace the current timecycle with the new element:
-    timecycle.append(tc)
+    overallcycle.append(current)
     # Note: this is the thread-safe variant for ONE thread
     #  waiting for the _tc_queue to be filled (may be empty):
     with _tc_lock:
-        _tc_queue.append(tc)
+        _tc_queue.append(current)
         _tc_lock.notify()
     # manually delete the outdated requests..
     outdated = []
     for cmd in commands:
-        current =    tc["OverallCycle"]
         future  = float(cmd["Schedule"])
         if current >= future:
             outdated.append(cmd)
@@ -143,8 +144,8 @@ class MqttClient:
         return server_state[0]
 
     @property
-    def current_timecycle(self):
-        return timecycle[0]
+    def current_cycle(self):
+        return overallcycle[0]
 
     @property
     def is_running(self):
@@ -152,14 +153,14 @@ class MqttClient:
 
     def __init__(self, host=ionitof_host):
         commands.clear()
-        timecycle.append({ "Cycle": 0, "OverallCycle": 0, "RelTime": 0, "AbsTime": 0 })
+        overallcycle.append(0)
         self.host = host
         self.client = mqtt.Client()
         #self.client.user_data_set(commands)  # this ain't working..
         self.client.on_connect = on_connect
         self.client.on_subscribe = on_subscribe
         self.client.on_publish = on_publish
-        self.client.message_callback_add("IC_Command/Write/Scheduled", follow_schedule)
+        self.client.message_callback_add("IC_Command/Write/+", follow_schedule)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState", follow_state)
         self.client.message_callback_add("DataCollection/Set/#", follow_set)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle", follow_tc)
@@ -228,7 +229,7 @@ class MqttClient:
     def block_until(self, future_cycle):
         '''Blocks the current thread until 'future_cycle' or the end of the measurement.'''
         while self.is_running:
-            if timecycle[0]["OverallCycle"] >= int(future_cycle):
+            if overallcycle[0] >= int(future_cycle):
                 return True
             time.sleep(.1)
         return False
