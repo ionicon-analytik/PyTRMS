@@ -1,3 +1,4 @@
+import os.path
 from functools import partial, lru_cache
 
 import h5py
@@ -24,14 +25,31 @@ class GroupNotFoundError(KeyError):
 class IoniTOFReader:
 
     @property
-    def timezero(self):
-        """The pandas.Timestamp of the 0th cycle."""
-        # ..which is *not exactly* the file-created-time!
-        #return convert_labview_to_posix(
-        #    float(self.hf.attrs['FileCreatedTime_UTC']),
-        #    float(self.hf.attrs['UTC_Offset'])
-        #)
+    @lru_cache
+    def time_of_meas(self):
+        """The pandas.Timestamp of the 0th measurement cycle."""
         return next(self.iter_index('abs_time')) - next(self.iter_index('rel_time'))
+
+    @property
+    @lru_cache
+    def time_of_file(self):
+        """The pandas.Timestamp of the 0th file cycle."""
+        # ..which is *not* the 1st file-cycle, but the (unrecorded) one before..
+        file0 = next(self.iter_index('abs_time')) - pd.Timedelta(self.single_spec_duration_ms, 'ms')
+        # ..and should never pre-pone the measurement time:
+        return max(file0, self.time_of_meas)
+
+    @property
+    @lru_cache
+    def time_of_file_creation(self):
+        """The pandas.Timestamp of the file creation."""
+        return convert_labview_to_posix(float(self.hf.attrs['FileCreatedTime_UTC']), self.utc_offset_sec)
+
+    @property
+    @lru_cache
+    def utc_offset_sec(self):
+        """The pandas.Timestamp of the 0th file cycle."""
+        return int(self.hf.attrs['UTC_Offset'])
 
     @property
     def inst_type(self):
@@ -47,7 +65,7 @@ class IoniTOFReader:
 
     @serial_nr.setter
     def serial_nr(self, number):
-        path = self.hf.filename
+        path = self.filename
         self.hf.close()
         try:
             hf = h5py.File(path, 'r+')
@@ -86,6 +104,7 @@ class IoniTOFReader:
 
     def __init__(self, path):
         self.hf = h5py.File(path, 'r', swmr=True)
+        self.filename = os.path.abspath(self.hf.filename)
 
     def read_addtraces(self, matches=None, index='abs_cycle'):
         """Reads all /AddTraces into a DataFrame.
@@ -123,6 +142,9 @@ class IoniTOFReader:
     def read_traces(self, kind='conc', index='abs_cycle', force_original=False):
         """Reads the peak-traces of the given 'kind' into a DataFrame.
 
+        If the traces have been post-processed in the Ionicon Viewer,
+        those will be used, unless `force_original=True`.
+
         - 'kind' one of raw|corr|conc
         - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
         - 'force_original' ignore the post-processed data
@@ -138,6 +160,9 @@ class IoniTOFReader:
     def read_all(self, kind='conc', index='abs_cycle', force_original=False):
         """Reads all traces into a DataFrame.
 
+        If the traces have been post-processed in the Ionicon Viewer,
+        those will be used, unless `force_original=True`.
+
         - 'kind' one of raw|corr|conc
         - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
         - 'force_original' ignore the post-processed data
@@ -149,11 +174,10 @@ class IoniTOFReader:
         ], axis='columns')
 
     def iter_index(self, kind='abs_cycle'):
-        tz_offset = utc_offset_sec=int(self.hf.attrs['UTC_Offset'])
         lut = {
                 'REL_CYCLE': (0, lambda a: iter(a.astype('int', copy=False))),
                 'ABS_CYCLE': (1, lambda a: iter(a.astype('int', copy=False))),
-                'ABS_TIME':  (2, lambda a: map(partial(convert_labview_to_posix, utc_offset_sec=tz_offset), a)),
+                'ABS_TIME':  (2, lambda a: map(partial(convert_labview_to_posix, utc_offset_sec=self.utc_offset_sec), a)),
                 'REL_TIME':  (3, lambda a: map(partial(pd.Timedelta, unit='s'), a)),
         }
         try:
@@ -164,6 +188,9 @@ class IoniTOFReader:
     
         return convert2iterator(self.hf['SPECdata/Times'][:, _N])
     
+    def __len__(self):
+        return self.hf['SPECdata/Intensities'].shape[0]
+
     def __iter__(self):
         # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
         # columns merkt! diese haelt die ganze erste Zeile des datensatzes. 
@@ -171,14 +198,21 @@ class IoniTOFReader:
         # reduziert werden
         return self.read_all(kind='conc', index='abs_cycle', force_original=False).iterrows()
 
-    def print_datastructure(self):
-        """Prints all hdf5 group- and dataset-names to stdout."""
+    def list_file_structure(self):
+        """Lists all hdf5 group- and dataset-names."""
         # this walks all h5 objects in alphabetic order:
-        self.hf.visit(lambda obj_name: print(obj_name))
+        obj_names = set()
+        self.hf.visit(lambda obj_name: obj_names.add(obj_name))
+
+        return sorted(obj_names)
+    
+    def list_addtrace_groups(self):
+        """Lists the recorded additional trace-groups."""
+        return sorted(self._locate_datainfo())
     
     def __repr__(self):
-        return "<%s (%s) [no. %s] %s>" % (self.__class__.__name__, self.inst_type,
-                self.serial_nr, self.timezero.isoformat(timespec='milliseconds'))
+        return "<%s (%s) [no. %s] %s>" % (self.__class__.__name__,
+                self.inst_type, self.serial_nr, self.hf.filename)
 
     @lru_cache
     def _locate_datainfo(self):

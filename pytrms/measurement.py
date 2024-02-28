@@ -1,45 +1,41 @@
-import os.path
-import logging
-from abc import abstractmethod
-from collections.abc import Iterable
+from glob import glob
+from operator import attrgetter
+from itertools import chain
 
-from .reader import H5Reader
-
-log = logging.getLogger()
+from .readers import IoniTOFReader
 
 
-class Measurement(Iterable):
-    """Base class for PTRMS-measurements or batch processing.
+class Measurement:
+    """Class for PTRMS-measurements and batch processing.
 
-    Every instance is associated with exactly one `.filename` to a datafile.
-    The start time of the measurement is given by `.timezero`.
+    The start time of the measurement is given by `.time_of_meas`.
 
     A measurement is iterable over the 'rows' of its data. 
-    In the online case, this would slowly produce the current trace, one after another.
+    In the online case, this would slowly produce the current trace, one
+    after another.
     In the offline case, this would quickly iterate over the traces in the given
     measurement file.
     """
-
-    def is_local(self):
-        return os.path.exists(self.filename)
-
-    def __init__(self, filename):
-        self.h5 = H5Reader(filename)
-
     @property
-    def filename(self):
-        return self.h5.path
-    
-    @property
-    def timezero(self):
-        return self.h5.timezero
+    def time_of_meas(self):
+        return next(iter(self.sourcefiles)).time_of_meas
 
-    @property
-    def traces(self):
-        """shortcut for `.get_traces(kind='concentration')`."""
-        return self.get_traces(kind='concentration')
+    def __init__(self, filenames, _reader=IoniTOFReader):
+        if isinstance(filenames, str):
+            filenames = glob(filenames)
+        if not len(filenames):
+            raise ValueError("need at least one filename")
 
-    def get_traces(self, kind='raw', index='abs_cycle', force_original=False):
+        self.sourcefiles = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
+
+        _assumptions = ("incompatible files! "
+                "sourcefiles must have the same number-of-timebins "
+                "and the same instrument-type to be collected as a batch")
+
+        assert 1 == len(set(sf.inst_type          for sf in self.sourcefiles)), _assumptions
+        assert 1 == len(set(sf.number_of_timebins for sf in self.sourcefiles)), _assumptions
+
+    def iter_traces(self, kind='raw', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
 
         'kind' is the type of traces and must be one of 'raw', 'concentration' or
@@ -48,11 +44,9 @@ class Measurement(Iterable):
         'index' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
         'abs_time' or 'rel_time'.
 
-        If the traces have been post-processed in the Ionicon Viewer, those will be used,
-        unless `force_original=True`.
         """
-        return self.h5.get_all(kind, index, force_original)
+        return chain.from_iterable(sf.get_all(kind, index, force_original) for sf in self.sourcefiles)
 
-    def __iter__(self):
-        return iter(self.h5)
+    def __len__(self):
+        return sum(len(sf) for sf in self.sourcefiles)
 
