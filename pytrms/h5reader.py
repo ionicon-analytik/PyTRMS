@@ -4,15 +4,21 @@
 from functools import partial, lru_cache
 
 import h5py
+import numpy as np
 import pandas as pd
 
-__all__ = ['H5Reader']
+__all__ = ['H5Reader', 'GroupNotFoundError']
 
-def convert_labview_to_posix(ts):
-    '''Create a `Pandas.Timestamp` from LabView time.'''
-    posix_time = ts - 2082844800
+def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
+    '''Create a `pandas.Timestamp` from LabView time.'''
+    # change epoch from 01.01.1904 to 01.01.1970:
+    posix_time = lv_time_utc - 2082844800
+    # the tz must be specified in isoformat like '+02:30'..
+    tz_sec = int(utc_offset_sec)
+    tz_designator = '{0}{1:02d}:{2:02d}'.format(
+            '+' if tz_sec >= 0 else '-', tz_sec // 3600, tz_sec % 3600 // 60)
 
-    return pd.Timestamp(posix_time, unit='s')
+    return pd.Timestamp(posix_time, unit='s', tz=tz_designator)
 
 class GroupNotFoundError(KeyError):
     pass
@@ -22,7 +28,13 @@ class H5Reader:
 
     @property
     def timezero(self):
-        return convert_labview_to_posix(float(self.hf.attrs['FileCreatedTime_UTC']))
+        """The pandas.Timestamp of the 0th cycle."""
+        # ..which is *not exactly* the file-created-time!
+        #return convert_labview_to_posix(
+        #    float(self.hf.attrs['FileCreatedTime_UTC']),
+        #    float(self.hf.attrs['UTC_Offset'])
+        #)
+        return next(self.iter_index('abs_time')) - next(self.iter_index('rel_time'))
 
     @property
     def inst_type(self):
@@ -33,16 +45,49 @@ class H5Reader:
         return str(self.hf.attrs.get('InstSubType', [b'',])[0].decode('latin-1'))
 
     @property
-    def serial(self):
-        return str(self.hf.attrs.get('InstSerial#', [b'',])[0].decode('latin-1'))
+    def serial_nr(self):
+        return str(self.hf.attrs.get('InstSerial#', [b'???',])[0].decode('latin-1'))
 
-    @serial.setter
-    def serial(self, number):
-        self.hf.attrs['InstSerial#'] = np.array([str(number).encode()], dtype='S')
-        self.hf.flush()
+    @serial_nr.setter
+    def serial_nr(self, number):
+        path = self.hf.filename
+        self.hf.close()
+        try:
+            hf = h5py.File(path, 'r+')
+            hf.attrs['InstSerial#'] = np.array([str(number).encode('latin-1')], dtype='S')
+            hf.flush()
+            hf.close()
+        except OSError:
+            # well it didn't work..
+            pass
+        finally:
+            self.hf = h5py.File(path, 'r', swmr=True)
+
+    @property
+    def number_of_timebins(self):
+        return int(self.hf['SPECdata/Intensities'].shape[1])
+
+    @property
+    def timebin_width_ps(self):
+        return float(self.hf.attrs.get('Timebin width (ps)'))
+
+    @property
+    def poisson_deadtime_ns(self):
+        return float(self.hf.attrs.get('PoissonDeadTime (ns)'))
+
+    @property
+    def pulsing_period_ns(self):
+        return float(self.hf.attrs.get('Pulsing Period (ns)'))
+
+    @property
+    def start_delay_ns(self):
+        return float(self.hf.attrs.get('Start Delay (ns)'))
+
+    @property
+    def single_spec_duration_ms(self):
+        return float(self.hf.attrs.get('Single Spec Duration (ms)'))
 
     def __init__(self, path):
-        self.path = path
         self.hf = h5py.File(path, 'r', swmr=True)
 
     def read_addtraces(self, matches=None, index='abs_cycle'):
@@ -65,7 +110,7 @@ class H5Reader:
             raise ValueError(f"no match for {matches} in {self._locate_datainfo()}")
 
         rv = pd.concat((self._read_datainfo(loc) for loc in locs), axis='columns')
-        rv.index = self.read_index(index)
+        rv.index = list(self.iter_index(index))
 
         # de-duplicate trace-columns to prevent issues...
         return rv.loc[:, ~rv.columns.duplicated()]
@@ -77,8 +122,9 @@ class H5Reader:
         """
         return self.read_addtraces('CalcTraces', index)
 
+    @lru_cache
     def read_traces(self, kind='conc', index='abs_cycle', force_original=False):
-        """Reads the traces of the given 'kind' into a DataFrame.
+        """Reads the peak-traces of the given 'kind' into a DataFrame.
 
         - 'kind' one of raw|corr|conc
         - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
@@ -92,36 +138,41 @@ class H5Reader:
             except GroupNotFoundError:
                 return self._read_original_traces(kind, index)
 
-    @lru_cache
     def read_all(self, kind='conc', index='abs_cycle', force_original=False):
+        """Reads all traces into a DataFrame.
+
+        - 'kind' one of raw|corr|conc
+        - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
+        - 'force_original' ignore the post-processed data
+        """
         # ...and throw it all together:
         return pd.concat([
             self.read_traces(kind, index, force_original),
             self.read_addtraces(None, index),
         ], axis='columns')
 
-    def read_index(self, kind='abs_cycle'):
+    def iter_index(self, kind='abs_cycle'):
+        tz_offset = utc_offset_sec=int(self.hf.attrs['UTC_Offset'])
         lut = {
-                'REL_CYCLE': (0, lambda a: a.astype('int', copy=False)),
-                'ABS_CYCLE': (1, lambda a: a.astype('int', copy=False)),
-                'ABS_TIME': (2, lambda a: list(map(convert_labview_to_posix, a))),
-                'REL_TIME': (3, lambda a: list(map(partial(pd.Timedelta, unit='s'), a))),
+                'REL_CYCLE': (0, lambda a: iter(a.astype('int', copy=False))),
+                'ABS_CYCLE': (1, lambda a: iter(a.astype('int', copy=False))),
+                'ABS_TIME':  (2, lambda a: map(partial(convert_labview_to_posix, utc_offset_sec=tz_offset), a)),
+                'REL_TIME':  (3, lambda a: map(partial(pd.Timedelta, unit='s'), a)),
         }
-        info = self.hf['SPECdata/Times']
         try:
-            _N, convert = lut[kind.upper()]
+            _N, convert2iterator = lut[kind.upper()]
         except KeyError as exc:
             msg = "Unknown index-type! `kind` must be one of {0}.".format(', '.join(lut.keys()))
             raise KeyError(msg) from exc
     
-        return convert(info[:, _N])
+        return convert2iterator(self.hf['SPECdata/Times'][:, _N])
     
     def __iter__(self):
         # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
         # columns merkt! diese haelt die ganze erste Zeile des datensatzes. 
         # ab dem zweiten durchgang kann die Series auf diese columns
         # reduziert werden
-        return self.read_all().iterrows()
+        return self.read_all(kind='conc', index='abs_cycle', force_original=False).iterrows()
 
     def print_datastructure(self):
         """Prints all hdf5 group- and dataset-names to stdout."""
@@ -129,7 +180,8 @@ class H5Reader:
         self.hf.visit(lambda obj_name: print(obj_name))
     
     def __repr__(self):
-        return "<%s %s [no. %s]>" % (self.inst_type, self.sub_type, self.serial)
+        return "<%s (%s) [no. %s] %s>" % (self.__class__.__name__, self.inst_type,
+                self.serial_nr, self.timezero.isoformat(timespec='milliseconds'))
 
     @lru_cache
     def _locate_datainfo(self):
@@ -152,6 +204,7 @@ class H5Reader:
         # ...and return only groups with both /Data and /Info datasets:
         return dataloc.intersection(infoloc)
     
+    @lru_cache
     def _read_datainfo(self, group, prefix=''):
         """Parse a "Data-Info" group into a pd.DataFrame.
 
@@ -242,7 +295,7 @@ class H5Reader:
 
         mapper = dict(zip(data.columns, labels))
         data.rename(columns=mapper)
-        data.index = self.read_index(index)
+        data.index = list(self.iter_index(index))
         
         return data
 
@@ -263,5 +316,5 @@ class H5Reader:
         info = self.hf['TRACEdata/TraceInfo']
         labels = [b.decode('latin1') for b in info[1,:]]
     
-        return pd.DataFrame(data, columns=labels, index=self.read_index(index))
+        return pd.DataFrame(data, columns=labels, index=list(self.iter_index(index)))
 
