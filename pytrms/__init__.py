@@ -17,9 +17,9 @@ def load(path):
     returns a `Measurement`.
     '''
     from .measurement import OfflineMeasurement
-    from .reader import H5Reader
+    from .readers import IoniTOFReader
 
-    reader = H5Reader(path)
+    reader = IoniTOFReader(path)
 
     return OfflineMeasurement(reader)
 

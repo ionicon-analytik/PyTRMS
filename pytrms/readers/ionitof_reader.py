@@ -1,13 +1,10 @@
-"""file h5reader.py
-
-"""
 from functools import partial, lru_cache
 
 import h5py
 import numpy as np
 import pandas as pd
 
-__all__ = ['H5Reader', 'GroupNotFoundError']
+__all__ = ['IoniTOFReader', 'GroupNotFoundError']
 
 def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
     '''Create a `pandas.Timestamp` from LabView time.'''
@@ -24,7 +21,7 @@ class GroupNotFoundError(KeyError):
     pass
 
 
-class H5Reader:
+class IoniTOFReader:
 
     @property
     def timezero(self):
