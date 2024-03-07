@@ -173,29 +173,30 @@ class IoniTOFReader:
             self.read_addtraces(None, index),
         ], axis='columns')
 
+    @property
     def iter_index(self, kind='abs_cycle'):
         lut = {
-                'REL_CYCLE': (0, lambda a: iter(a.astype('int', copy=False))),
-                'ABS_CYCLE': (1, lambda a: iter(a.astype('int', copy=False))),
-                'ABS_TIME':  (2, lambda a: map(partial(convert_labview_to_posix, utc_offset_sec=self.utc_offset_sec), a)),
-                'REL_TIME':  (3, lambda a: map(partial(pd.Timedelta, unit='s'), a)),
+                'rel_cycle': (0, lambda a: iter(a.astype('int', copy=False))),
+                'abs_cycle': (1, lambda a: iter(a.astype('int', copy=False))),
+                'abs_time':  (2, lambda a: map(partial(convert_labview_to_posix, utc_offset_sec=self.utc_offset_sec), a)),
+                'rel_time':  (3, lambda a: map(partial(pd.Timedelta, unit='s'), a)),
         }
         try:
-            _N, convert2iterator = lut[kind.upper()]
+            _N, convert2iterator = lut[kind.lower()]
         except KeyError as exc:
             msg = "Unknown index-type! `kind` must be one of {0}.".format(', '.join(lut.keys()))
             raise KeyError(msg) from exc
     
         return convert2iterator(self.hf['SPECdata/Times'][:, _N])
+
+    @lru_cache
+    def make_index(self, kind='abs_cycle'):
+        return pd.Index(self.iter_index(kind))
     
     def __len__(self):
         return self.hf['SPECdata/Intensities'].shape[0]
 
     def __iter__(self):
-        # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
-        # columns merkt! diese haelt die ganze erste Zeile des datensatzes. 
-        # ab dem zweiten durchgang kann die Series auf diese columns
-        # reduziert werden
         return self.read_all(kind='conc', index='abs_cycle', force_original=False).iterrows()
 
     def list_file_structure(self):
@@ -235,6 +236,74 @@ class IoniTOFReader:
         # ...and return only groups with both /Data and /Info datasets:
         return dataloc.intersection(infoloc)
     
+    def traces(self):
+        """Returns a  'pandas.DataFrame' with all traces concatenated."""
+        return self.read_all(kind='conc', index='abs_cycle', force_original=False)
+
+    # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
+    # columns merkt! diese haelt die ganze erste Zeile des datensatzes. 
+    # ab dem zweiten durchgang kann die Series auf diese columns
+    # reduziert werden
+    # uuuuuuuuuund so geht's:
+    # - defaultdict ~> factory checkt parIDs! ~> sonst KeyError
+    #   |__ wird dann bei bedarf ge-populated
+    # 
+    # das sourcefile / measurement soll sich wie ein pd.DataFrame "anfuehlen":
+        
+    # das loest das Problem, aus einer "Matrix2 gezielt eine Zeile oder eine "Spalte" 
+    #  oder alles (d.h. iterieren ueber Zeilen) zu selektieren und zwar intuitiv!!
+    
+    ###################################################################################
+    #                                                                                 #
+    # ENDZIEL: times u. Automation fuer die "letzte" Zeile an die Datenbank schicken! #
+    #                                                                                 #
+    ###################################################################################
+
+    def __getitem__(self, key):
+        index = self.make_index()
+        if isinstance(key, str):
+            return pd.Series(self._get_datacolumn(key), name=key, index=index)
+        else:
+            return pd.DataFrame({k: self._get_datacolumn(k) for k in key}, index=index)
+
+    @lru_cache
+    def _build_datainfo(self):
+        """Parse all "Data-Info" groups and build a lookup-table.
+        """
+        lut = dict()
+        for group_name in self._locate_datainfo():
+            info = self.hf[group_name + '/Info']
+            for column, label in enumerate(info[:] if info.ndim == 1 else info[0,:]):
+                if hasattr(label, 'decode'):
+                    label = label.decode('latin1')
+                lut[label] = group_name + '/Data', column
+
+        return lut
+
+    def _get_datacolumn(self, key):
+        lut = self._build_datainfo()
+        if key not in lut and not key.endswith('_Act') and not key.endswith('_Set'):
+            # fallback to act-value (which is typically wanted):
+            key = key + '_Act'
+
+        dset_name, column = lut[key]  # may raise KeyError
+
+        return self.hf[dset_name][:,column]
+    
+    def loc(self, label):
+        if isinstance(label, int):
+            return self.iloc[self.make_index('abs_cycle')[label]]
+        else:
+            return self.iloc[self.make_index('abs_time')[label]]
+
+    def iloc(self, offset):
+        # build a row of all trace-data...
+        lut = self._build_datainfo()
+        name = self.make_index()[offset]
+        data = {key: self.hf[h5_loc][offset,col] for key, [h5_loc, col] in lut.items()}
+
+        return pd.Series(data, name=name)
+
     @lru_cache
     def _read_datainfo(self, group, prefix=''):
         """Parse a "Data-Info" group into a pd.DataFrame.

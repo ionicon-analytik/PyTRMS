@@ -16,9 +16,13 @@ class Measurement:
     In the offline case, this would quickly iterate over the traces in the given
     measurement file.
     """
-    @property
-    def time_of_meas(self):
-        return next(iter(self.sourcefiles)).time_of_meas
+    def _check(self):
+        _assumptions = ("incompatible files! "
+                "sourcefiles must have the same number-of-timebins and "
+                "the same instrument-type to be collected as a batch")
+
+        assert 1 == len(set(sf.inst_type          for sf in self.sourcefiles)), _assumptions
+        assert 1 == len(set(sf.number_of_timebins for sf in self.sourcefiles)), _assumptions
 
     def __init__(self, filenames, _reader=IoniTOFReader):
         if isinstance(filenames, str):
@@ -27,13 +31,20 @@ class Measurement:
             raise ValueError("need at least one filename")
 
         self.sourcefiles = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
+        self._check()
 
-        _assumptions = ("incompatible files! "
-                "sourcefiles must have the same number-of-timebins "
-                "and the same instrument-type to be collected as a batch")
+        self.number_of_timebins      = next(iter(self.sourcefiles)).number_of_timebins
+        self.poisson_deadtime_ns     = next(iter(self.sourcefiles)).poisson_deadtime_ns
+        self.pulsing_period_ns       = next(iter(self.sourcefiles)).pulsing_period_ns
+        self.single_spec_duration_ms = next(iter(self.sourcefiles)).single_spec_duration_ms
+        self.start_delay_ns          = next(iter(self.sourcefiles)).start_delay_ns
+        self.timebin_width_ps        = next(iter(self.sourcefiles)).timebin_width_ps
+        self.time_of_meas            = next(iter(self.sourcefiles)).time_of_meas
 
-        assert 1 == len(set(sf.inst_type          for sf in self.sourcefiles)), _assumptions
-        assert 1 == len(set(sf.number_of_timebins for sf in self.sourcefiles)), _assumptions
+    def append(self, filename):
+        """Add a sourcefile with the given `filename` to the end of the list."""
+        self.sourcefiles.append(_reader(filename))
+        self._check()
 
     def iter_traces(self, kind='raw', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
