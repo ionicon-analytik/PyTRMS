@@ -164,9 +164,6 @@ class IoniconModbus:
         if self.mc.open():
             self.mc.close()
 
-    def __del__(self):
-        self.close()
-
     @property
     @lru_cache
     def n_parameters(self):

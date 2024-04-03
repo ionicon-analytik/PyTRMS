@@ -226,9 +226,6 @@ class MqttClient:
         self.client.loop_stop()
         self.client.disconnect()
 
-    def __del__(self):
-        self.disconnect()
-
     def get(self, parID):
         return _datacollection_dict.get(parID)
 
