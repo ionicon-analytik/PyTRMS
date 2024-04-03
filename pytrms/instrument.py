@@ -1,8 +1,11 @@
 import os.path
 import time
+from abc import abstractmethod, ABC
+
+from .measurement import *
 
 
-class Instrument:
+class Instrument(ABC):
     '''
     Class for controlling the PTR instrument remotely.
 
@@ -12,160 +15,100 @@ class Instrument:
     exception (RuntimeError).
 
     Note, that for every client PTR instrument there is only one instance of this class.
+    This is to prevent different instances to be in other states than the instrument.
     '''
 
-    __buffer_instances = {}
+    __instance = None
 
     def _new_state(self, newstate):
+        # Note: we get ourselves a nifty little state-machine :)
         self.__class__ = newstate
-        print(self)
 
-    def __new__(cls, buffer):
-        # make this class a singleton
-        if buffer in cls._Instrument__buffer_instances:
+    def __new__(cls, backend):
+        # make this class a singleton..
+        if cls._Instrument__instance is not None:
             # quick reminder: If __new__() does not return an instance of cls, then the
             # new instance’s __init__() method will *not* be invoked:
-            return cls._Instrument__buffer_instances[buffer]
+            return cls._Instrument__instance
+
+        # ..that is synchronized with the PTR-instrument state:
+        if backend.is_running:
+            cls = RunningInstrument
+        else:
+            cls = IdleInstrument
 
         inst = object.__new__(cls)
-        cls._Instrument__buffer_instances[buffer] = inst
-
-        # launch the buffer's thread..
-        if not buffer.is_alive():
-            buffer.daemon = True
-            buffer.start()
-        # ..and synchronize the PTR-instrument state with this Python object:
-        Instrument._new_state(inst, IdleInstrument)
-        try:
-            buffer.wait_for_connection(timeout=3)  # may raise PTRConnectionError!
-        except:
-            del cls._Instrument__buffer_instances[buffer]
-            raise
-
-        if buffer.is_idle():
-            Instrument._new_state(inst, IdleInstrument)
-        else:
-            Instrument._new_state(inst, RunningInstrument)
+        Instrument._Instrument__instance = inst
 
         return inst
 
-    def __init__(self, buffer):
+    def __init__(self, backend):
         # dispatch all blocking calls to the client
-        # and fetch current data from the buffer!
-        self._buffer = buffer
-        self._client = buffer.client
+        self.backend = backend
 
     @property
     def is_local(self):
         """Returns True if files are written to the local machine."""
-        host = self._client.host
-        return host == 'localhost' or host == '127.0.0.1'
-
-    def wait(self, seconds, reason=''):
-        if reason:
-            print(reason)
-        time.sleep(seconds)
+        host = str(self.backend.host)
+        return 'localhost' in host or '127.0.0.1' in host
 
     def get(self, varname):
         """Get the current value of a setting."""
         # TODO :: this is not an interface implementation
-        import json
-        raw = self._client.get(varname)
-        jobj = json.loads(raw)
+        raw = self.backend.get(varname)
+        if not isinstance(self.backend, MqttClient):
+            import json
+            jobj = json.loads(raw)
 
-        return jobj[0]['Act']['Real']
+            return jobj[0]['Act']['Real']
 
-    def set(self, varname, value):
+        ## how it should be:
+        return raw
+
+    def set(self, varname, value, unit='-'):
         """Set a variable to a new value."""
-        return self._client.set(varname, value)
+        return self.backend.set(varname, value, unit='-')
 
-    def __enter__(self):
-        # TODO :: implement proper context with dict of settings...
-        self.start()
-        return self
-
-    def __exit__(self, exc_type, exc_val, tb):
-        self.stop()
-
-    def start(self, path=''):
-        """Start a measurement on the PTR server.
-
-        'path' is the filename of the datafile to write to. 
-        If left blank, start a "quick measurement".
-
-        If pointing to a file and the file exist on the (local) server, this raises an exception.
-        To create unique filenames, use placeholders for year (%Y), month (%m), and so on,
-        for example `path=C:/Ionicon/Data/Sauerteig_%Y-%m-%d_%H-%M-%S.h5`.
-
-        see also:
-        """
+    def start_measurement(self, filename=''):
         # this method must be implemented by each state
-        raise NotImplementedError()
+        raise RuntimeError("can't start %s" % self.__class__)
 
-    start.__doc__ += time.strftime.__doc__
+    start_measurement.__doc__ = Measurement.start.__doc__
 
-    def stop(self):
-        """Stop the current measurement on the PTR server."""
+    def stop_measurement(self):
         # this method must be implemented by each state
-        raise NotImplementedError()
+        raise RuntimeError("can't stop %s" % self.__class__)
 
-    def get_traces(self, kind='raw', index='abs_cycle'):
-        """Return the timeseries ("traces") of all masses, compounds and settings.
-
-        This will grow with time if a measurement is currently running and stop growing
-        once the measurement has been stopped. The tracedata is cleared, when a new
-        measurement is started.
-
-        'kind' is the type of traces and must be one of 'raw', 'concentration' or 'corrected'.
-
-        'index' specifies the desired index and must be one of 'abs_cycle', 'rel_cycle',
-        'abs_time' or 'rel_time'.
-        """
-        # TODO :: this method must be implemented by each state
-        raise NotImplementedError()
-
-    def follow(self, kind='raw'):
-        """Returns an iterator over the timeseries ("traces") of all masses, compounds and settings.
-
-        'kind' is the type of traces and must be one of 'raw', 'concentration' or 'corrected'.
-        """
-        # TODO :: this method must be implemented by each state
-        raise NotImplementedError()
+    stop_measurement.__doc__ = Measurement.stop.__doc__
 
 
 class IdleInstrument(Instrument):
 
-    def start(self, path=''):
+    def start_measurement(self, filename=''):
         # if we send a filepath to the server that does not exist there, the server will
         # open a dialog and "hang" (which I'd very much like to avoid).
         # the safest way is to not send a path at all and start a 'Quick' measurement.
         # but if the server is the local machine, we do our best to verify the path:
-        if path and self.is_local:
-            home = os.path.dirname(path)
+        if filename and self.is_local:
+            home = os.path.dirname(filename)
             os.makedirs(home, exist_ok=True)
-            base = os.path.basename(path)
+            base = os.path.basename(filename)
             if not base:
                 base = '%Y-%m-%d_%H-%M-%S.h5'
             base = time.strftime(base)
-            path = os.path.join(home, base)
-            if os.path.exists(path):
-                raise RuntimeError(f'path exists and cannot be overwritten')
+            filename = os.path.join(home, base)
+            if os.path.exists(filename):
+                raise RuntimeError(f'filename exists and cannot be overwritten')
 
-        self._client.start_measurement(path)
+        self.backend.start_measurement(filename)
         self._new_state(RunningInstrument)
 
-        return Measurement(path)
-
-    def stop(self):
-        raise RuntimeError('instrument is not running')
+        return RunningMeasurement(self)
 
 
 class RunningInstrument(Instrument):
 
-    def start(self, path=''):
-        raise RuntimeError('instrument is already running')
-
-    def stop(self):
-        self._client.stop_measurement()
+    def stop_measurement(self):
+        self.backend.stop_measurement()
         self._new_state(IdleInstrument)
 

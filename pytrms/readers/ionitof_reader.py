@@ -173,7 +173,6 @@ class IoniTOFReader:
             self.read_addtraces(None, index),
         ], axis='columns')
 
-    @property
     def iter_index(self, kind='abs_cycle'):
         lut = {
                 'rel_cycle': (0, lambda a: iter(a.astype('int', copy=False))),
@@ -252,6 +251,15 @@ class IoniTOFReader:
         
     # das loest das Problem, aus einer "Matrix2 gezielt eine Zeile oder eine "Spalte" 
     #  oder alles (d.h. iterieren ueber Zeilen) zu selektieren und zwar intuitiv!!
+
+    # IDEE: die .traces "tun so, als waren sie ein DataFrame"
+    #  (keine inheritance, nur ein paar methoden werden durch effizientere ersetzt):
+    # wir brauchen:
+    # 1. _len_getter ~> reace condi vermeiden!
+    # 2. |__ index_getter
+    # 3. _column_getter
+    # 4. _row_getter
+    # 5. parID_resolver ~> keys() aus ParID.txt zu addtrace-group + column!
     
     ###################################################################################
     #                                                                                 #

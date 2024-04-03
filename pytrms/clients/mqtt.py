@@ -16,8 +16,9 @@ __all__ = ['MqttClient']
 
 commands     = deque([], maxlen=1000)
 server_state = deque(["<unknown>"], maxlen=1)
+sf_filename  = deque(["<unknown>"], maxlen=1)
 overallcycle = deque([], maxlen=1)  # never empty!
-_tc_queue    = deque([], maxlen=1)  # maybe empty!
+_tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
 _tc_lock     = Condition()
 
 def _build_header():
@@ -30,7 +31,28 @@ def _build_header():
     }
     return header
 
-def _build_command(parID, value, future_cycle=None):
+def _build_data_element(value, unit="-"):
+    elm = {
+        "Datatype": "",
+        "Index": -1,
+        "Value": str(value),
+        "Unit": str(unit),
+    }
+    if isinstance(value, bool):
+        # Note: True is also instance of int!
+        elm.update({"Datatype": "BOOL", "Value": str(value).lower()})
+    elif isinstance(value, str):
+        elm.update({"Datatype": "STRING"})
+    elif isinstance(value, int):
+        elm.update({"Datatype": "I32"})
+    elif isinstance(value, float):
+        elm.update({"Datatype": "DBL"})
+    else:
+        raise NotImplemented("unknown datatype")
+
+    return elm
+
+def _build_write_command(parID, value, future_cycle=None):
     cmd = {
         "ParaID": str(parID),
         "Value": str(value),
@@ -64,12 +86,13 @@ def on_connect(client, userdata, flags, rc):
     # Note: ensure subscription after re-connecting,
     #  wildcards are '+' (one level), '#' (all levels):
     rc, mid = client.subscribe([
-        ("DataCollection/Act/ACQ_SRV_OverallCycle",               2),
-        ("IC_Command/Write/Scheduled",                            2),
-        ("IC_Command/Write/Direct",                               2),
-        ("DataCollection/Act/ACQ_SRV_CurrentState",     default_qos),
-        ("DataCollection/Act/ACQ_SRV_CurrentTraceData", default_qos),
-        ("DataCollection/Set/#", default_qos),
+        ("DataCollection/Act/ACQ_SRV_OverallCycle",             2),
+        ("IC_Command/Write/Scheduled",                          2),
+        ("IC_Command/Write/Direct",                             2),
+        ("DataCollection/Act/ACQ_SRV_CurrentState",             2),
+        ("DataCollection/Act/ACQ_SRV_CurrentTraceData",         2),
+        ("DataCollection/Act/ACQ_SRV_SetFullStorageFile",       2),
+        ("DataCollection/Set/#",        2),
     ])
     print("subscribed (rc) @mid [{}]".format(rc, mid))
 
@@ -97,14 +120,37 @@ def follow_state(client, userdata, msg):
     if state == "ACQ_JustStopped":
         commands.clear()
 
-def follow_set(client, userdata, msg):
+def follow_sourcefile(client, userdata, msg):
     print("retained?", msg.retain)
+    payload = json.loads(msg.payload.decode())
+    path = payload["DataElement"]["Value"]
+    log.info("new source-file: " + str(path))
+    # replace the current path with the new element:
+    sf_filename.append(path)
+
+def _parse_data_element(elm):
+    # make a Python object of a DataElement
+    if elm["Datatype"] == "BOOL":
+        return bool(elm["Value"])
+    elif elm["Datatype"] == "STRING":
+        return str(elm["Value"])
+    elif elm["Datatype"] == "I32":
+        return int(elm["Value"])
+    else:  # if elm["Datatype"] == "DBL":
+        return float(elm["Value"])
+
+_datacollection_dict = dict()
+
+def follow_set(client, userdata, msg):
+    print("retained?", msg.retain, msg.topic)
     try:
         payload = json.loads(msg.payload.decode())
-        state = payload["DataElement"]["Value"]
-        print(msg.topic, state)
+        *more, parID = msg.topic.split('/')
+        _datacollection_dict[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError:
         print(msg.payload.decode())
+    except KeyError:
+        pass  # probably cleared...
 
 def follow_tc(client, userdata, msg):
     payload = json.loads(msg.payload.decode())
@@ -144,12 +190,16 @@ class MqttClient:
         return server_state[0]
 
     @property
+    def current_sourcefile(self):
+        return sf_filename[0]
+
+    @property
     def current_cycle(self):
         return overallcycle[0]
 
     @property
     def is_running(self):
-        return current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
+        return self.current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
 
     def __init__(self, host=ionitof_host):
         commands.clear()
@@ -162,6 +212,7 @@ class MqttClient:
         self.client.on_publish = on_publish
         self.client.message_callback_add("IC_Command/Write/+", follow_schedule)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState", follow_state)
+        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_SetFullStorageFile", follow_sourcefile)
         self.client.message_callback_add("DataCollection/Set/#", follow_set)
         self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle", follow_tc)
         # ..and connect to the server:
@@ -178,9 +229,21 @@ class MqttClient:
     def __del__(self):
         self.disconnect()
 
+    def get(self, parID):
+        return _datacollection_dict.get(parID)
+
+    def set(self, parID, new_value, unit='-'):
+        '''Set a 'new_value' to 'parID' in the DataCollection.'''
+        payload = {
+            "Header":      _build_header(),
+            "DataElement": _build_data_element(new_value, unit),
+        }
+        topic = "DataCollection/Set/" + str(parID)
+        self.client.publish(topic, json.dumps(payload), qos=2, retain=True)
+
     def write(self, parID, new_value):
         '''Write a 'new_value' to 'parID' directly.'''
-        cmd = _build_command(parID, new_value)
+        cmd = _build_write_command(parID, new_value)
         payload = {
             "Header": _build_header(),
             "CMDs": [ cmd, ]
@@ -193,7 +256,7 @@ class MqttClient:
         if future_cycle is None:
             return self.write(parID, new_value)
 
-        cmd = _build_command(parID, new_value, future_cycle)
+        cmd = _build_write_command(parID, new_value, future_cycle)
         payload = {
             "Header": _build_header(),
             "CMDs": [ cmd, ]
@@ -239,9 +302,15 @@ class MqttClient:
 
         Calling next on the iterator will block until the next timecycle is available.
         '''
-        while self.is_running:
+        while True:
             with _tc_lock:
                 while not len(_tc_queue):
-                    _tc_lock.wait()
-                yield _tc_queue.pop()
+                    expired = _tc_lock.wait(timeout=0.100)
+                    if not self.is_running:
+                        return
+                    if not expired:
+                        yield _tc_queue.pop()
+                # if not self.is_running:
+                #     break
+                # TODO :: ain't working this way...
 
