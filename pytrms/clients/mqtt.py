@@ -103,13 +103,22 @@ def on_publish(client, userdata, mid):
     log.debug("published: " + str(mid))
 
 def follow_schedule(client, userdata, msg):
-    log.info(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
+    print(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        return
+
     if msg.topic.split('/')[-1] == "Scheduled":
         payload = json.loads(msg.payload.decode())
         commands.extend(payload["CMDs"])
     
 def follow_state(client, userdata, msg):
     print("retained?", msg.retain)
+    print("QoS-level?", msg.qos)
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        return
+
     payload = json.loads(msg.payload.decode())
     state = payload["DataElement"]["Value"]
     log.info("new server-state: " + str(state))
@@ -143,6 +152,10 @@ _datacollection_dict = dict()
 
 def follow_set(client, userdata, msg):
     print("retained?", msg.retain, msg.topic)
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        return
+
     try:
         payload = json.loads(msg.payload.decode())
         *more, parID = msg.topic.split('/')
@@ -153,6 +166,10 @@ def follow_set(client, userdata, msg):
         pass  # probably cleared...
 
 def follow_tc(client, userdata, msg):
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        return
+
     payload = json.loads(msg.payload.decode())
     current = int(payload["DataElement"]["Value"])
     log.debug("new timecycle " + str(current))
