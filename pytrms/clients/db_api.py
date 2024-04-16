@@ -76,13 +76,13 @@ class IoniConnect:
         self.post('/api/components', payload)
         self.refresh_comp_dict()
 
-    def create_average(self, run, step, action=0, use_mean=True):
+    def create_average(self, endpoint, run, step, action=0, use_mean=True):
 
         params = {'run': int(run), 'step': int(step), 'usemean': bool(use_mean)}
         if (action != 0):
             params['action'] = int(action)
 
-        timecycles = self.get('/api/times', params)
+        timecycles = self.get(endpoint, params)
         self.current_avg_endpoint = self.post('/api/averages', timecycles)
 
     def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time,
