@@ -79,6 +79,27 @@ def _build_write_command(parID, value, future_cycle=None):
 
     return cmd
 
+def _parse_fullcycle(byte_string):
+    import numpy as np
+    from collections import namedtuple
+
+    rv = namedtuple('fullcycle', ['timecycle', 'n_timebins', 'intensity'])
+    _f32 = np.dtype(np.float32).newbyteorder('>')
+    _f64 = np.dtype(np.float64).newbyteorder('>')
+    _i32 = np.dtype(np.int32).newbyteorder('>')
+
+    offset = 0
+    tc = np.frombuffer(byte_string, dtype=_f64, count=6, offset=offset)
+    offset += tc.nbytes
+    _arr = np.frombuffer(s, dtype=_i32, count=1, offset=offset)
+    offset += _arr.nbytes
+    n_tb, = _arr
+    inty = np.frombuffer(s, dtype=_f32, count=n_tb, offset=offset)
+    offset += inty.nbytes
+    # TODO :: t.b.c. ...
+
+    return rv(tc, n_tb, inty)
+
 
 def on_connect(client, userdata, flags, rc):
     log.info("connected: " + str(rc))
