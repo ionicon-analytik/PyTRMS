@@ -285,19 +285,43 @@ class MqttClient:
                 future_cycle - grace_time)
 
     def start_measurement(self, path=None):
-        '''Start a new measurement.
+        '''Start a new measurement and block until the change is confirmed.
 
-        If 'path' is not None, write to this .h5 file.'''
+        If 'path' is not None, write to the given .h5 file.
+        '''
         if path is None:
-            return self.write('ACQ_SRV_Start_Meas_Quick', True)
+            self.write('ACQ_SRV_Start_Meas_Quick', True)
         else:
-            return self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+            self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+        timeout_s = 30
+        delta_s = 0.1
+        while timeout_s > 0:  # TODO :: this is much nicer using Recipe 12.13 ...
+            if self.is_running:
+                return
+            
+            timeout_s -= delta_s
+            time.sleep(delta_s)
+            
+        raise Exception("error starting measurement")
 
     def stop_measurement(self, future_cycle=None):
-        '''Stop the current measurement.
+        '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None, schedule the stop command.'''
-        return self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
+        self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
+        # confirm change of state...
+        if future_cycle is not None:
+            self.block_until(future_cycle)
+        timeout_s = 30
+        delta_s = 0.1
+        while timeout_s > 0:  # TODO :: this is much nicer using Recipe 12.13 ...
+            if not self.is_running:
+                return
+            
+            timeout_s -= delta_s
+            time.sleep(delta_s)
+            
+        raise Exception("error stopping measurement")
 
     def find_scheduled(self, parID):
         matches = [cmd for cmd in commands if cmd["ParaID"] == str(parID)]
