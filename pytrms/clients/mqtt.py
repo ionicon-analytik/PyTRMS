@@ -3,7 +3,8 @@ import time
 import logging
 import json
 from collections import deque
-from threading import Condition
+from itertools import cycle
+from threading import Condition, RLock
 from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
@@ -93,40 +94,30 @@ def _parse_fullcycle(byte_string):
 
     return rv(tc, n_tb, inty)
 
-def on_connect(client, self, flags, rc):
-    log.info("connected: " + str(rc))
-    # Note: ensure subscription after re-connecting,
-    #  wildcards are '+' (one level), '#' (all levels):
-    rc, mid = client.subscribe([
-        ("DataCollection/Act/ACQ_SRV_OverallCycle",             2),
-        ("IC_Command/Write/Scheduled",                          2),
-        ("IC_Command/Write/Direct",                             2),
-        ("DataCollection/Act/ACQ_SRV_CurrentState",             2),
-        ("DataCollection/Act/ACQ_SRV_CurrentTraceData",         2),
-        ("DataCollection/Act/ACQ_SRV_SetFullStorageFile",       2),
-        ("DataCollection/Set/#",        2),
-    ])
-    print("subscribed (rc) @mid [{}]".format(rc, mid))
-
-def on_subscribe(client, self, mid, granted_qos):
-    print("subscribed ({}) with QoS: {}".format(mid, granted_qos))
-
-def on_publish(client, self, mid):
-    log.debug("published: " + str(mid))
 
 def follow_schedule(client, self, msg):
-    print(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
-    if not msg.payload:
-        # empty payload will clear a retained topic
-        return
+    log.debug(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
+    with follow_schedule._lock:
+        if msg.topic.startswith("DataCollection"):
+            # this is the schedule maintained by IoniTOF
+            if not msg.payload:
+                log.debug("empty ACQ_SRV_Schedule payload has cleared retained topic")
+                self.commands.clear()
+            elif msg.retain:
+                # we have recently connected and received a message that has been retained
+                payload = json.loads(msg.payload.decode())
+                self.commands.clear()
+                self.commands.extend(payload["CMDs"])
+        if msg.topic.startswith("IC_Command"):
+            # these are the fresh scheduling requests
+            #payload = json.loads(msg.payload.decode())
+            #self.commands.extend(payload["CMDs"])
+            pass
 
-    if msg.topic.split('/')[-1] == "Scheduled":
-        payload = json.loads(msg.payload.decode())
-        self.commands.extend(payload["CMDs"])
-    
+follow_schedule.topics = ["DataCollection/Act/ACQ_SRV_Schedule", "IC_Command/Write/Scheduled"]
+follow_schedule._lock = RLock()
+
 def follow_state(client, self, msg):
-    print("retained?", msg.retain)
-    print("QoS-level?", msg.qos)
     if not msg.payload:
         # empty payload will clear a retained topic
         return
@@ -138,16 +129,17 @@ def follow_state(client, self, msg):
     self.server_state.append(state)
     if state == "ACQ_JustStarted":
         self._tc_queue.clear()
-    if state == "ACQ_JustStopped":
-        self.commands.clear()
+
+follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
 def follow_sourcefile(client, self, msg):
-    print("retained?", msg.retain)
     payload = json.loads(msg.payload.decode())
     path = payload["DataElement"]["Value"]
     log.info("new source-file: " + str(path))
     # replace the current path with the new element:
     self.sf_filename.append(path)
+
+follow_sourcefile.topics = ["DataCollection/Act/ACQ_SRV_SetFullStorageFile"]
 
 def _parse_data_element(elm):
     # make a Python object of a DataElement
@@ -162,7 +154,6 @@ def _parse_data_element(elm):
 
 
 def follow_set(client, self, msg):
-    print("retained?", msg.retain, msg.topic)
     if not msg.payload:
         # empty payload will clear a retained topic
         return
@@ -172,9 +163,12 @@ def follow_set(client, self, msg):
         *more, parID = msg.topic.split('/')
         self._datacollection_dict[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError:
-        print(msg.payload.decode())
+        log.error(msg.payload.decode())
+        raise
     except KeyError:
         pass  # probably cleared...
+
+follow_set.topics = ["DataCollection/Set/#"]
 
 def follow_tc(client, self, msg):
     if not msg.payload:
@@ -191,21 +185,43 @@ def follow_tc(client, self, msg):
     with self._tc_lock:
         self._tc_queue.append(current)
         self._tc_lock.notify()
-    # manually delete the outdated requests..
-    outdated = []
-    for cmd in self.commands:
-        future  = float(cmd["Schedule"])
-        if current >= future:
-            outdated.append(cmd)
-    for cmd in outdated:
-        self.commands.remove(cmd)
+
+follow_tc.topics = ["DataCollection/Act/ACQ_SRV_OverallCycle"]
+
+# collect all follow-functions together:
+subscriber_functions = [fun for name, fun in list(vars().items())
+    if callable(fun) and name.startswith('follow_')]
+
+def on_connect(client, self, flags, rc):
+    # Note: ensure subscription after re-connecting,
+    #  wildcards are '+' (one level), '#' (all levels):
+    default_QoS = 2
+    topics = set()
+    for subscriber in subscriber_functions:
+        topics.update(set(getattr(subscriber, "topics", [])))
+    subs = list(zip(topics, cycle([default_QoS])))
+    log.debug(f"[{self}] " + "\n".join(["subscribing to >>"] + list(map(str, subs))))
+    rv = client.subscribe(subs)
+    log.info(f"[{self}] successfully connected with {rv = }")
+
+def on_subscribe(client, self, mid, granted_qos):
+    log.info(f"[{self}] successfully subscribed with {mid = } | {granted_qos = }")
+
+def on_publish(client, self, mid):
+    log.debug(f"[{self}] published {mid = }")
+
+def on_message(client, self, msg):
+    log.debug(f"[{self}] received: {msg.topic = } | {msg.qos = } | {msg.retain = }")
+
+_NOT_INIT = object()
 
 
 class MqttClient:
-    commands     = deque([], maxlen=1000)
-    server_state = deque([], maxlen=1)
-    sf_filename  = deque([""], maxlen=1)
-    overallcycle = deque([0], maxlen=1)  # never empty!
+
+    commands     = deque([_NOT_INIT], maxlen=None)
+    server_state = deque([_NOT_INIT], maxlen=1)
+    sf_filename  = deque([""],        maxlen=1)
+    overallcycle = deque([0],         maxlen=1)
     _tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
     _tc_lock     = Condition()
     _datacollection_dict = dict()
@@ -213,7 +229,10 @@ class MqttClient:
     @property
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
-        return self.client.is_connected() and len(self.server_state)
+        return (True
+            and self.client.is_connected()
+            and self.server_state[0] is not _NOT_INIT
+            and self.commands[0] is not _NOT_INIT)
 
     @property
     def is_running(self):
@@ -223,8 +242,14 @@ class MqttClient:
     @property
     def current_schedule(self):
         '''Returns a list with the upcoming write commands in ascending order.'''
-        if self.is_connected:
-            return sorted(self.commands, key=lambda x: float(x["Schedule"]))
+        if not self.is_connected:
+            return []
+
+        current_cycle = self.overallcycle[0]
+        filter_fun = lambda cmd: float(cmd["Schedule"]) > current_cycle
+        sorted_fun = lambda cmd: float(cmd["Schedule"])
+
+        return sorted(filter(self.commands, filter_fun), key=sorted_fun)
 
     @property
     def current_server_state(self):
@@ -237,16 +262,15 @@ class MqttClient:
 
         or "<unknown>" if there's no connection to IoniTOF.
         '''
-        if self.is_connected:
-            return self.server_state[0]
-        return "<unknown>"
+        return self.server_state[0]
 
     @property
     def current_sourcefile(self):
-        '''Returns the path to the hdf5-file that is currently (or soon to be) written.'''
-        if self.is_connected:
-            return self.sf_filename[0]
-        return "<unknown>"
+        '''Returns the path to the hdf5-file that is currently (or soon to be) written.
+        
+        May be an empty string if no sourcefile has yet been set.
+        '''
+        return self.sf_filename[0]
 
     @property
     def current_cycle(self):
@@ -255,44 +279,41 @@ class MqttClient:
             return self.overallcycle[0]
         return 0
 
-    def filter_scheduled(self, parID):
+    def filter_schedule(self, parID):
         '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
         return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
 
     def __init__(self, host='127.0.0.1'):
-        self.commands.clear()
-        self.host = str(host)
+        # Note: circumvent (potentially sluggish) Windows DNS lookup:
+        self.host = '127.0.0.1' if host == 'localhost' else str(host)
         # configure connection...
         self.client = mqtt.Client()
-        self.client.on_connect = on_connect
+        self.client.on_connect   = on_connect
         self.client.on_subscribe = on_subscribe
-        self.client.on_publish = on_publish
+        self.client.on_publish   = on_publish
+        self.client.on_message   = on_message
         # ...subscribe to topics...
-        self.client.message_callback_add("IC_Command/Write/+",
-                follow_schedule)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState",
-                follow_state)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_SetFullStorageFile",
-                follow_sourcefile)
-        self.client.message_callback_add("DataCollection/Set/#",
-                follow_set)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle",
-                follow_tc)
+        for subscriber in subscriber_functions:
+            for topic in getattr(subscriber, "topics", []):
+                self.client.message_callback_add(topic, subscriber)
         # ...pass this instance to each callback...
         self.client.user_data_set(self)
         # ...and connect to the server:
         self.connect()
 
     def connect(self, timeout_s=10):
+        log.info(f"connecting to mqtt broker at {self.host}")
         self.client.connect(self.host, 1883, 60)
         self.client.loop_start()  # runs in a background thread
-        delta_s = 10e-3
-        while not len(self.server_state):
-            # wait for server_state to be populated by IoniTOF (retained topic):
-            time.sleep(delta_s)
-            timeout_s -= delta_s
-            if timeout_s < 0:
-                raise TimeoutError("no connection to IoniTOF");
+        connected_at = time.monotonic()
+        while time.monotonic() < connected_at + timeout_s:
+            if self.is_connected:
+                break
+
+            time.sleep(10e-3)
+        else:
+            self.disconnect()
+            raise TimeoutError("no connection to IoniTOF");
 
     def disconnect(self):
         self.client.loop_stop()
@@ -430,3 +451,5 @@ class MqttClient:
                 #     break
                 # TODO :: ain't working this way...
 
+    def __repr__(self):
+        return f"<{__class__} @ {self.host}>"
