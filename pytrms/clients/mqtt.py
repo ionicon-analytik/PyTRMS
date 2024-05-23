@@ -15,9 +15,9 @@ log = logging.getLogger()
 __all__ = ['MqttClient']
 
 commands     = deque([], maxlen=1000)
-server_state = deque(["<unknown>"], maxlen=1)
-sf_filename  = deque(["<unknown>"], maxlen=1)
-overallcycle = deque([], maxlen=1)  # never empty!
+server_state = deque([], maxlen=1)
+sf_filename  = deque([""], maxlen=1)
+overallcycle = deque([0], maxlen=1)  # never empty!
 _tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
 _tc_lock     = Condition()
 
@@ -103,7 +103,6 @@ def _parse_fullcycle(byte_string):
 
 def on_connect(client, userdata, flags, rc):
     log.info("connected: " + str(rc))
-    default_qos = 1
     # Note: ensure subscription after re-connecting,
     #  wildcards are '+' (one level), '#' (all levels):
     rc, mid = client.subscribe([
@@ -213,32 +212,50 @@ def follow_tc(client, userdata, msg):
 
 class MqttClient:
 
-    QoS_level = 1  # "at least once"
-
     @property
     def is_connected(self):
-        return self.client.is_connected()
+        '''Returns `True` if connection to IoniTOF could be established.'''
+        return self.client.is_connected() and len(server_state)
+
+    @property
+    def is_running(self):
+        '''Returns `True` if IoniTOF is currently acquiring data.'''
+        return self.current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
 
     @property
     def current_schedule(self):
         '''Returns a list with the upcoming write commands in ascending order.'''
-        return sorted(commands, key=lambda x: float(x["Schedule"]))
+        if self.is_connected:
+            return sorted(commands, key=lambda x: float(x["Schedule"]))
 
     @property
     def current_server_state(self):
-        return server_state[0]
+        '''Returns the state of the acquisition-server. One of:
+
+        - "ACQ_Idle"
+        - "ACQ_JustStarted"
+        - "ACQ_Aquire"
+        - "ACQ_Stopping"
+
+        or "<unknown>" if there's no connection to IoniTOF.
+        '''
+        if self.is_connected:
+            return server_state[0]
+        return "<unknown>"
 
     @property
     def current_sourcefile(self):
-        return sf_filename[0]
+        '''Returns the path to the hdf5-file that is currently (or soon to be) written.'''
+        if self.is_connected:
+            return sf_filename[0]
+        return "<unknown>"
 
     @property
     def current_cycle(self):
-        return overallcycle[0]
-
-    @property
-    def is_running(self):
-        return self.current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
+        '''Returns the current 'AbsCycle' (/'OverallCycle').'''
+        if self.is_connected:
+            return overallcycle[0]
+        return 0
 
     def filter_scheduled(self, parID):
         '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
@@ -246,7 +263,6 @@ class MqttClient:
 
     def __init__(self, host=ionitof_host):
         commands.clear()
-        overallcycle.append(0)
         self.host = host
         self.client = mqtt.Client()
         #self.client.user_data_set(commands)  # this ain't working..
@@ -261,54 +277,70 @@ class MqttClient:
         # ..and connect to the server:
         self.connect()
 
-    def connect(self):
+    def connect(self, timeout_s=10):
         self.client.connect(self.host, 1883, 60)
         self.client.loop_start()  # runs in a background thread
+        delta_s = 10e-3
+        while not len(server_state):
+            # wait for server_state to be populated by IoniTOF (retained topic):
+            time.sleep(delta_s)
+            timeout_s -= delta_s
+            if timeout_s < 0:
+                raise TimeoutError("no connection to IoniTOF");
 
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
+        commands.clear()
+        server_state.clear()
+        sf_filename.append("")
+        overallcycle.append(0)  # never empty!
+        _tc_queue.clear()       # maybe empty!
 
     def get(self, parID):
         return _datacollection_dict.get(parID)
 
     def set(self, parID, new_value, unit='-'):
         '''Set a 'new_value' to 'parID' in the DataCollection.'''
+        if not self.is_connected:
+            raise Exception("no connection to instrument");
+
+        topic, qos, retain = "DataCollection/Set/" + str(parID), 2, True
         payload = {
             "Header":      _build_header(),
             "DataElement": _build_data_element(new_value, unit),
         }
-        topic = "DataCollection/Set/" + str(parID)
-        self.client.publish(topic, json.dumps(payload), qos=2, retain=True)
+        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def write(self, parID, new_value):
         '''Write a 'new_value' to 'parID' directly.'''
+        if not self.is_connected:
+            raise Exception("no connection to instrument");
+
+        topic, qos, retain = "IC_Command/Write/Direct", 2, False
         cmd = _build_write_command(parID, new_value)
         payload = {
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return self.client.publish("IC_Command/Write/Direct", json.dumps(payload),
-                qos=self.QoS_level, retain=False)
+        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
-        if future_cycle is None:
-            return self.write(parID, new_value)
+        if not self.is_connected:
+            raise Exception("no connection to instrument");
 
+        topic, qos, retain = "IC_Command/Write/Scheduled", 2, False
         cmd = _build_write_command(parID, new_value, future_cycle)
         payload = {
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return self.client.publish("IC_Command/Write/Scheduled", json.dumps(payload),
-                qos=self.QoS_level)
+        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
-        grace_time = 0  # how much time does IoniTOF need??
-        return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'),
-                future_cycle - grace_time)
+        return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle)
 
     def start_measurement(self, path=None):
         '''Start a new measurement and block until the change is confirmed.
@@ -334,12 +366,15 @@ class MqttClient:
         '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None, schedule the stop command.'''
-        self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
+        if future_cycle is None:
+            self.write('ACQ_SRV_Stop_Meas', True)
+        else:
+            self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
         # confirm change of state...
         if future_cycle is not None:
             self.block_until(future_cycle)
-        timeout_s = 30
-        delta_s = 0.1
+        timeout_s = 10
+        delta_s = 0.01
         while timeout_s > 0:  # TODO :: this is much nicer using Recipe 12.13 ...
             if not self.is_running:
                 return
@@ -349,13 +384,17 @@ class MqttClient:
             
         raise Exception("error stopping measurement")
 
-    def block_until(self, future_cycle):
-        '''Blocks the current thread until 'future_cycle' or the end of the measurement.'''
+    def block_until(self, cycle):
+        '''Blocks the current thread until at least 'cycle' has passed or acquisition stopped.
+
+        Returns the actual current cycle.
+        '''
         while self.is_running:
-            if overallcycle[0] >= int(future_cycle):
-                return True
-            time.sleep(.1)
-        return False
+            if overallcycle[0] >= int(cycle):
+                return overallcycle[0]
+            time.sleep(10e-3)
+        
+        return 0
 
     def iter_timecycles(self):
         '''Returns an iterator over the current TimeCycle/Automation.
