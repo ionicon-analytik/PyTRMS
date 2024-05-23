@@ -160,7 +160,6 @@ def _parse_data_element(elm):
     else:  # if elm["Datatype"] == "DBL":
         return float(elm["Value"])
 
-_datacollection_dict = dict()
 
 def follow_set(client, self, msg):
     print("retained?", msg.retain, msg.topic)
@@ -171,7 +170,7 @@ def follow_set(client, self, msg):
     try:
         payload = json.loads(msg.payload.decode())
         *more, parID = msg.topic.split('/')
-        _datacollection_dict[parID] = _parse_data_element(payload["DataElement"])
+        self._datacollection_dict[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError:
         print(msg.payload.decode())
     except KeyError:
@@ -209,6 +208,7 @@ class MqttClient:
     overallcycle = deque([0], maxlen=1)  # never empty!
     _tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
     _tc_lock     = Condition()
+    _datacollection_dict = dict()
     
     @property
     def is_connected(self):
@@ -297,14 +297,16 @@ class MqttClient:
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
-        self.commands.clear()
-        self.server_state.clear()
-        self.sf_filename.append("")
-        self.overallcycle.append(0)  # never empty!
-        self._tc_queue.clear()       # maybe empty!
+        # reset internal queues to their defaults:
+        self.commands          = MqttClient.commands
+        self.server_state   = MqttClient.server_state
+        self.sf_filename    = MqttClient.sf_filename
+        self.overallcycle   = MqttClient.overallcycle
+        self._tc_queue      = MqttClient._tc_queue
+        self._datacollection_dict = MqttClient._datacollection_dict
 
     def get(self, parID):
-        return _datacollection_dict.get(parID)
+        return self._datacollection_dict.get(parID)
 
     def set(self, parID, new_value, unit='-'):
         '''Set a 'new_value' to 'parID' in the DataCollection.'''
