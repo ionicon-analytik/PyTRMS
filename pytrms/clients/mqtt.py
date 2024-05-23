@@ -326,7 +326,12 @@ class MqttClient:
         return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule(self, parID, new_value, future_cycle):
-        '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
+        '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
+
+        If 'future_cycle' is actually in the past, the behaviour is defined by IoniTOF
+        (most likely the command is ignored). The current cycle should be checked before
+        and after running the schedule command to be actually in the future.
+        '''
         if not self.is_connected:
             raise Exception("no connection to instrument");
 
@@ -340,6 +345,10 @@ class MqttClient:
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
+        # immediately check if we're not too late:
+        if not future_cycle > overallcycle[0]:
+            raise TimeoutError(f"while scheduling: the 'future_cycle' is already in the past")
+
         return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle)
 
     def start_measurement(self, path=None):
@@ -360,13 +369,13 @@ class MqttClient:
             timeout_s -= delta_s
             time.sleep(delta_s)
             
-        raise Exception("error starting measurement")
+        raise TimeoutError("error starting measurement")
 
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
 
-        If 'future_cycle' is not None, schedule the stop command.'''
-        if future_cycle is None:
+        If 'future_cycle' is not None and in the future, schedule the stop command.'''
+        if future_cycle is None or not future_cycle > overallcycle[0]:
             self.write('ACQ_SRV_Stop_Meas', True)
         else:
             self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
@@ -382,7 +391,7 @@ class MqttClient:
             timeout_s -= delta_s
             time.sleep(delta_s)
             
-        raise Exception("error stopping measurement")
+        raise TimeoutError("error stopping measurement")
 
     def block_until(self, cycle):
         '''Blocks the current thread until at least 'cycle' has passed or acquisition stopped.
