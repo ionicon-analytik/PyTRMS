@@ -8,18 +8,11 @@ from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
 
-from . import ionitof_host
 
 log = logging.getLogger()
 
 __all__ = ['MqttClient']
 
-commands     = deque([], maxlen=1000)
-server_state = deque([], maxlen=1)
-sf_filename  = deque([""], maxlen=1)
-overallcycle = deque([0], maxlen=1)  # never empty!
-_tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
-_tc_lock     = Condition()
 
 def _build_header():
     ts = dt.now()
@@ -100,8 +93,7 @@ def _parse_fullcycle(byte_string):
 
     return rv(tc, n_tb, inty)
 
-
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, self, flags, rc):
     log.info("connected: " + str(rc))
     # Note: ensure subscription after re-connecting,
     #  wildcards are '+' (one level), '#' (all levels):
@@ -116,13 +108,13 @@ def on_connect(client, userdata, flags, rc):
     ])
     print("subscribed (rc) @mid [{}]".format(rc, mid))
 
-def on_subscribe(client, userdata, mid, granted_qos):
+def on_subscribe(client, self, mid, granted_qos):
     print("subscribed ({}) with QoS: {}".format(mid, granted_qos))
 
-def on_publish(client, userdata, mid):
+def on_publish(client, self, mid):
     log.debug("published: " + str(mid))
 
-def follow_schedule(client, userdata, msg):
+def follow_schedule(client, self, msg):
     print(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
     if not msg.payload:
         # empty payload will clear a retained topic
@@ -130,9 +122,9 @@ def follow_schedule(client, userdata, msg):
 
     if msg.topic.split('/')[-1] == "Scheduled":
         payload = json.loads(msg.payload.decode())
-        commands.extend(payload["CMDs"])
+        self.commands.extend(payload["CMDs"])
     
-def follow_state(client, userdata, msg):
+def follow_state(client, self, msg):
     print("retained?", msg.retain)
     print("QoS-level?", msg.qos)
     if not msg.payload:
@@ -143,19 +135,19 @@ def follow_state(client, userdata, msg):
     state = payload["DataElement"]["Value"]
     log.info("new server-state: " + str(state))
     # replace the current state with the new element:
-    server_state.append(state)
+    self.server_state.append(state)
     if state == "ACQ_JustStarted":
-        _tc_queue.clear()
+        self._tc_queue.clear()
     if state == "ACQ_JustStopped":
-        commands.clear()
+        self.commands.clear()
 
-def follow_sourcefile(client, userdata, msg):
+def follow_sourcefile(client, self, msg):
     print("retained?", msg.retain)
     payload = json.loads(msg.payload.decode())
     path = payload["DataElement"]["Value"]
     log.info("new source-file: " + str(path))
     # replace the current path with the new element:
-    sf_filename.append(path)
+    self.sf_filename.append(path)
 
 def _parse_data_element(elm):
     # make a Python object of a DataElement
@@ -170,7 +162,7 @@ def _parse_data_element(elm):
 
 _datacollection_dict = dict()
 
-def follow_set(client, userdata, msg):
+def follow_set(client, self, msg):
     print("retained?", msg.retain, msg.topic)
     if not msg.payload:
         # empty payload will clear a retained topic
@@ -185,7 +177,7 @@ def follow_set(client, userdata, msg):
     except KeyError:
         pass  # probably cleared...
 
-def follow_tc(client, userdata, msg):
+def follow_tc(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
         return
@@ -194,28 +186,34 @@ def follow_tc(client, userdata, msg):
     current = int(payload["DataElement"]["Value"])
     log.debug("new timecycle " + str(current))
     # replace the current timecycle with the new element:
-    overallcycle.append(current)
+    self.overallcycle.append(current)
     # Note: this is the thread-safe variant for ONE thread
     #  waiting for the _tc_queue to be filled (may be empty):
-    with _tc_lock:
-        _tc_queue.append(current)
-        _tc_lock.notify()
+    with self._tc_lock:
+        self._tc_queue.append(current)
+        self._tc_lock.notify()
     # manually delete the outdated requests..
     outdated = []
-    for cmd in commands:
+    for cmd in self.commands:
         future  = float(cmd["Schedule"])
         if current >= future:
             outdated.append(cmd)
     for cmd in outdated:
-        commands.remove(cmd)
+        self.commands.remove(cmd)
 
 
 class MqttClient:
-
+    commands     = deque([], maxlen=1000)
+    server_state = deque([], maxlen=1)
+    sf_filename  = deque([""], maxlen=1)
+    overallcycle = deque([0], maxlen=1)  # never empty!
+    _tc_queue    = deque([])  #, maxlen=1)  # maybe empty!
+    _tc_lock     = Condition()
+    
     @property
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
-        return self.client.is_connected() and len(server_state)
+        return self.client.is_connected() and len(self.server_state)
 
     @property
     def is_running(self):
@@ -226,7 +224,7 @@ class MqttClient:
     def current_schedule(self):
         '''Returns a list with the upcoming write commands in ascending order.'''
         if self.is_connected:
-            return sorted(commands, key=lambda x: float(x["Schedule"]))
+            return sorted(self.commands, key=lambda x: float(x["Schedule"]))
 
     @property
     def current_server_state(self):
@@ -240,48 +238,56 @@ class MqttClient:
         or "<unknown>" if there's no connection to IoniTOF.
         '''
         if self.is_connected:
-            return server_state[0]
+            return self.server_state[0]
         return "<unknown>"
 
     @property
     def current_sourcefile(self):
         '''Returns the path to the hdf5-file that is currently (or soon to be) written.'''
         if self.is_connected:
-            return sf_filename[0]
+            return self.sf_filename[0]
         return "<unknown>"
 
     @property
     def current_cycle(self):
         '''Returns the current 'AbsCycle' (/'OverallCycle').'''
         if self.is_connected:
-            return overallcycle[0]
+            return self.overallcycle[0]
         return 0
 
     def filter_scheduled(self, parID):
         '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
         return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
 
-    def __init__(self, host=ionitof_host):
-        commands.clear()
-        self.host = host
+    def __init__(self, host='127.0.0.1'):
+        self.commands.clear()
+        self.host = str(host)
+        # configure connection...
         self.client = mqtt.Client()
-        #self.client.user_data_set(commands)  # this ain't working..
         self.client.on_connect = on_connect
         self.client.on_subscribe = on_subscribe
         self.client.on_publish = on_publish
-        self.client.message_callback_add("IC_Command/Write/+", follow_schedule)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState", follow_state)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_SetFullStorageFile", follow_sourcefile)
-        self.client.message_callback_add("DataCollection/Set/#", follow_set)
-        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle", follow_tc)
-        # ..and connect to the server:
+        # ...subscribe to topics...
+        self.client.message_callback_add("IC_Command/Write/+",
+                follow_schedule)
+        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_CurrentState",
+                follow_state)
+        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_SetFullStorageFile",
+                follow_sourcefile)
+        self.client.message_callback_add("DataCollection/Set/#",
+                follow_set)
+        self.client.message_callback_add("DataCollection/Act/ACQ_SRV_OverallCycle",
+                follow_tc)
+        # ...pass this instance to each callback...
+        self.client.user_data_set(self)
+        # ...and connect to the server:
         self.connect()
 
     def connect(self, timeout_s=10):
         self.client.connect(self.host, 1883, 60)
         self.client.loop_start()  # runs in a background thread
         delta_s = 10e-3
-        while not len(server_state):
+        while not len(self.server_state):
             # wait for server_state to be populated by IoniTOF (retained topic):
             time.sleep(delta_s)
             timeout_s -= delta_s
@@ -291,11 +297,11 @@ class MqttClient:
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
-        commands.clear()
-        server_state.clear()
-        sf_filename.append("")
-        overallcycle.append(0)  # never empty!
-        _tc_queue.clear()       # maybe empty!
+        self.commands.clear()
+        self.server_state.clear()
+        self.sf_filename.append("")
+        self.overallcycle.append(0)  # never empty!
+        self._tc_queue.clear()       # maybe empty!
 
     def get(self, parID):
         return _datacollection_dict.get(parID)
@@ -346,7 +352,7 @@ class MqttClient:
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
         # immediately check if we're not too late:
-        if not future_cycle > overallcycle[0]:
+        if not future_cycle > self.overallcycle[0]:
             raise TimeoutError(f"while scheduling: the 'future_cycle' is already in the past")
 
         return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle)
@@ -375,7 +381,7 @@ class MqttClient:
         '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None and in the future, schedule the stop command.'''
-        if future_cycle is None or not future_cycle > overallcycle[0]:
+        if future_cycle is None or not future_cycle > self.overallcycle[0]:
             self.write('ACQ_SRV_Stop_Meas', True)
         else:
             self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
@@ -399,8 +405,8 @@ class MqttClient:
         Returns the actual current cycle.
         '''
         while self.is_running:
-            if overallcycle[0] >= int(cycle):
-                return overallcycle[0]
+            if self.overallcycle[0] >= int(cycle):
+                return self.overallcycle[0]
             time.sleep(10e-3)
         
         return 0
@@ -411,13 +417,13 @@ class MqttClient:
         Calling next on the iterator will block until the next timecycle is available.
         '''
         while True:
-            with _tc_lock:
-                while not len(_tc_queue):
-                    expired = _tc_lock.wait(timeout=0.100)
+            with self._tc_lock:
+                while not len(self._tc_queue):
+                    expired = self._tc_lock.wait(timeout=0.100)
                     if not self.is_running:
                         return
                     if not expired:
-                        yield _tc_queue.pop()
+                        yield self._tc_queue.pop()
                 # if not self.is_running:
                 #     break
                 # TODO :: ain't working this way...
