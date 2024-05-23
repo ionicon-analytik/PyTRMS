@@ -221,6 +221,7 @@ class MqttClient:
 
     @property
     def current_schedule(self):
+        '''Returns a list with the upcoming write commands in ascending order.'''
         return sorted(commands, key=lambda x: float(x["Schedule"]))
 
     @property
@@ -238,6 +239,10 @@ class MqttClient:
     @property
     def is_running(self):
         return self.current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
+
+    def filter_scheduled(self, parID):
+        '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
+        return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
 
     def __init__(self, host=ionitof_host):
         commands.clear()
@@ -343,10 +348,6 @@ class MqttClient:
             time.sleep(delta_s)
             
         raise Exception("error stopping measurement")
-
-    def find_scheduled(self, parID):
-        matches = [cmd for cmd in commands if cmd["ParaID"] == str(parID)]
-        return sorted(matches, key=lambda x: float(x["Schedule"]))
 
     def block_until(self, future_cycle):
         '''Blocks the current thread until 'future_cycle' or the end of the measurement.'''
