@@ -336,6 +336,7 @@ class MqttClient:
             raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "DataCollection/Set/" + str(parID), 2, True
+        log.info(f"setting '{parID}' ~> [{new_value}]")
         payload = {
             "Header":      _build_header(),
             "DataElement": _build_data_element(new_value, unit),
@@ -348,6 +349,7 @@ class MqttClient:
             raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "IC_Command/Write/Direct", 2, False
+        log.info(f"writing '{parID}' ~> [{new_value}]")
         cmd = _build_write_command(parID, new_value)
         payload = {
             "Header": _build_header(),
@@ -366,6 +368,7 @@ class MqttClient:
             raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "IC_Command/Write/Scheduled", 2, False
+        log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
         cmd = _build_write_command(parID, new_value, future_cycle)
         payload = {
             "Header": _build_header(),
@@ -375,6 +378,16 @@ class MqttClient:
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
+        # try to make sure that IoniTOF accepts the path:
+        if self.host == '127.0.0.1':
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            try:
+                with open(path, 'x'):
+                    log.info("touched new file:", path)
+            except FileExistsError as exc:
+                log.error(f"new filename '{path}' already exists and will not be scheduled!")
+                return
+
         # immediately check if we're not too late:
         if not future_cycle > self.overallcycle[0]:
             raise TimeoutError(f"while scheduling: the 'future_cycle' is already in the past")
