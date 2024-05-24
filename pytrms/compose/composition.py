@@ -100,19 +100,19 @@ class Composition(Iterable):
             steps = list(json.load(ifstream))
             return Composition(steps, **kwargs)
 
-    def __init__(self, steps, max_runs=-1, start_cycle=0, start_action=None, generate_automation=False, foresight_cycles=300, schedule_delay=5):
+    def __init__(self, steps, max_runs=-1, start_cycle=0, start_action=None, generate_automation=False, foresight_runs=5, schedule_delay=5):
         self.steps = [Step(**item) if isinstance(item, dict) else item for item in steps]
         self.max_runs            = int(max_runs)
         self.start_cycle         = int(start_cycle)
         self.start_action        = int(start_action) if start_action is not None else None
         self.generate_automation = bool(generate_automation)
-        self.foresight_cycles    = int(foresight_cycles)
+        self.foresight_runs      = int(foresight_runs) if self.max_runs < 0 else max(int(foresight_runs), self.max_runs)
         self.schedule_delay      = int(schedule_delay)
         
         assert len(self.steps) > 0, "empty step list"
-        assert self.foresight_cycles > 0,                   "foresight_cycles must be positive"
-        assert self.schedule_delay > 0,                     "schedule_delay must be positive"
-        assert self.schedule_delay < self.foresight_cycles, "schedule_delay >= foresight_cycles"
+        assert self.max_runs != 0, "max_runs cannot be zero"
+        assert self.foresight_runs > 0, "foresight_runs must be positive"
+        assert self.schedule_delay > 0, "schedule_delay must be positive"
         names = set(step.name for step in self.steps)
         assert len(names) == len(self.steps), "duplicate step name"
 
@@ -164,27 +164,30 @@ class Composition(Iterable):
         ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
         ...         Step("Zwoa", {"Zwei": 2}, 10, start_delay=3)
         ...      ],
-        ...      foresight_cycles=25,
+        ...      foresight_runs=2,
         ...      schedule_delay=6)
         >>> coro = co.schedule_routine(print)
-        >>> wake_cycle = coro.send(1)
+        >>> wake_cycle = coro.send(1)  # yields at least 'foresight_runs'
         Eins 1 0
         Zwei 2 10
         Eins 1 20
+        Zwei 2 30
+        Eins 1 40
         
-        >>> wake_cycle
-        24
+        >>> wake_cycle  # prints 50 - 'schedule_delay'
+        44
         
         '''
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
         sequence = self.sequence()
+        foresight_cycles = self.foresight_runs * sum(step.duration for step in self.steps)
         next_cycle, set_values = next(sequence)
         while True:
             # receive current cycle, yield proposed wake cycle...
             current_cycle = yield next_cycle - self.schedule_delay
             log.debug(f"schedule_routine: got [{current_cycle}]")
-            while next_cycle < current_cycle + self.foresight_cycles:
+            while next_cycle < current_cycle + foresight_cycles:
                 log.debug(f'scheduling cycle [{next_cycle}] ~> {set_values}')
                 for parID, value in set_values.items():
                     schedule_fun(parID, value, next_cycle)
