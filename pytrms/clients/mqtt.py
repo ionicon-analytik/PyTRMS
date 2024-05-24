@@ -142,7 +142,7 @@ def follow_state(client, self, msg):
 
     payload = json.loads(msg.payload.decode())
     state = payload["DataElement"]["Value"]
-    log.debug("new server-state: " + str(state))
+    log.debug(f"[{self}] new server-state: " + str(state))
     # replace the current state with the new element:
     self.server_state.append(state)
 
@@ -151,7 +151,7 @@ follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 def follow_sourcefile(client, self, msg):
     payload = json.loads(msg.payload.decode())
     path = payload["DataElement"]["Value"]
-    log.debug("new source-file: " + str(path))
+    log.debug(f"[{self}] new source-file: " + str(path))
     # replace the current path with the new element:
     self.sf_filename.append(path)
 
@@ -214,8 +214,6 @@ def on_subscribe(client, self, mid, granted_qos):
 def on_publish(client, self, mid):
     log.debug(f"[{self}] published {mid = }")
 
-def on_message(client, self, msg):
-    log.debug(f"[{self}] received: {msg.topic = } | {msg.qos = } | {msg.retain = }")
 
 _NOT_INIT = object()
 
@@ -234,7 +232,7 @@ class MqttClient:
         return (True
             and self.client.is_connected()
             and self.server_state[0] is not _NOT_INIT
-            and self.sched_cmds[0] is not _NOT_INIT)
+            and (len(self.sched_cmds) == 0 or self.sched_cmds[0] is not _NOT_INIT))
 
     @property
     def is_running(self):
@@ -251,7 +249,7 @@ class MqttClient:
         filter_fun = lambda cmd: float(cmd["Schedule"]) > current_cycle
         sorted_fun = lambda cmd: float(cmd["Schedule"])
 
-        return sorted(filter(self.sched_cmds, filter_fun), key=sorted_fun)
+        return sorted(filter(filter_fun, self.sched_cmds), key=sorted_fun)
 
     @property
     def current_server_state(self):
@@ -295,7 +293,6 @@ class MqttClient:
         self.client.on_connect   = on_connect
         self.client.on_subscribe = on_subscribe
         self.client.on_publish   = on_publish
-        self.client.on_message   = on_message
         # ...subscribe to topics...
         for subscriber in _subscriber_functions:
             for topic in getattr(subscriber, "topics", []):
@@ -317,7 +314,7 @@ class MqttClient:
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError("[{self}] no connection to IoniTOF");
+            raise TimeoutError(f"[{self}] no connection to IoniTOF");
 
     def disconnect(self):
         self.client.loop_stop()
@@ -336,7 +333,7 @@ class MqttClient:
     def set(self, parID, new_value, unit='-'):
         '''Set a 'new_value' to 'parID' in the DataCollection.'''
         if not self.is_connected:
-            raise Exception("no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "DataCollection/Set/" + str(parID), 2, True
         payload = {
@@ -348,7 +345,7 @@ class MqttClient:
     def write(self, parID, new_value):
         '''Write a 'new_value' to 'parID' directly.'''
         if not self.is_connected:
-            raise Exception("no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "IC_Command/Write/Direct", 2, False
         cmd = _build_write_command(parID, new_value)
@@ -366,7 +363,7 @@ class MqttClient:
         and after running the schedule command to be actually in the future.
         '''
         if not self.is_connected:
-            raise Exception("no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument");
 
         topic, qos, retain = "IC_Command/Write/Scheduled", 2, False
         cmd = _build_write_command(parID, new_value, future_cycle)
@@ -402,7 +399,7 @@ class MqttClient:
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError("[{self}] error starting measurement");
+            raise TimeoutError(f"[{self}] error starting measurement");
 
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
@@ -426,7 +423,7 @@ class MqttClient:
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError("[{self}] error stopping measurement");
+            raise TimeoutError(f"[{self}] error stopping measurement");
 
     def block_until(self, cycle):
         '''Blocks the current thread until at least 'cycle' has passed or acquisition stopped.
