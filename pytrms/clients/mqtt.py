@@ -117,20 +117,30 @@ def follow_schedule(client, self, msg):
     log.debug(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
     with follow_schedule._lock:
         if msg.topic.startswith("DataCollection"):
-            # this is the schedule maintained by IoniTOF
             if not msg.payload:
-                log.debug("empty ACQ_SRV_Schedule payload has cleared retained topic")
+                log.warn("empty ACQ_SRV_Schedule payload has cleared retained topic")
                 self.sched_cmds.clear()
-            elif msg.retain:
-                # we have recently connected and received a message that has been retained
+                return
+
+            if msg.retain:
+                # Note: we either have received a message that has been
+                #  retained because of a new connection..
                 payload = json.loads(msg.payload.decode())
                 self.sched_cmds.clear()
                 self.sched_cmds.extend(payload["CMDs"])
+            else:
+                #  ..or the schedule as maintained by IoniTOF has changed,
+                #  which we handle ourselves below:
+                pass
+
         if msg.topic.startswith("IC_Command"):
-            # these are the fresh scheduling requests
-            #payload = json.loads(msg.payload.decode())
-            #self.sched_cmds.extend(payload["CMDs"])
-            pass
+            if not msg.payload:
+                log.error("empty IC_Command! has topic been cleared?")
+                return
+
+            # these are the freshly added scheduling requests:
+            payload = json.loads(msg.payload.decode())
+            self.sched_cmds.extend(payload["CMDs"])
 
 follow_schedule.topics = ["DataCollection/Act/ACQ_SRV_Schedule", "IC_Command/Write/Scheduled"]
 follow_schedule._lock = RLock()
