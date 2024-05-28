@@ -178,7 +178,7 @@ def follow_set(client, self, msg):
         log.error(f"while parsing [{parID}] :: {str(exc)}")
         pass
 
-follow_set.topics = ["DataCollection/Set/#", "PTR/Act/#", "TPS/Act/#"]
+follow_set.topics = ["DataCollection/Set/#", "Automation/Act/#", "PTR/Act/#", "TPS/Act/#"]
 
 def follow_cycle(client, self, msg):
     if not msg.payload:
