@@ -9,6 +9,8 @@ from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
 
+from .._base.mqttconn import MqttConn
+
 
 log = logging.getLogger()
 
@@ -206,29 +208,20 @@ follow_cycle.topics = ["DataCollection/Act/ACQ_SRV_OverallCycle"]
 _subscriber_functions = [fun for name, fun in list(vars().items())
     if callable(fun) and name.startswith('follow_')]
 
-def on_connect(client, self, flags, rc):
-    # Note: ensure subscription after re-connecting,
-    #  wildcards are '+' (one level), '#' (all levels):
-    default_QoS = 2
-    topics = set()
-    for subscriber in _subscriber_functions:
-        topics.update(set(getattr(subscriber, "topics", [])))
-    subs = sorted(zip(topics, cycle([default_QoS])))
-    log.debug(f"[{self}] " + "\n   --> ".join(["subscribing to"] + list(map(str, subs))))
-    rv = client.subscribe(subs)
-    log.info(f"[{self}] successfully connected with {rv = }")
 
-def on_subscribe(client, self, mid, granted_qos):
-    log.info(f"[{self}] successfully subscribed with {mid = } | {granted_qos = }")
-
-def on_publish(client, self, mid):
-    log.debug(f"[{self}] published {mid = }")
+def on_disconnect(client, self):
+    # reset internal queues to their defaults:
+    self.sched_cmds     = MqttClient.sched_cmds
+    self.server_state   = MqttClient.server_state
+    self.sf_filename    = MqttClient.sf_filename
+    self.overallcycle   = MqttClient.overallcycle
+    self.act_values     = MqttClient.act_values
 
 
 _NOT_INIT = object()
 
 
-class MqttClient:
+class MqttClient(MqttConn):
 
     sched_cmds   = deque([_NOT_INIT], maxlen=None)
     server_state = deque([_NOT_INIT], maxlen=1)
@@ -296,45 +289,8 @@ class MqttClient:
         return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
 
     def __init__(self, host='127.0.0.1'):
-        # Note: circumvent (potentially sluggish) Windows DNS lookup:
-        self.host = '127.0.0.1' if host == 'localhost' else str(host)
-        # configure connection...
-        self.client = mqtt.Client()
-        self.client.on_connect   = on_connect
-        self.client.on_subscribe = on_subscribe
-        self.client.on_publish   = on_publish
-        # ...subscribe to topics...
-        for subscriber in _subscriber_functions:
-            for topic in getattr(subscriber, "topics", []):
-                self.client.message_callback_add(topic, subscriber)
-        # ...pass this instance to each callback...
-        self.client.user_data_set(self)
-        # ...and connect to the server:
-        self.connect()
-
-    def connect(self, timeout_s=10):
-        log.info(f"[{self}] connecting to mqtt broker at {self.host}")
-        self.client.connect(self.host, 1883, 60)
-        self.client.loop_start()  # runs in a background thread
-        started_at = time.monotonic()
-        while time.monotonic() < started_at + timeout_s:
-            if self.is_connected:
-                break
-
-            time.sleep(10e-3)
-        else:
-            self.disconnect()
-            raise TimeoutError(f"[{self}] no connection to IoniTOF");
-
-    def disconnect(self):
-        self.client.loop_stop()
-        self.client.disconnect()
-        # reset internal queues to their defaults:
-        self.sched_cmds     = MqttClient.sched_cmds
-        self.server_state   = MqttClient.server_state
-        self.sf_filename    = MqttClient.sf_filename
-        self.overallcycle   = MqttClient.overallcycle
-        self.act_values     = MqttClient.act_values
+        # this sets up the mqtt connection with default callbacks:
+        super().__init__(host, _subscriber_functions, None, None, None, on_disconnect)
 
     def get(self, parID):
         '''Return the last value for the given 'parID' or None if not known.'''
