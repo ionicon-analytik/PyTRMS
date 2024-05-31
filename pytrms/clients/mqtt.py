@@ -2,8 +2,9 @@ import os
 import time
 import logging
 import json
+from itertools import cycle, zip_longest
 from collections import deque
-from itertools import cycle
+from queue import Queue
 from threading import Condition, RLock
 from datetime import datetime as dt
 
@@ -93,27 +94,122 @@ def _parse_data_element(elm):
         return float(elm["Value"])
     raise ParsingError("unknown datatype: " + str(elm["Datatype"]))
 
-def _parse_fullcycle(byte_string):
+def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
+    '''Parses 'timecycle', 'intensity', 'mass_cal' and 'add_data' from bytes.
+
+    @params
+    - add_data a dictionary that will be filled or `None` if not needed
+    - need_masscal if `False`, the 'mass_cal' returned will be None
+
+    Parsing the AddData-cluster is much slower than parsing the intensity-array.
+    Therefore, this may be skipped to improve performance, but is necessary if
+    the 'mass_cal' is needed:
+
+    performance (on a Intel Core i5, 8th Gen Ubuntu Linux):
+      < 2 ms  when `add_data=None, need_masscal=False` (default)
+      6-7 ms  when needing to parse the AddData-cluster (else)
+    
+    @returns a tuple ('timecycle', 'intensity', 'mass_cal')
+    '''
     import numpy as np
     from collections import namedtuple
 
-    rv = namedtuple('fullcycle', ['timecycle', 'n_timebins', 'intensity'])
+    tc_tup = namedtuple('timecycle',
+            ['rel_cycle','abs_cycle','abs_time','rel_time', 'run', 'cpx'])
+    ad_tup = namedtuple('add_data',
+            ['value', 'name', 'unit', 'view'])
+    mc_tup = namedtuple('masscal',
+            ['mode', 'masses', 'timebins', 'cal_pars', 'cal_segs'])
+    rv_tup = namedtuple('fullcycle',
+            ['timecycle', 'intensity', 'mass_cal'])
+
     _f32 = np.dtype(np.float32).newbyteorder('>')
     _f64 = np.dtype(np.float64).newbyteorder('>')
+    _i16 = np.dtype(np.int16).newbyteorder('>')
     _i32 = np.dtype(np.int32).newbyteorder('>')
+    _i64 = np.dtype(np.int64).newbyteorder('>')
+    _chr = np.dtype(np.int8).newbyteorder('>')
 
     offset = 0
-    tc = np.frombuffer(byte_string, dtype=_f64, count=6, offset=offset)
-    offset += tc.nbytes
-    _arr = np.frombuffer(s, dtype=_i32, count=1, offset=offset)
-    offset += _arr.nbytes
-    n_tb, = _arr
-    inty = np.frombuffer(s, dtype=_f32, count=n_tb, offset=offset)
-    offset += inty.nbytes
-    # TODO :: t.b.c. ...
 
-    return rv(tc, n_tb, inty)
+    def rd_single(dtype=_i32):
+        nonlocal offset
+        _arr = np.frombuffer(byte_string, dtype=dtype, count=1, offset=offset)
+        offset += _arr.nbytes
+        return _arr[0]
+    
+    def rd_arr1d(dtype=_f32, count=None):
+        nonlocal offset
+        if count is None:
+            count = rd_single()
+        arr = np.frombuffer(byte_string, dtype=dtype, count=count, offset=offset)
+        offset += arr.nbytes
+        return arr
+    
+    def rd_arr2d(dtype=_f32):
+        nonlocal offset
+        n = rd_single()
+        m = rd_single()
+        arr = np.frombuffer(byte_string, dtype=dtype, count=n*m, offset=offset)
+        offset += arr.nbytes
+        return arr.reshape((n, m))
 
+    def rd_string():
+        nonlocal offset
+        return rd_arr1d(dtype=_chr).tobytes().decode('latin-1').lstrip('\x00')
+    
+    tc_cluster      = rd_arr1d(dtype=_f64, count=6)
+    # SpecData #
+    intensity       = rd_arr1d(dtype=_f32)
+    sum_inty        = rd_arr1d(dtype=_f32)  # (discarded)
+    mon_peaks       = rd_arr2d(dtype=_f32)  # (discarded)
+    
+    if add_data is None and not need_masscal:
+        # skip costly parsing of Trace- and Add-Data cluster:
+        return rv_tup(tc_tup(*tc_cluster), intensity, None)
+
+    # TraceData #  (as yet discarded)
+    tc_cluster2     = rd_arr1d(dtype=_f64, count=6)
+    twoD_raw        = rd_arr2d(dtype=_f32)
+    sum_raw         = rd_arr1d(dtype=_f32)
+    sum_corr        = rd_arr1d(dtype=_f32)
+    sum_conz        = rd_arr1d(dtype=_f32)
+    calc_traces     = rd_arr1d(dtype=_f32)
+    n_calc_trcs     = rd_single()
+    for i in range(n_calc_trcs):
+        calc_names  = rd_arr1d(dtype=_chr)
+    peak_centrs     = rd_arr1d(dtype=_f32)
+    # AddData #
+    n_add_data      = rd_single()
+    for i in range(n_add_data):
+        grp_name    = rd_string()
+        descr = []
+        for i in range(rd_single()):
+            descr.append(rd_string())
+        units = []
+        for i in range(rd_single()):
+            units.append(rd_string())
+        data        = rd_arr1d(dtype=_f32)
+        view        = rd_arr1d(dtype=_chr)
+        n_lv_times  = rd_single()
+        offset += 16 * n_lv_times  # skipping LabVIEW timestamp
+        if add_data is None:
+            # Note: the AddData is discarded, but if the caller
+            #  needs the mass-cal then we have to do the parsing,
+            #  because of the unknown length of arrays and strings..
+            pass
+        else:
+            add_data[grp_name] = [ad_tup(*tup) for tup in zip_longest(data, descr, units, view)]
+
+    # MassCal #
+    mc_masses       = rd_arr1d(dtype=_f64)
+    mc_tbins        = rd_arr1d(dtype=_f64)
+    cal_paras       = rd_arr1d(dtype=_f64)
+    segmnt_cal_pars = rd_arr2d(dtype=_f64)
+    mcal_mode       = rd_single(dtype=_i16)
+    mass_cal = mc_tup(mcal_mode, mc_masses, mc_tbins, cal_paras, segmnt_cal_pars)
+
+    return rv_tup(tc_tup(*tc_cluster), intensity, mass_cal)
 
 def follow_schedule(client, self, msg):
     log.debug(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
@@ -284,10 +380,6 @@ class MqttClient(MqttConn):
             return self.overallcycle[0]
         return 0
 
-    def filter_schedule(self, parID):
-        '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
-        return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
-
     def __init__(self, host='127.0.0.1'):
         # this sets up the mqtt connection with default callbacks:
         super().__init__(host, _subscriber_functions, None, None, None, on_disconnect)
@@ -308,6 +400,10 @@ class MqttClient(MqttConn):
             "DataElement": _build_data_element(new_value, unit),
         }
         return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
+
+    def filter_schedule(self, parID):
+        '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
+        return (cmd for cmd in self.current_schedule if cmd["ParaID"] == str(parID))
 
     def write(self, parID, new_value):
         '''Write a 'new_value' to 'parID' directly.'''
@@ -417,6 +513,41 @@ class MqttClient(MqttConn):
             return 0
 
         return self.overallcycle[0]
+
+    def iter_specdata(self, add_data=None, need_masscal=False):
+        '''Returns an iterator over the fullcycle-data as long as it is available.
+
+        Elements will be buffered up to a maximum of 300 cycles. A `queue.Full`
+        exception will be raised when the caller fails to consume the iterator!
+
+        '''
+        q = Queue(300)
+        timeout_s = 60
+        topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+        qos = 2
+
+        def callback(client, self, msg):
+            q.put(_parse_fullcycle(msg.payload, add_data, need_masscal), timeout_s)
+
+        # Note: when using a simple generator function like this, the following lines
+        #  will not be excecuted until the first call to `next` on the iterator!
+        #  this means, the callback will not yet be executed, the queue not filled 
+        #  and we might miss the first cycles...
+        self.client.message_callback_add(topic, callback)
+        self.client.subscribe(topic, qos)
+        yield q.get()  # waiting indefinitely to run..
+        while self.is_running or not q.empty():
+            yield q.get(timeout_s)
+
+        #  ...also, when using more than one iterator, the first to finish will
+        #  unsubscribe and cause all others to stop maybe before the time!
+        #  all of this might not actually be an issue right now, but
+        # TODO :: fix this weird behaviour (can only be done by implementing the
+        #  iterator-protocol properly using a helper class)!
+        self.client.unsubscribe(topic)
+        self.client.message_callback_remove(topic)
+
+    iter_specdata.__doc__ += _parse_fullcycle.__doc__
 
     def __repr__(self):
         return f"<{self.__class__.__name__}[{self.host}]>"
