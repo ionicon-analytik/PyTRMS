@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import json
+from functools import wraps
 from itertools import cycle, zip_longest
 from collections import deque
 from queue import Queue
@@ -10,12 +11,69 @@ from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
 
-from .._base.mqttconn import MqttConn
+from .._base.mqttconn import ConnectorBase
 
 
 log = logging.getLogger()
 
-__all__ = ['MqttClient']
+__all__ = ['MqttClient', 'ConnectorBase', 'publisher', 'receiver']
+
+
+def publisher(to_publish=list()):
+    """let a class automatically publish a subset of attributes directly to the mqtt broker.
+
+    (class-decorator)
+
+    wants the attributes .client and .topic from the sub-class.
+    """
+    def __setattr__(self, name, value):
+        object.__setattr__(self, name, value)
+        if (self._publisher_init
+          and name in self._published_attrs
+          and self.client.is_connected):
+            payload = str(getattr(self, name))
+            self.client.publish(self.topic + "/" + name, payload, 2, retain=True)
+
+    def decorator(klass):
+        @wraps(klass)
+        def wrapper(*args, **kwargs):
+            klass._publisher_init = False
+            klass._published_attrs = list(to_publish)
+            klass.__setattr__ = __setattr__
+            # wait until after __init__() to check for wanted attributes..
+            inst = klass(*args, **kwargs)
+            assert hasattr(inst, "client"), f"decorator wants {__klass__}.client"
+            assert hasattr(inst, "topic"), f"decorator wants {__klass__}.topic"
+            # ..and finally replace the attribute-setter with our patch:
+            inst._publisher_init = True
+
+            return inst
+        return wrapper
+    return decorator
+
+
+def receiver(conversion_functions=dict()):
+    """let a class converts a subset of its attributes before setting.
+
+    (class decorator)
+    
+    `conversion_functions` dictionary with callables per attribute name
+    """
+    def __setattr__(self, name, value):
+        if name in self._attr_converters:
+            value = self._attr_converters[name](value)
+        object.__setattr__(self, name, value)
+
+    def decorator(klass):
+        @wraps(klass)
+        def wrapper(*args, **kwargs):
+            klass._attr_converters = dict()
+            klass.__setattr__ = __setattr__
+            inst = klass(*args, **kwargs)
+
+            return inst
+        return wrapper
+    return decorator
 
 
 def _build_header():
@@ -317,7 +375,7 @@ def on_disconnect(client, self):
 _NOT_INIT = object()
 
 
-class MqttClient(MqttConn):
+class MqttClient(ConnectorBase):
 
     sched_cmds   = deque([_NOT_INIT], maxlen=None)
     server_state = deque([_NOT_INIT], maxlen=1)

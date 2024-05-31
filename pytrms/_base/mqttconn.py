@@ -13,7 +13,7 @@ import paho.mqtt.client as mqtt
 
 log = logging.getLogger()
 
-__all__ = ['MqttConn']
+__all__ = ['ConnectorBase']
 
 
 def _on_connect(client, self, flags, rc):
@@ -38,7 +38,7 @@ def _on_disconnect(client, self):
     log.debug(f"[{self}] has disconnected")
 
 
-class MqttConn(ABC):
+class ConnectorBase(ABC):
 
     @property
     @abstractmethod
