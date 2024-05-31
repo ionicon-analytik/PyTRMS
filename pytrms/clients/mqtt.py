@@ -31,7 +31,7 @@ def publisher(to_publish=list()):
         if (self._publisher_init
           and name in self._published_attrs
           and self.client.is_connected):
-            payload = str(getattr(self, name))
+            payload = getattr(self, name)
             self.client.publish(self.topic + "/" + name, payload, 2, retain=True)
 
     def decorator(klass):
