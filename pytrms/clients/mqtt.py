@@ -11,12 +11,12 @@ from datetime import datetime as dt
 
 import paho.mqtt.client as mqtt
 
-from .._base.mqttconn import ConnectorBase
+from .._base.mqttclient import MqttClientBase
 
 
 log = logging.getLogger()
 
-__all__ = ['MqttClient', 'ConnectorBase', 'publisher', 'receiver']
+__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver']
 
 
 def publisher(to_publish=list()):
@@ -94,7 +94,7 @@ def _build_data_element(value, unit="-"):
         "Unit": str(unit),
     }
     if isinstance(value, bool):
-        # Note: True is also instance of int!
+        # Note: True is also instance of int! Therefore, we must check it first:
         elm.update({"Datatype": "BOOL", "Value": str(value).lower()})
     elif isinstance(value, str):
         elm.update({"Datatype": "STRING"})
@@ -144,12 +144,16 @@ def _parse_data_element(elm):
     # make a Python object of a DataElement
     if elm["Datatype"] == "BOOL":
         return bool(elm["Value"])
-    elif elm["Datatype"] == "STRING":
-        return str(elm["Value"])
-    elif elm["Datatype"] == "I32":
-        return int(elm["Value"])
     elif elm["Datatype"] == "DBL":
         return float(elm["Value"])
+    elif elm["Datatype"] == "SGL":
+        return float(elm["Value"])
+    elif elm["Datatype"] == "I32":
+        return int(elm["Value"])
+    elif elm["Datatype"] == "I16":
+        return int(elm["Value"])
+    elif elm["Datatype"] == "STRING":
+        return str(elm["Value"])
     raise ParsingError("unknown datatype: " + str(elm["Datatype"]))
 
 def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
@@ -335,10 +339,10 @@ def follow_set(client, self, msg):
             return
         self.act_values[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError as exc:
-        log.error(str(exc) + " :: " + str(msg.payload.decode()))
+        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
         raise
     except KeyError as exc:
-        log.error(str(exc))
+        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
         pass
     except ParsingError as exc:
         log.error(f"while parsing [{parID}] :: {str(exc)}")
@@ -375,7 +379,7 @@ def on_disconnect(client, self):
 _NOT_INIT = object()
 
 
-class MqttClient(ConnectorBase):
+class MqttClient(MqttClientBase):
 
     sched_cmds   = deque([_NOT_INIT], maxlen=None)
     server_state = deque([_NOT_INIT], maxlen=1)
@@ -386,8 +390,7 @@ class MqttClient(ConnectorBase):
     @property
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
-        return (True
-            and self.client.is_connected()
+        return (super().is_connected
             and self.server_state[0] is not _NOT_INIT
             and (len(self.sched_cmds) == 0 or self.sched_cmds[0] is not _NOT_INIT))
 
@@ -441,6 +444,7 @@ class MqttClient(ConnectorBase):
     def __init__(self, host='127.0.0.1'):
         # this sets up the mqtt connection with default callbacks:
         super().__init__(host, _subscriber_functions, None, None, None, on_disconnect)
+        log.debug(f"connection check ({self.is_connected}) :: {self.server_state = } / {self.sched_cmds = }");
 
     def get(self, parID):
         '''Return the last value for the given 'parID' or None if not known.'''

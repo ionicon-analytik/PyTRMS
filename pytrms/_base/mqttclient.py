@@ -10,10 +10,11 @@ from abc import ABC, abstractmethod
 
 import paho.mqtt.client as mqtt
 
+from .ioniclient import IoniClientBase
 
 log = logging.getLogger()
 
-__all__ = ['ConnectorBase']
+__all__ = ['MqttClientBase']
 
 
 def _on_connect(client, self, flags, rc):
@@ -38,7 +39,7 @@ def _on_disconnect(client, self):
     log.debug(f"[{self}] has disconnected")
 
 
-class ConnectorBase(ABC):
+class MqttClientBase(IoniClientBase):
 
     @property
     @abstractmethod
@@ -49,8 +50,7 @@ class ConnectorBase(ABC):
 
     def __init__(self, host, subscriber_functions,
             on_connect, on_subscribe, on_publish, on_disconnect):
-        # Note: circumvent (potentially sluggish) Windows DNS lookup:
-        self.host = '127.0.0.1' if host == 'localhost' else str(host)
+        super().__init__(host, port=1883)
         # configure connection...
         self.client = mqtt.Client()
         self.client.on_connect   = on_connect    if on_connect    else _on_connect
@@ -65,11 +65,14 @@ class ConnectorBase(ABC):
         # ...pass this instance to each callback...
         self.client.user_data_set(self)
         # ...and connect to the server:
-        self.connect()
+        try:
+            self.connect()
+        except TimeoutError as exc:
+            log.warn(f"{exc} (retry connecting when the Instrument is set up)")
 
     def connect(self, timeout_s=10):
-        log.info(f"[{self}] connecting to mqtt broker at {self.host}")
-        self.client.connect(self.host, 1883, 60)
+        log.info(f"[{self}] connecting to MQTT broker...")
+        self.client.connect(self.host, self.port, timeout_s)
         self.client.loop_start()  # runs in a background thread
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
@@ -86,7 +89,4 @@ class ConnectorBase(ABC):
         self.client.disconnect()
         # may be used to reset internal queues to their defaults:
         self._on_disconnect(self.client, self)
-
-    def __repr__(self):
-        return f"<{self.__class__.__name__} @ {self.host}>"
 
