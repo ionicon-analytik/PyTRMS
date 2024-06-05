@@ -19,6 +19,12 @@ log = logging.getLogger()
 __all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver']
 
 
+def _publish_with_ack(client, *args, **kwargs):
+    msg = client.publish(*args, **kwargs)
+    msg.wait_for_publish(timeout=10)
+    return msg
+
+
 def publisher(to_publish=list()):
     """let a class automatically publish a subset of attributes directly to the mqtt broker.
 
@@ -32,7 +38,8 @@ def publisher(to_publish=list()):
           and name in self._published_attrs
           and self.client.is_connected):
             payload = getattr(self, name)
-            self.client.publish(self.topic + "/" + name, payload, 2, retain=True)
+            _publish_with_ack(self.client, self.topic + "/" + name, payload, 2, retain=True)
+
 
     def decorator(klass):
         @wraps(klass)
@@ -367,15 +374,6 @@ _subscriber_functions = [fun for name, fun in list(vars().items())
     if callable(fun) and name.startswith('follow_')]
 
 
-def on_disconnect(client, self):
-    # reset internal queues to their defaults:
-    self.sched_cmds     = MqttClient.sched_cmds
-    self.server_state   = MqttClient.server_state
-    self.sf_filename    = MqttClient.sf_filename
-    self.overallcycle   = MqttClient.overallcycle
-    self.act_values     = MqttClient.act_values
-
-
 _NOT_INIT = object()
 
 
@@ -443,8 +441,18 @@ class MqttClient(MqttClientBase):
 
     def __init__(self, host='127.0.0.1'):
         # this sets up the mqtt connection with default callbacks:
-        super().__init__(host, _subscriber_functions, None, None, None, on_disconnect)
+        super().__init__(host, _subscriber_functions, None, None, None)
         log.debug(f"connection check ({self.is_connected}) :: {self.server_state = } / {self.sched_cmds = }");
+
+    def disconnect(self):
+        super().disconnect()
+        log.debug(f"[{self}] has disconnected")
+        # reset internal queues to their defaults:
+        self.sched_cmds     = MqttClient.sched_cmds
+        self.server_state   = MqttClient.server_state
+        self.sf_filename    = MqttClient.sf_filename
+        self.overallcycle   = MqttClient.overallcycle
+        self.act_values     = MqttClient.act_values
 
     def get(self, parID):
         '''Return the last value for the given 'parID' or None if not known.'''
@@ -461,7 +469,7 @@ class MqttClient(MqttClientBase):
             "Header":      _build_header(),
             "DataElement": _build_data_element(new_value, unit),
         }
-        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
+        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
 
     def filter_schedule(self, parID):
         '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
@@ -479,7 +487,7 @@ class MqttClient(MqttClientBase):
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
+        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
@@ -498,7 +506,7 @@ class MqttClient(MqttClientBase):
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return self.client.publish(topic, json.dumps(payload), qos=qos, retain=retain)
+        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''

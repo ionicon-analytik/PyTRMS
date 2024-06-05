@@ -35,9 +35,6 @@ def _on_subscribe(client, self, mid, granted_qos):
 def _on_publish(client, self, mid):
     log.debug(f"[{self}] published {mid = }")
 
-def _on_disconnect(client, self):
-    log.debug(f"[{self}] has disconnected")
-
 
 class MqttClientBase(IoniClientBase):
 
@@ -49,14 +46,21 @@ class MqttClientBase(IoniClientBase):
             and self.client.is_connected())
 
     def __init__(self, host, subscriber_functions,
-            on_connect, on_subscribe, on_publish, on_disconnect):
+            on_connect, on_subscribe, on_publish):
         super().__init__(host, port=1883)
         # configure connection...
-        self.client = mqtt.Client()
-        self.client.on_connect   = on_connect    if on_connect    else _on_connect
-        self.client.on_subscribe = on_subscribe  if on_subscribe  else _on_subscribe
-        self.client.on_publish   = on_publish    if on_publish    else _on_publish
-        self._on_disconnect      = on_disconnect if on_disconnect else _on_disconnect
+        self.client = mqtt.Client(clean_session=True)
+        # clean_session is a boolean that determines the client type. If True,
+        # the broker will remove all information about this client when it
+        # disconnects. If False, the client is a persistent client and
+        # subscription information and queued messages will be retained when the
+        # client disconnects.
+        # The clean_session argument only applies to MQTT versions v3.1.1 and v3.1.
+        # It is not accepted if the MQTT version is v5.0 - use the clean_start
+        # argument on connect() instead.
+        self.client.on_connect   = on_connect    if on_connect   is not None else _on_connect
+        self.client.on_subscribe = on_subscribe  if on_subscribe is not None else _on_subscribe
+        self.client.on_publish   = on_publish    if on_publish   is not None else _on_publish
         # ...subscribe to topics...
         self._subscriber_functions = list(subscriber_functions)
         for subscriber in self._subscriber_functions:
@@ -87,6 +91,4 @@ class MqttClientBase(IoniClientBase):
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
-        # may be used to reset internal queues to their defaults:
-        self._on_disconnect(self.client, self)
 
