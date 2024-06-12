@@ -16,7 +16,7 @@ from .._base.mqttclient import MqttClientBase
 
 log = logging.getLogger()
 
-__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver']
+__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver', 'PTR_Reaction']
 
 
 def _publish_with_ack(client, *args, **kwargs):
@@ -25,33 +25,37 @@ def _publish_with_ack(client, *args, **kwargs):
     return msg
 
 
-def publisher(to_publish=list()):
+def publisher(to_publish=list(), qos=2, retain=False):
     """let a class automatically publish a subset of attributes directly to the mqtt broker.
 
     (class-decorator)
 
-    wants the attributes .client and .topic from the sub-class.
+    wants the attributes ._client and ._topic from the sub-class.
     """
     def __setattr__(self, name, value):
         object.__setattr__(self, name, value)
         if (self._publisher_init
           and name in self._published_attrs
-          and self.client.is_connected):
+          and self._client.is_connected):
             payload = getattr(self, name)
-            _publish_with_ack(self.client, self.topic + "/" + name, payload, 2, retain=True)
+            _publish_with_ack(self._client, self._topic + "/" + name, payload,
+                    self._publish_qos, self._publish_retain)
 
 
     def decorator(klass):
         @wraps(klass)
         def wrapper(*args, **kwargs):
-            klass._publisher_init = False
+            klass._publisher_init  = False
             klass._published_attrs = list(to_publish)
+            klass._publish_qos     = int(qos)
+            klass._publish_retain  = bool(retain)
+            # replace the attribute-setter with our patch:
             klass.__setattr__ = __setattr__
-            # wait until after __init__() to check for wanted attributes..
+            # wait until after __init__() to check for wanted attributes...
             inst = klass(*args, **kwargs)
-            assert hasattr(inst, "client"), f"decorator wants {__klass__}.client"
-            assert hasattr(inst, "topic"), f"decorator wants {__klass__}.topic"
-            # ..and finally replace the attribute-setter with our patch:
+            assert hasattr(inst, "_client"), f"decorator wants {__klass__}._client"
+            assert hasattr(inst, "_topic"), f"decorator wants {__klass__}._topic"
+            # ...and let everyone know, we're set:
             inst._publisher_init = True
 
             return inst
@@ -279,6 +283,17 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
     mass_cal = mc_tup(mcal_mode, mc_masses, mc_tbins, cal_paras, segmnt_cal_pars)
 
     return rv_tup(tc_tup(*tc_cluster), intensity, mass_cal)
+
+from enum import IntEnum
+
+class PTR_Reaction(IntEnum):
+    Udrift   = 0
+    pDrift   = 1
+    Tdrift   = 2
+    E_N      = 3
+    PI_index = 4
+    TM_index = 5
+
 
 def follow_schedule(client, self, msg):
     log.debug(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
