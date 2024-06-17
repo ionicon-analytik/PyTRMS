@@ -4,8 +4,8 @@ import logging
 import json
 from functools import wraps
 from itertools import cycle, zip_longest
-from collections import deque
-from queue import Queue
+from collections import deque, namedtuple
+import queue
 from threading import Condition, RLock
 from datetime import datetime as dt
 
@@ -16,7 +16,7 @@ from .._base.mqttclient import MqttClientBase
 
 log = logging.getLogger()
 
-__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver', 'PTR_Reaction']
+__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver', 'FullCycle']
 
 
 def _publish_with_ack(client, *args, **kwargs):
@@ -185,7 +185,6 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
     @returns a tuple ('timecycle', 'intensity', 'mass_cal')
     '''
     import numpy as np
-    from collections import namedtuple
 
     tc_tup = namedtuple('timecycle',
             ['rel_cycle','abs_cycle','abs_time','rel_time', 'run', 'cpx'])
@@ -284,15 +283,30 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
 
     return rv_tup(tc_tup(*tc_cluster), intensity, mass_cal)
 
-from enum import IntEnum
 
-class PTR_Reaction(IntEnum):
-    Udrift   = 0
-    pDrift   = 1
-    Tdrift   = 2
-    E_N      = 3
-    PI_index = 4
-    TM_index = 5
+class FullCycle:
+    _bytes = b''
+    _add_data = None
+    timecycle = None
+    intensity = None
+    mass_cal = None
+
+    def __init__(self, byte_string):
+        self.timecycle, self.intensity, self.mass_cal = _parse_fullcycle(byte_string,
+                self._add_data, need_masscal=True)
+
+    @property
+    def add_data(self):
+        if self._add_data is None:
+            _parse_fullcycle(self._bytes, self._add_data)
+        return self._add_data
+
+    @property
+    def ptr_reaction(self):
+        rv = namedtuple('PTR_reaction', ['Udrift', 'pDrift', 'Tdrift', 'E_N', 'pi_index', 'tm_index'])
+        value_list = self.add_data["PTR-Reaction"]  # may raise KeyError!
+
+        return rv(*(data.value for data in value_list))
 
 
 def follow_schedule(client, self, msg):
@@ -599,20 +613,28 @@ class MqttClient(MqttClientBase):
 
         return self.overallcycle[0]
 
-    def iter_specdata(self, add_data=None, need_masscal=False):
+    def iter_specdata(self, cycle_buffer=300):
         '''Returns an iterator over the fullcycle-data as long as it is available.
 
-        Elements will be buffered up to a maximum of 300 cycles. A `queue.Full`
-        exception will be raised when the caller fails to consume the iterator!
+        Elements will be buffered up to a maximum of `cycle_buffer` cycles (default: 300).
 
+        Important: when the buffer runs full, a `queue.Full` exception will be raised!
+         Therefore, the caller should consume the iterator as soon as possible while the
+         measurement is running.
         '''
-        q = Queue(300)
-        timeout_s = 60
+        q = queue.Queue(cycle_buffer)
         topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
         qos = 2
 
         def callback(client, self, msg):
-            q.put(_parse_fullcycle(msg.payload, add_data, need_masscal), timeout_s)
+            try:
+                q.put_nowait(FullCycle(msg.payload))
+            except queue.Full:
+                # DO NOT FAIL INSIDE THE CALLBACK!
+                client.unsubscribe(topic)
+
+        if not self.is_connected:
+            raise Exception("no connection to MQTT broker")
 
         # Note: when using a simple generator function like this, the following lines
         #  will not be excecuted until the first call to `next` on the iterator!
@@ -620,17 +642,31 @@ class MqttClient(MqttClientBase):
         #  and we might miss the first cycles...
         self.client.message_callback_add(topic, callback)
         self.client.subscribe(topic, qos)
-        yield q.get()  # waiting indefinitely to run..
-        while self.is_running or not q.empty():
-            yield q.get(timeout_s)
+        yield q.get()  # (waiting indefinitely for measurement to run)
+        try:
+            while self.is_running or not q.empty():
+                # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
+                # if block is true and timeout is None, this operation goes into an
+                # uninterruptible wait on an underlying lock. This means that no exceptions
+                # can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
+                if q.full():
+                    # re-raise what we swallowed in the callback..
+                    raise queue.Full
 
-        #  ...also, when using more than one iterator, the first to finish will
-        #  unsubscribe and cause all others to stop maybe before the time!
-        #  all of this might not actually be an issue right now, but
-        # TODO :: fix this weird behaviour (can only be done by implementing the
-        #  iterator-protocol properly using a helper class)!
-        self.client.unsubscribe(topic)
-        self.client.message_callback_remove(topic)
+                if not self.is_connected:
+                    # no more data will come, so better prevent a deadlock:
+                    break
+
+                yield q.get()  # (blocks indefinitely, see above)
+
+        finally:
+            #  ...also, when using more than one iterator, the first to finish will
+            #  unsubscribe and cause all others to stop maybe before the time!
+            #  all of this might not actually be an issue right now, but
+            # TODO :: fix this weird behaviour (can only be done by implementing the
+            #  iterator-protocol properly using a helper class)!
+            self.client.unsubscribe(topic)
+            self.client.message_callback_remove(topic)
 
     iter_specdata.__doc__ += _parse_fullcycle.__doc__
 
