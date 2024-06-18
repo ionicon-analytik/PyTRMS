@@ -3,20 +3,18 @@ import time
 import logging
 import json
 from functools import wraps
-from itertools import cycle, zip_longest
+from itertools import cycle, chain, zip_longest
 from collections import deque, namedtuple
 import queue
 from threading import Condition, RLock
 from datetime import datetime as dt
-
-import paho.mqtt.client as mqtt
 
 from .._base.mqttclient import MqttClientBase
 
 
 log = logging.getLogger(__name__)
 
-__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver', 'FullCycle']
+__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver']
 
 
 def _publish_with_ack(client, *args, **kwargs):
@@ -87,6 +85,8 @@ def receiver(conversion_functions=dict()):
     return decorator
 
 
+## >>>>>>>>    adaptor functions    <<<<<<<< ##
+
 def _build_header():
     ts = dt.now()
     header = {
@@ -145,8 +145,12 @@ def _build_write_command(parID, value, future_cycle=None):
 
     return cmd
 
+
+## >>>>>>>>    parsing functions    <<<<<<<< ##
+
 class ParsingError(Exception):
     pass
+
 
 def _parse_data_element(elm):
     '''
@@ -285,32 +289,80 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
 
 
 class FullCycle:
-    _bytes = b''
-    _add_data = None
+
+    add_data = dict()
     timecycle = None
     intensity = None
     mass_cal = None
 
-    def __init__(self, byte_string):
-        self.timecycle, self.intensity, self.mass_cal = _parse_fullcycle(byte_string,
-                self._add_data, need_masscal=True)
-
-    @property
-    def add_data(self):
-        if self._add_data is None:
-            _parse_fullcycle(self._bytes, self._add_data)
-        return self._add_data
+    @staticmethod
+    def load_bytes(byte_string):
+        rv = FullCycle()
+        rv.timecycle, rv.intensity, rv.mass_cal = _parse_fullcycle(byte_string,
+            rv.add_data, need_masscal=True)
+        return rv
 
     @property
     def ptr_reaction(self):
         rv = namedtuple('PTR_reaction', ['Udrift', 'pDrift', 'Tdrift', 'E_N', 'pi_index', 'tm_index'])
-        value_list = self.add_data["PTR-Reaction"]  # may raise KeyError!
+        value_list = [data.value for data in self.add_data["PTR-Reaction"]]  # may raise KeyError!
 
-        return rv(*(data.value for data in value_list))
+        return rv(*chain(map(float, value_list[:4]), map(int, value_list[4:])))
 
+
+class CalcConzInfo:
+
+    tables = {
+        "primary-ions": list(),
+        "transmission": list(),
+    }
+
+    @staticmethod
+    def load_json(json_string):
+        pi_setting = namedtuple('PI_Setting', ['name', 'mass2multiplier'])
+        tm_setting = namedtuple('TM_Setting', ['name', 'mass2value'])
+        cc = CalcConzInfo()
+        j = json.loads(json_string)
+        delm = j["DataElement"]
+        for li in delm["Value"]["PISets"]["PiSets"]:
+            if not li["PriIonSetName"]:
+                log.info(f'loaded ({len(cc.tables["primary-ions"])}) primary-ion settings')
+                break
+
+            masses = map(float, filter(lambda x: x > 0, li["PriIonSetMasses"]))
+            values = map(float, li["PriIonSetMultiplier"])
+            cc.tables["primary-ions"].append(pi_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
+
+        for li in j["DataElement"]["Value"]["TransSets"]["Transsets"]:
+            if not li["Name"]:
+                log.info(f'loaded ({len(cc.tables["transmission"])}) transmission settings')
+                break
+
+            masses = map(float, filter(lambda x: x > 0, li["Mass"]))
+            values = map(float, li["Value"])
+            # float(li["Voltage"])  # (not used)
+            cc.tables["transmission"].append(tm_setting(str(li["Name"]), list(zip(masses, values))))
+
+        return cc
+
+
+## >>>>>>>>    callback functions    <<<<<<<< ##
+
+def follow_settings(client, self, msg):
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        return
+
+    if not self.calcconzinfo[0] is _NOT_INIT:
+        # nothing to do..
+        return
+
+    log.debug(f"updating tm-/pi-table from {msg.topic}...")
+    self.calcconzinfo.append(CalcConzInfo.load_json(msg.payload.decode('latin-1')))
+
+follow_settings.topics = ["PTR/Act/PTR_CalcConzInfo"]
 
 def follow_schedule(client, self, msg):
-    log.debug(f"received: {msg.topic} | QoS: {msg.qos} | retain? {msg.retain}")
     with follow_schedule._lock:
         if msg.topic.startswith("DataCollection"):
             if not msg.payload:
@@ -351,6 +403,9 @@ def follow_state(client, self, msg):
     log.debug(f"[{self}] new server-state: " + str(state))
     # replace the current state with the new element:
     self.server_state.append(state)
+    if state == "ACQ_Aquire":
+        # signal to the relevant thread that we need an update:
+        self.calcconzinfo.append(_NOT_INIT)
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
@@ -410,6 +465,7 @@ class MqttClient(MqttClientBase):
 
     sched_cmds   = deque([_NOT_INIT], maxlen=None)
     server_state = deque([_NOT_INIT], maxlen=1)
+    calcconzinfo = deque([_NOT_INIT], maxlen=1)
     sf_filename  = deque([""],        maxlen=1)
     overallcycle = deque([0],         maxlen=1)
     act_values   = dict()
@@ -479,6 +535,7 @@ class MqttClient(MqttClientBase):
         # reset internal queues to their defaults:
         self.sched_cmds     = MqttClient.sched_cmds
         self.server_state   = MqttClient.server_state
+        self.calcconzinfo   = MqttClient.calcconzinfo
         self.sf_filename    = MqttClient.sf_filename
         self.overallcycle   = MqttClient.overallcycle
         self.act_values     = MqttClient.act_values
@@ -486,6 +543,21 @@ class MqttClient(MqttClientBase):
     def get(self, parID):
         '''Return the last value for the given 'parID' or None if not known.'''
         return self.act_values.get(parID)
+
+    def get_table(self, table_name):
+        timeout_s = 10
+        started_at = time.monotonic()
+        try:
+            while time.monotonic() < started_at + timeout_s:
+                # confirm change of state:
+                if not self.calcconzinfo[0] is _NOT_INIT:
+                    return self.calcconzinfo[0].tables[table_name]
+    
+                time.sleep(10e-3)
+            else:
+                raise TimeoutError(f"[{self}] unable to retrieve calc-conz-info from PTR server");
+        except KeyError as exc:
+            raise KeyError(str(exc) + f", possible values: {list(CalcConzInfo.tables.keys())}")
 
     def set(self, parID, new_value, unit='-'):
         '''Set a 'new_value' to 'parID' in the DataCollection.'''
@@ -628,9 +700,11 @@ class MqttClient(MqttClientBase):
 
         def callback(client, self, msg):
             try:
-                q.put_nowait(FullCycle(msg.payload))
+                q.put_nowait(FullCycle.load_bytes(msg.payload))
+                log.debug(f"received fullcycle, buffer at ({q.qsize()}/{q.maxsize})")
             except queue.Full:
                 # DO NOT FAIL INSIDE THE CALLBACK!
+                log.error(f"iter_specdata({q.maxsize}): fullcycle buffer overrun!")
                 client.unsubscribe(topic)
 
         if not self.is_connected:
