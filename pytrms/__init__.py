@@ -48,7 +48,7 @@ def connect(host=None, method='webapi'):
     #try:
     #    inst = Instrument(_buffer)
     #except PTRConnectionError as exc:
-    #    log = logging.getLogger('pytrms')
+    #    log = logging.getLogger(__package__)
     #    log.error(exc)
     #    raise
 

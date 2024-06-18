@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 
 from .ioniclient import IoniClientBase
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 __all__ = ['MqttClientBase']
 

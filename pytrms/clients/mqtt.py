@@ -14,7 +14,7 @@ import paho.mqtt.client as mqtt
 from .._base.mqttclient import MqttClientBase
 
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 __all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver', 'FullCycle']
 

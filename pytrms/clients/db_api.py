@@ -7,7 +7,7 @@ import requests
 
 from . import database_url
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 # TODO :: sowas waer auch ganz cool: die DBAPI bietes sich geradezu an,
 #  da mehr object-oriented zu arbeiten:

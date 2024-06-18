@@ -8,7 +8,7 @@ from functools import wraps
 
 __all__ = ['Step', 'Composition']
 
-log = logging.getLogger()
+log = logging.getLogger(__name__)
 
 
 def coroutine(func):
