@@ -174,13 +174,17 @@ def _parse_data_element(elm):
 def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
     '''Parses 'timecycle', 'intensity', 'mass_cal' and 'add_data' from bytes.
 
+    Important: the byteorder of the parsed arrays will be big-endian! This
+     may be aligned if needed with the `.byteswap()`-method on the array,
+     but is not automatically performed to avoid any extra copy.
+
     @params
     - add_data a dictionary that will be filled or `None` if not needed
     - need_masscal if `False`, the 'mass_cal' returned will be None
 
-    Parsing the AddData-cluster is much slower than parsing the intensity-array.
-    Therefore, this may be skipped to improve performance, but is necessary if
-    the 'mass_cal' is needed:
+    Parsing the AddData-cluster is much slower than parsing the intensity-array!
+     This may be skipped to improve performance, but is necessary for loading
+     the 'mass_cal' anyway. For orientation:
 
     performance (on a Intel Core i5, 8th Gen Ubuntu Linux):
       < 2 ms  when `add_data=None, need_masscal=False` (default)
@@ -310,28 +314,28 @@ class FullCycle:
         return rv(*chain(map(float, value_list[:4]), map(int, value_list[4:])))
 
 
+table_setting = namedtuple('mass_mapping', ['name', 'mass2value'])
+
 class CalcConzInfo:
 
     tables = {
-        "primary-ions": list(),
+        "primary_ions": list(),
         "transmission": list(),
     }
 
     @staticmethod
     def load_json(json_string):
-        pi_setting = namedtuple('PI_Setting', ['name', 'mass2multiplier'])
-        tm_setting = namedtuple('TM_Setting', ['name', 'mass2value'])
         cc = CalcConzInfo()
         j = json.loads(json_string)
         delm = j["DataElement"]
         for li in delm["Value"]["PISets"]["PiSets"]:
             if not li["PriIonSetName"]:
-                log.info(f'loaded ({len(cc.tables["primary-ions"])}) primary-ion settings')
+                log.info(f'loaded ({len(cc.tables["primary_ions"])}) primary-ion settings')
                 break
 
             masses = map(float, filter(lambda x: x > 0, li["PriIonSetMasses"]))
             values = map(float, li["PriIonSetMultiplier"])
-            cc.tables["primary-ions"].append(pi_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
+            cc.tables["primary_ions"].append(table_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
 
         for li in j["DataElement"]["Value"]["TransSets"]["Transsets"]:
             if not li["Name"]:
@@ -341,7 +345,7 @@ class CalcConzInfo:
             masses = map(float, filter(lambda x: x > 0, li["Mass"]))
             values = map(float, li["Value"])
             # float(li["Voltage"])  # (not used)
-            cc.tables["transmission"].append(tm_setting(str(li["Name"]), list(zip(masses, values))))
+            cc.tables["transmission"].append(table_setting(str(li["Name"]), list(zip(masses, values))))
 
         return cc
 
