@@ -443,9 +443,9 @@ class IoniconModbus(IoniClientBase):
         _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
         
         register = _read(addr, n_bytes)
-        if register is None and self.is_open:
+        if register is None and self.mc.is_open:
             raise IOError(f"unable to read ({n_bytes}) registers at [{addr}] from connection")
-        elif register is None and not self.is_open:
+        elif register is None and not self.mc.is_open:
             raise IOError("trying to read from closed Modbus-connection")
 
         return _unpack(register, c_format)
