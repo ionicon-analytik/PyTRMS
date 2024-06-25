@@ -14,75 +14,7 @@ from .._base.mqttclient import MqttClientBase
 
 log = logging.getLogger(__name__)
 
-__all__ = ['MqttClient', 'MqttClientBase', 'publisher', 'receiver']
-
-
-def _publish_with_ack(client, *args, **kwargs):
-    msg = client.publish(*args, **kwargs)
-    msg.wait_for_publish(timeout=10)
-    return msg
-
-
-def publisher(to_publish=list(), qos=2, retain=False):
-    """let a class automatically publish a subset of attributes directly to the mqtt broker.
-
-    (class-decorator)
-
-    wants the attributes ._client and ._topic from the sub-class.
-    """
-    def __setattr__(self, name, value):
-        object.__setattr__(self, name, value)
-        if (self._publisher_init
-          and name in self._published_attrs
-          and self._client.is_connected):
-            payload = getattr(self, name)
-            _publish_with_ack(self._client, self._topic + "/" + name, payload,
-                    self._publish_qos, self._publish_retain)
-
-
-    def decorator(klass):
-        @wraps(klass)
-        def wrapper(*args, **kwargs):
-            klass._publisher_init  = False
-            klass._published_attrs = list(to_publish)
-            klass._publish_qos     = int(qos)
-            klass._publish_retain  = bool(retain)
-            # replace the attribute-setter with our patch:
-            klass.__setattr__ = __setattr__
-            # wait until after __init__() to check for wanted attributes...
-            inst = klass(*args, **kwargs)
-            assert hasattr(inst, "_client"), f"decorator wants {__klass__}._client"
-            assert hasattr(inst, "_topic"), f"decorator wants {__klass__}._topic"
-            # ...and let everyone know, we're set:
-            inst._publisher_init = True
-
-            return inst
-        return wrapper
-    return decorator
-
-
-def receiver(conversion_functions=dict()):
-    """let a class converts a subset of its attributes before setting.
-
-    (class decorator)
-    
-    `conversion_functions` dictionary with callables per attribute name
-    """
-    def __setattr__(self, name, value):
-        if name in self._attr_converters:
-            value = self._attr_converters[name](value)
-        object.__setattr__(self, name, value)
-
-    def decorator(klass):
-        @wraps(klass)
-        def wrapper(*args, **kwargs):
-            klass._attr_converters = dict()
-            klass.__setattr__ = __setattr__
-            inst = klass(*args, **kwargs)
-
-            return inst
-        return wrapper
-    return decorator
+__all__ = ['MqttClient', 'MqttClientBase']
 
 
 ## >>>>>>>>    adaptor functions    <<<<<<<< ##
@@ -461,6 +393,11 @@ follow_cycle.topics = ["DataCollection/Act/ACQ_SRV_OverallCycle"]
 _subscriber_functions = [fun for name, fun in list(vars().items())
     if callable(fun) and name.startswith('follow_')]
 
+
+def _publish_with_ack(client, *args, **kwargs):
+    msg = client.publish(*args, **kwargs)
+    msg.wait_for_publish(timeout=10)
+    return msg
 
 _NOT_INIT = object()
 
