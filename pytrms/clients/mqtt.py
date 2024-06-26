@@ -250,10 +250,11 @@ table_setting = namedtuple('mass_mapping', ['name', 'mass2value'])
 
 class CalcConzInfo:
 
-    tables = {
-        "primary_ions": list(),
-        "transmission": list(),
-    }
+    def __init__(self):
+        self.tables = {
+            "primary_ions": list(),
+            "transmission": list(),
+        }
 
     @staticmethod
     def load_json(json_string):
