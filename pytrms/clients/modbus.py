@@ -93,27 +93,27 @@ def _pack(value, format='>f'):
 class IoniconModbus(IoniClientBase):
 
     address = dict([
-        ('server_state',     (    0, '>f', False)),  # 0: Not ready, 1: Ready, 2: Startup
-        ('measure_state',    (    2, '>f', False)),  # 0: Not running | 1: running | 2: Just Started | 3: Just Stopped
-        ('instrument_state', (    4, '>f', False)),  # 0: Not Ok, 1: Ok, 2: Error, 3: Warning
-        ('alive_counter',    (    6, '>H', False)),  # (updated every 500 ms)
-        ('n_parameters',     ( 2000, '>H', False)),
-        ('tc_raw',           ( 4000, '>f', False)),
-        ('tc_conc',          ( 6000, '>f', False)),
-        ('n_masses',         ( 8000, '>f', False)),
-        # ('n_corr',         ( 7000, '>i', False)),  # not implemented?
-        ('tc_components',    (10000, '>f', True )),
-        ('ame_alarms',       (12000, '>f', True )),
-        ('user_number',      (13900, '>i', True )),
-        ('step_number',      (13902, '>i', True )),
-        ('run_number',       (13904, '>i', True )),
-        ('use_mean',         (13906, '>i', True )),
-        ('action_number',    (13912, '>i', True )),
-        ('ame_state',        (13914, '>i', True )),  # Running 0=Off; 1=On (not implemented!)
-        ('n_components',     (14000, '>f', True )),
-        ('component_names',  (14002, '>f', True )),
-        ('ame_mean_data',    (26000, '>f', True )),
-        ('n_ame_mean',       (26002, '>d', True )),
+        ('server_state',     (    0, '>f', True)),  # 0: Not ready, 1: Ready, 2: Startup
+        ('measure_state',    (    2, '>f', True)),  # 0: Not running | 1: running | 2: Just Started | 3: Just Stopped
+        ('instrument_state', (    4, '>f', True)),  # 0: Not Ok, 1: Ok, 2: Error, 3: Warning
+        ('alive_counter',    (    6, '>H', True)),  # (updated every 500 ms)
+        ('n_parameters',     ( 2000, '>H', True)),
+        ('tc_raw',           ( 4000, '>f', True)),
+        ('tc_conc',          ( 6000, '>f', True)),
+        ('n_masses',         ( 8000, '>f', True)),
+        # ('n_corr',         ( 7000, '>i', True)),  # not implemented?
+        ('tc_components',    (10000, '>f', True)),
+        ('ame_alarms',       (12000, '>f', True)),
+        ('user_number',      (13900, '>i', True)),
+        ('step_number',      (13902, '>i', True)),
+        ('run_number',       (13904, '>i', True)),
+        ('use_mean',         (13906, '>i', True)),
+        ('action_number',    (13912, '>i', True)),
+        ('ame_state',        (13914, '>i', True)),  # Running 0=Off; 1=On (not implemented!)
+        ('n_components',     (14000, '>f', True)),
+        ('component_names',  (14002, '>f', True)),
+        ('ame_mean_data',    (26000, '>f', True)),
+        ('n_ame_mean',       (26002, '>d', True)),
     ])
 
     @property
