@@ -340,9 +340,12 @@ def follow_state(client, self, msg):
     log.debug(f"[{self}] new server-state: " + str(state))
     # replace the current state with the new element:
     self.server_state.append(state)
-    if state == "ACQ_Aquire":
+    if state == "ACQ_Aquire":  # yes, there's a typo, plz keep it :)
         # signal to the relevant thread that we need an update:
         self.calcconzinfo.append(_NOT_INIT)
+    else:
+        # replace the current timecycle with '0' (because ioniTOF40 ain't doin' it):
+        self.overallcycle.append(0)
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
@@ -422,7 +425,7 @@ class MqttClient(MqttClientBase):
     @property
     def is_running(self):
         '''Returns `True` if IoniTOF is currently acquiring data.'''
-        return self.current_server_state == 'ACQ_Aquire'  # yes, there's still a typo :)
+        return self.current_server_state == 'ACQ_Aquire'  # yes, there's a typo, plz keep it :)
 
     @property
     def current_schedule(self):
@@ -535,12 +538,32 @@ class MqttClient(MqttClientBase):
     def schedule(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
 
-        If 'future_cycle' is actually in the past, the behaviour is defined by IoniTOF
-        (most likely the command is ignored). The current cycle should be checked before
-        and after running the schedule command to be actually in the future.
+        If 'future_cycle' is in fact in the past, the behaviour is defined by IoniTOF
+        (most likely the command is ignored). To be sure, the '.current_cycle' should
+        be checked before and after running the '.schedule' command programmatically!
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
+
+        if (future_cycle == 0 and not self.is_running):
+            # Note: ioniTOF40 doesn't handle scheduling for the 0th cycle!
+            if parID == "AME_ActionNumber":
+                # a) the action-number will trigger a script for the 0th cycle, so
+                #    we *must* be scheduling it!
+                self.write("AME_ActionNumber", new_value)
+            elif parID.startswith("AME_"):
+                # b) the AME-numbers cannot (currently) be set (i.e. written), but since
+                #    they are inserted just *before* the cycle, this will work just fine:
+                future_cycle = 1
+            else:
+                # c) in all other cases, let's assume the measurement will start soon
+                #    and dare to write immediately, skipping the schedule altogether:
+                log.info(f"writing request for cycle '0' immediately while measurement is stopped")
+                return self.write(parID, new_value)
+
+        if not future_cycle > self.current_cycle:
+            log.warn(f"attempting to schedule past cycle, hope you know what you're doing");
+            pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
 
         topic, qos, retain = "IC_Command/Write/Scheduled", 2, False
         log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
@@ -553,6 +576,7 @@ class MqttClient(MqttClientBase):
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
+        assert str(path), "filename cannot be empty!"
         # try to make sure that IoniTOF accepts the path:
         if self.host == '127.0.0.1':
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -563,10 +587,6 @@ class MqttClient(MqttClientBase):
                 log.error(f"new filename '{path}' already exists and will not be scheduled!")
                 return
 
-        # immediately check if we're not too late:
-        if not future_cycle > self.overallcycle[0]:
-            raise TimeoutError(f"while scheduling: the 'future_cycle' is already in the past")
-
         return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle)
 
     def start_measurement(self, path=None):
@@ -574,7 +594,7 @@ class MqttClient(MqttClientBase):
 
         If 'path' is not None, write to the given .h5 file.
         '''
-        if path is None:
+        if not path:
             self.write('ACQ_SRV_Start_Meas_Quick', True)
         else:
             self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
