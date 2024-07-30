@@ -304,15 +304,15 @@ def follow_schedule(client, self, msg):
         if msg.topic.startswith("DataCollection"):
             if not msg.payload:
                 log.warn("empty ACQ_SRV_Schedule payload has cleared retained topic")
-                self.sched_cmds.clear()
+                self._sched_cmds.clear()
                 return
 
             if msg.retain:
                 # Note: we either have received a message that has been
                 #  retained because of a new connection..
                 payload = json.loads(msg.payload.decode())
-                self.sched_cmds.clear()
-                self.sched_cmds.extend(payload["CMDs"])
+                self._sched_cmds.clear()
+                self._sched_cmds.extend(payload["CMDs"])
             else:
                 #  ..or the schedule as maintained by IoniTOF has changed,
                 #  which we handle ourselves below:
@@ -325,7 +325,7 @@ def follow_schedule(client, self, msg):
 
             # these are the freshly added scheduling requests:
             payload = json.loads(msg.payload.decode())
-            self.sched_cmds.extend(payload["CMDs"])
+            self._sched_cmds.extend(payload["CMDs"])
 
 follow_schedule.topics = ["DataCollection/Act/ACQ_SRV_Schedule", "IC_Command/Write/Scheduled"]
 follow_schedule._lock = RLock()
@@ -408,7 +408,7 @@ _NOT_INIT = object()
 
 class MqttClient(MqttClientBase):
 
-    sched_cmds   = deque([_NOT_INIT], maxlen=None)
+    _sched_cmds  = deque([_NOT_INIT], maxlen=None)
     server_state = deque([_NOT_INIT], maxlen=1)
     calcconzinfo = deque([_NOT_INIT], maxlen=1)
     sf_filename  = deque([""],        maxlen=1)
@@ -420,7 +420,7 @@ class MqttClient(MqttClientBase):
         '''Returns `True` if connection to IoniTOF could be established.'''
         return (super().is_connected
             and self.server_state[0] is not _NOT_INIT
-            and (len(self.sched_cmds) == 0 or self.sched_cmds[0] is not _NOT_INIT))
+            and (len(self._sched_cmds) == 0 or self._sched_cmds[0] is not _NOT_INIT))
 
     @property
     def is_running(self):
@@ -437,7 +437,7 @@ class MqttClient(MqttClientBase):
         filter_fun = lambda cmd: float(cmd["Schedule"]) > current_cycle
         sorted_fun = lambda cmd: float(cmd["Schedule"])
 
-        return sorted(filter(filter_fun, self.sched_cmds), key=sorted_fun)
+        return sorted(filter(filter_fun, self._sched_cmds), key=sorted_fun)
 
     @property
     def current_server_state(self):
@@ -472,13 +472,13 @@ class MqttClient(MqttClientBase):
     def __init__(self, host='127.0.0.1'):
         # this sets up the mqtt connection with default callbacks:
         super().__init__(host, _subscriber_functions, None, None, None)
-        log.debug(f"connection check ({self.is_connected}) :: {self.server_state = } / {self.sched_cmds = }");
+        log.debug(f"connection check ({self.is_connected}) :: {self.server_state = } / {self._sched_cmds = }");
 
     def disconnect(self):
         super().disconnect()
         log.debug(f"[{self}] has disconnected")
         # reset internal queues to their defaults:
-        self.sched_cmds     = MqttClient.sched_cmds
+        self._sched_cmds    = MqttClient._sched_cmds
         self.server_state   = MqttClient.server_state
         self.calcconzinfo   = MqttClient.calcconzinfo
         self.sf_filename    = MqttClient.sf_filename
