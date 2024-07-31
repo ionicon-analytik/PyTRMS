@@ -290,12 +290,12 @@ def follow_settings(client, self, msg):
         # empty payload will clear a retained topic
         return
 
-    if not self.calcconzinfo[0] is _NOT_INIT:
+    if not self._calcconzinfo[0] is _NOT_INIT:
         # nothing to do..
         return
 
     log.debug(f"updating tm-/pi-table from {msg.topic}...")
-    self.calcconzinfo.append(CalcConzInfo.load_json(msg.payload.decode('latin-1')))
+    self._calcconzinfo.append(CalcConzInfo.load_json(msg.payload.decode('latin-1')))
 
 follow_settings.topics = ["PTR/Act/PTR_CalcConzInfo"]
 
@@ -339,13 +339,13 @@ def follow_state(client, self, msg):
     state = payload["DataElement"]["Value"]
     log.debug(f"[{self}] new server-state: " + str(state))
     # replace the current state with the new element:
-    self.server_state.append(state)
+    self._server_state.append(state)
     if state == "ACQ_Aquire":  # yes, there's a typo, plz keep it :)
         # signal to the relevant thread that we need an update:
-        self.calcconzinfo.append(_NOT_INIT)
+        self._calcconzinfo.append(_NOT_INIT)
     else:
         # replace the current timecycle with '0' (because ioniTOF40 ain't doin' it):
-        self.overallcycle.append(0)
+        self._overallcycle.append(0)
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
@@ -354,7 +354,7 @@ def follow_sourcefile(client, self, msg):
     path = payload["DataElement"]["Value"]
     log.debug(f"[{self}] new source-file: " + str(path))
     # replace the current path with the new element:
-    self.sf_filename.append(path)
+    self._sf_filename.append(path)
 
 follow_sourcefile.topics = ["DataCollection/Act/ACQ_SRV_SetFullStorageFile"]
 
@@ -389,7 +389,7 @@ def follow_cycle(client, self, msg):
     payload = json.loads(msg.payload.decode())
     current = int(payload["DataElement"]["Value"])
     # replace the current timecycle with the new element:
-    self.overallcycle.append(current)
+    self._overallcycle.append(current)
 
 follow_cycle.topics = ["DataCollection/Act/ACQ_SRV_OverallCycle"]
 
@@ -408,18 +408,18 @@ _NOT_INIT = object()
 
 class MqttClient(MqttClientBase):
 
-    _sched_cmds  = deque([_NOT_INIT], maxlen=None)
-    server_state = deque([_NOT_INIT], maxlen=1)
-    calcconzinfo = deque([_NOT_INIT], maxlen=1)
-    sf_filename  = deque([""],        maxlen=1)
-    overallcycle = deque([0],         maxlen=1)
-    act_values   = dict()
+    _sched_cmds   = deque([_NOT_INIT], maxlen=None)
+    _server_state = deque([_NOT_INIT], maxlen=1)
+    _calcconzinfo = deque([_NOT_INIT], maxlen=1)
+    _sf_filename  = deque([""],        maxlen=1)
+    _overallcycle = deque([0],         maxlen=1)
+    act_values    = dict()
     
     @property
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
         return (super().is_connected
-            and self.server_state[0] is not _NOT_INIT
+            and self._server_state[0] is not _NOT_INIT
             and (len(self._sched_cmds) == 0 or self._sched_cmds[0] is not _NOT_INIT))
 
     @property
@@ -433,7 +433,7 @@ class MqttClient(MqttClientBase):
         if not self.is_connected:
             return []
 
-        current_cycle = self.overallcycle[0]
+        current_cycle = self._overallcycle[0]
         filter_fun = lambda cmd: float(cmd["Schedule"]) > current_cycle
         sorted_fun = lambda cmd: float(cmd["Schedule"])
 
@@ -451,7 +451,7 @@ class MqttClient(MqttClientBase):
         or "<unknown>" if there's no connection to IoniTOF.
         '''
         if self.is_connected:
-            return self.server_state[0]
+            return self._server_state[0]
         return "<unknown>"
 
     @property
@@ -460,30 +460,30 @@ class MqttClient(MqttClientBase):
         
         May be an empty string if no sourcefile has yet been set.
         '''
-        return self.sf_filename[0]
+        return self._sf_filename[0]
 
     @property
     def current_cycle(self):
         '''Returns the current 'AbsCycle' (/'OverallCycle').'''
         if self.is_connected:
-            return self.overallcycle[0]
+            return self._overallcycle[0]
         return 0
 
     def __init__(self, host='127.0.0.1'):
         # this sets up the mqtt connection with default callbacks:
         super().__init__(host, _subscriber_functions, None, None, None)
-        log.debug(f"connection check ({self.is_connected}) :: {self.server_state = } / {self._sched_cmds = }");
+        log.debug(f"connection check ({self.is_connected}) :: {self._server_state = } / {self._sched_cmds = }");
 
     def disconnect(self):
         super().disconnect()
         log.debug(f"[{self}] has disconnected")
         # reset internal queues to their defaults:
-        self._sched_cmds    = MqttClient._sched_cmds
-        self.server_state   = MqttClient.server_state
-        self.calcconzinfo   = MqttClient.calcconzinfo
-        self.sf_filename    = MqttClient.sf_filename
-        self.overallcycle   = MqttClient.overallcycle
-        self.act_values     = MqttClient.act_values
+        self._sched_cmds   = MqttClient._sched_cmds
+        self._server_state = MqttClient._server_state
+        self._calcconzinfo = MqttClient._calcconzinfo
+        self._sf_filename  = MqttClient._sf_filename
+        self._overallcycle = MqttClient._overallcycle
+        self.act_values    = MqttClient.act_values
 
     def get(self, parID):
         '''Return the last value for the given 'parID' or None if not known.'''
@@ -495,8 +495,8 @@ class MqttClient(MqttClientBase):
         try:
             while time.monotonic() < started_at + timeout_s:
                 # confirm change of state:
-                if not self.calcconzinfo[0] is _NOT_INIT:
-                    return self.calcconzinfo[0].tables[table_name]
+                if not self._calcconzinfo[0] is _NOT_INIT:
+                    return self._calcconzinfo[0].tables[table_name]
     
                 time.sleep(10e-3)
             else:
@@ -613,7 +613,7 @@ class MqttClient(MqttClientBase):
         '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None and in the future, schedule the stop command.'''
-        if future_cycle is None or not future_cycle > self.overallcycle[0]:
+        if future_cycle is None or not future_cycle > self._overallcycle[0]:
             self.write('ACQ_SRV_Stop_Meas', True)
         else:
             self.schedule('ACQ_SRV_Stop_Meas', True, future_cycle)
@@ -639,13 +639,13 @@ class MqttClient(MqttClientBase):
         Returns the actual current cycle.
         '''
         while self.is_running:
-            if self.overallcycle[0] >= int(cycle):
+            if self._overallcycle[0] >= int(cycle):
                 break
             time.sleep(10e-3)
         else:
             return 0
 
-        return self.overallcycle[0]
+        return self._overallcycle[0]
 
     def iter_specdata(self, cycle_buffer=300):
         '''Returns an iterator over the fullcycle-data as long as it is available.
