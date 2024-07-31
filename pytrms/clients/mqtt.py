@@ -341,11 +341,8 @@ def follow_state(client, self, msg):
     # replace the current state with the new element:
     self._server_state.append(state)
     if state == "ACQ_Aquire":  # yes, there's a typo, plz keep it :)
-        # signal to the relevant thread that we need an update:
-        self._calcconzinfo.append(_NOT_INIT)
-    else:
-        # replace the current timecycle with '0' (because ioniTOF40 ain't doin' it):
-        self._overallcycle.append(0)
+        self._calcconzinfo.append(_NOT_INIT)  # invalidate
+        # Note: this signals to the relevant thread that we need an update
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
@@ -465,7 +462,7 @@ class MqttClient(MqttClientBase):
     @property
     def current_cycle(self):
         '''Returns the current 'AbsCycle' (/'OverallCycle').'''
-        if self.is_connected:
+        if self.is_running:
             return self._overallcycle[0]
         return 0
 
@@ -558,7 +555,7 @@ class MqttClient(MqttClientBase):
             else:
                 # c) in all other cases, let's assume the measurement will start soon
                 #    and dare to write immediately, skipping the schedule altogether:
-                log.info(f"writing request for cycle '0' immediately while measurement is stopped")
+                log.debug(f"immediately writing {parID = } @ cycle '0' (measurement stopped)")
                 return self.write(parID, new_value)
 
         if not future_cycle > self.current_cycle:
