@@ -1,14 +1,11 @@
 _version = '0.2.1'
 
-import logging
+import logging as _logging
 
-logging.TRACE = 0  # overwrites logging.NOTSET
-logging.basicConfig(format='[%(levelname)s]\t%(message)s')
+_logging.TRACE = 0  # overwrites logging.NOTSET
+_logging.basicConfig(format='[%(levelname)s]\t%(message)s')
 
-
-from .plotting import plot_marker
-
-__all__ = ['plot_marker', 'load', 'connect']
+__all__ = ['load', 'connect']
 
 
 def load(path):
@@ -22,7 +19,6 @@ def load(path):
     reader = IoniTOFReader(path)
 
     return OfflineMeasurement(reader)
-
 
 def connect(host=None, method='webapi'):
     '''Connect a client to a running measurement server.
@@ -43,15 +39,4 @@ def connect(host=None, method='webapi'):
         return IoniconModbus(host)
 
     raise NotImplementedError(str(method))
-
-
-    #try:
-    #    inst = Instrument(_buffer)
-    #except PTRConnectionError as exc:
-    #    log = logging.getLogger(__package__)
-    #    log.error(exc)
-    #    raise
-
-    #return inst
-
 

@@ -1,0 +1,731 @@
+ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Unit	MBTCP Address
+0	none	none	none						
+1	FC_PC	DBL	RW	PTR	PTR_Write		PC Inlet	mbar	
+2	FC_FC inlet	DBL	RW	PTR	PTR_Write		FC Inlet	sccm	
+3	FC_O2	DBL	RW	PTR	PTR_Write		FC O2	sccm	
+4	FC_NO	DBL	RW	PTR	PTR_Write		FC NO	sccm	
+5	FC_Dilution	DBL	RW	PTR	PTR_Write		FC Dilution		
+6	FC_Krypton	DBL	RW	PTR	PTR_Write		FC Krypton		
+7	FC_Xenon	DBL	RW	PTR	PTR_Write		FC Xenon		
+8	FC_Purge	DBL	RW	PTR	PTR_Write		FC Purge		
+9	FC_fastGC	DBL	RW	PTR	PTR_Write		FC fastGC		
+10	FC_Custom_1	DBL	RW	PTR	PTR_Write		FC Custom 1		
+11	FC_Custom_2	DBL	RW	PTR	PTR_Write		FC Custom 2		
+12	FC_Custom_3	DBL	RW	PTR	PTR_Write		FC Custom 3		
+13	FC_Custom_4	DBL	RW	PTR	PTR_Write		FC Custom 4		
+14	FC_Custom_5	DBL	RW	PTR	PTR_Write		FC Custom 5		
+15	FC_Custom_6	DBL	RW	PTR	PTR_Write		FC Custom 6		
+16	FC_Custom_7	DBL	RW	PTR	PTR_Write		FC Custom 7		
+17	FC_Custom_8	DBL	RW	PTR	PTR_Write		FC Custom 8		
+18	FC_Custom_9	DBL	RW	PTR	PTR_Write		FC Custom 9		
+19	FC_Custom_10	DBL	RW	PTR	PTR_Write		FC Custom 10		
+20	Flowmeter_1(Addr8)	DBL	R	PTR	PTR_Write		Flowmeter 1		
+21	Flowmeter_2	DBL	R	PTR	PTR_Write		Flowmeter 2		
+22	Flowmeter_3	DBL	R	PTR	PTR_Write		Flowmeter 3		
+23	Flowmeter_4	DBL	R	PTR	PTR_Write		Flowmeter 4		
+24	Flowmeter_5 	DBL	R	PTR	PTR_Write		Flowmeter 5		
+25	Flowmeter_6	DBL	R	PTR	PTR_Write		Flowmeter 6		
+26	Flowmeter_7	DBL	R	PTR	PTR_Write		Flowmeter 7		
+27	Flowmeter_8	DBL	R	PTR	PTR_Write		Flowmeter 8		
+28	Flowmeter_9	DBL	R	PTR	PTR_Write		Flowmeter 9		
+29	Flowmeter_10	DBL	R	PTR	PTR_Write		Flowmeter 10		
+30	DPS_Us	DBL	RW	PTR	PTR_Write		Us	V	
+31	DPS_Uso	DBL	RW	PTR	PTR_Write		Uso	V	
+32	DPS_Udrift	DBL	RW	PTR	PTR_Write		Udrift	V	
+33	DPS_Udx_Uql	DBL	RW	PTR	PTR_Write		Udx Uql	V	
+34	DPS_Unc	DBL	RW	PTR	PTR_Write		Unc	V	
+35	DPS_Ihc	DBL	RW	PTR	PTR_Write		Ihc	mA	
+36	DPS_IhcOnOff	BOOL	RW	PTR	PTR_Write		Ihc On/Off		
+37	DPS_Pdrift_Ctrl_OnOff		RW	PTR	PTR_Write		p-drift controlled		
+38	DPS_Pdrift_Ctrl_Val		RW	PTR	PTR_Write		p-drift ctrl Value  		
+39	SourceValve		RW	PTR	PTR_Write		Source Valve		
+40	PrimionIdx		RW	PTR	PTR_Write		Prim Ion Idx		
+41	E/N	DBL	R				E/N	Td	
+42	FC_H2O	DBL	R	PTR	PTR_Write		FC H2O	sccm	
+43	SmartGAS1_Conc	DBL	R	PTR			Conz1 SG		
+44	SmartGAS2_Conc	DBL	R	PTR			Conz2 SG		
+45	SmartGAS3_Conc	DBL	R	PTR			Conz3 SG		
+46	DPS_IncMeasure			PTR			Inc		
+47	DPS_Uhc	DBL	RW	PTR	PTR_Write		Uhc	V	
+48	Spare_48 								
+49	Spare_49 								
+50	Press_Foreline	DBL	R	PTR			p-Foreline	mbar	
+51	Press_Drift	DBL	R	PTR			p-Drift	mbar	
+52	Press_Skimmer	DBL	R	PTR			p-Skimmer	mbar	
+53	Press_Toflens	DBL	R	PTR			p-TofLens	mbar	
+54	Press_TOF_Detect	DBL	R	PTR			p-TOF	mbar	
+55	Spare_55 								
+56	Spare_56 								
+57	Spare_57 								
+58	Spare_58 								
+59	Spare_59 								
+60	T-Drift	DBL	R	PTR	PTR_Write		T-Drift	°C	
+61	T-Inlet	DBL	R	PTR	PTR_Write		T-Inlet	°C	
+62	T-Opt1	DBL	R	PTR	PTR_Write		T-Opt1	°C	
+63	T-Opt2	DBL	R	PTR	PTR_Write		T-Opt2	°C	
+64	Spare_64 								
+65	Spare_65 								
+66	Spare_66 								
+67	Spare_67 								
+68	Spare_68 								
+69	Spare_69 								
+70	MPV_1			PTR	PTR_Write		MPValve1		
+71	MPV_2			PTR	PTR_Write		MPValve2		
+72	MPV_3			PTR	PTR_Write		MPValve3		
+73	DPS_Uf	DBL	RW	PTR	PTR_Write		Uf	V	
+74	DPS_U1	DBL	RW	PTR	PTR_Write		UF1	V	
+75	DPS_U2	DBL	RW	PTR	PTR_Write		UF2	V	
+76	Spare_76 								
+77	Spare_77 								
+78	Spare_78 								
+79	Spare_79 								
+80	OP_Mode	I32	RW	PTR	PTR_Write		OP Mode		
+81	ProportionalValve	DBL	RW	PTR	PTR_Write		Proportional Valve	%	
+82	DPS_Us_Neg	DBL	RW	PTR	PTR_Write		Us	V	
+83	DPS_Uso_Neg	DBL	RW	PTR	PTR_Write		Uso	V	
+84	DPS_Udrift_Neg	DBL	RW	PTR	PTR_Write		UDrift	V	
+85	DPS_Uf_Neg	DBL	RW	PTR	PTR_Write		Uf	V	
+86	DPS_U1_Neg	DBL	RW	PTR	PTR_Write		UF1	V	
+87	DPS_U2_Neg	DBL	RW	PTR	PTR_Write		UF2	V	
+88	DPS_Ihc_Neg	DBL	RW	PTR	PTR_Write		Ihc	mA	
+89	DPS_Uhc_Neg	DBL	RW	PTR	PTR_Write		Ihc	V	
+90	AI1	DBL	R	PTR			AI1		
+91	AI2	DBL	R	PTR			AI2		
+92	AI3	DBL	R	PTR			AI3		
+93	AI4	DBL	R	PTR			AI4		
+94	AI5	DBL	R	PTR			AI5		
+95	AI6	DBL	R	PTR			AI6		
+96	AI7	DBL	R	PTR			AI7		
+97	AI8	DBL	R	PTR			AI8		
+98	AI9	DBL	R	PTR			AI9		
+99	AI10	DBL	R	PTR			AI10		
+100	AI11	DBL	R	PTR			AI11		
+101	AI12	DBL	R	PTR			AI12		
+102	AI13	DBL	R	PTR			AI13		
+103	AI14	DBL	R	PTR			AI14		
+104	AI15	DBL	R	PTR			AI15		
+105	AI16	DBL	R	PTR			AI16		
+106	DI1	BOOL	R	PTR			DI1		
+107	DI2	BOOL	R	PTR			DI2		
+108	DI3	BOOL	R	PTR			DI3		
+109	DI4	BOOL	R	PTR			DI4		
+110	DI5	BOOL	R	PTR			DI5		
+111	DI6	BOOL	R	PTR			DI6		
+112	DI7	BOOL	R	PTR			DI7		
+113	DI8	BOOL	R	PTR			DI8		
+114	DI9	BOOL	R	PTR			DI9		
+115	DI10	BOOL	R	PTR			DI10		
+116	DI11	BOOL	R	PTR			DI11		
+117	DI12	BOOL	R	PTR			DI12		
+118	DI13	BOOL	R	PTR			DI13		
+119	DI14	BOOL	R	PTR			DI14		
+120	DI15	BOOL	R	PTR			DI15		
+121	DI16	BOOL	R	PTR			DI16		
+122	AO1	DBL	RW	PTR	PTR_Write		AO1		
+123	AO2	DBL	RW	PTR	PTR_Write		AO2		
+124	AO3	DBL	RW	PTR	PTR_Write		AO3		
+125	AO4	DBL	RW	PTR	PTR_Write		AO4		
+126	AO5	DBL	RW	PTR	PTR_Write		AO5		
+127	AO6	DBL	RW	PTR	PTR_Write		AO6		
+128	AO7	DBL	RW	PTR	PTR_Write		AO7		
+129	AO8	DBL	RW	PTR	PTR_Write		AO8		
+130	AO9	DBL	RW	PTR	PTR_Write		AO9		
+131	AO10	DBL	RW	PTR	PTR_Write		AO10		
+132	AO11	DBL	RW	PTR	PTR_Write		AO11		
+133	AO12	DBL	RW	PTR	PTR_Write		AO12		
+134	AO13	DBL	RW	PTR	PTR_Write		AO13		
+135	AO14	DBL	RW	PTR	PTR_Write		AO14		
+136	AO15	DBL	RW	PTR	PTR_Write		AO15		
+137	AO16	DBL	RW	PTR	PTR_Write		AO16		
+138	DO1	BOOL	RW	PTR	PTR_Write		DO1		
+139	DO2	BOOL	RW	PTR	PTR_Write		DO2		
+140	DO3	BOOL	RW	PTR	PTR_Write		DO3		
+141	DO4	BOOL	RW	PTR	PTR_Write		DO4		
+142	DO5	BOOL	RW	PTR	PTR_Write		DO5		
+143	DO6	BOOL	RW	PTR	PTR_Write		DO6		
+144	DO7	BOOL	RW	PTR	PTR_Write		DO7		
+145	DO8	BOOL	RW	PTR	PTR_Write		DO8		
+146	DO9	BOOL	RW	PTR	PTR_Write		DO9		
+147	DO10	BOOL	RW	PTR	PTR_Write		DO10		
+148	DO11	BOOL	RW	PTR	PTR_Write		DO11		
+149	DO12	BOOL	RW	PTR	PTR_Write		DO12		
+150	DO13	BOOL	RW	PTR	PTR_Write		DO13		
+151	DO14	BOOL	RW	PTR	PTR_Write		DO14		
+152	DO15	BOOL	RW	PTR	PTR_Write		DO15		
+153	DO16	BOOL	RW	PTR	PTR_Write		DO16		
+154	ACQstatus_Bool	BOOL	R	DataCollection		TOF_QUAD_Common\BOOL_MeasureState	Acq Active		
+155	TransmissionVoltage								
+156	TransmissionIdx	I32	RW	PTR	PTR_Write				
+157	TDC_PowerOnOff	BOOL	RW	PTR			TDC Power		
+158	Spare_158 								
+159	Spare_159 								
+160	TPS_Lens1	DBL	RW	TPS	TOFSupply_Write		Lens1	V	
+161	TPS_Lens2	DBL	RW	TPS	TOFSupply_Write		Lens2	V	
+162	TPS_Lens3	DBL	RW	TPS	TOFSupply_Write		Lens3	V	
+163	TPS_Lens4	DBL	RW	TPS	TOFSupply_Write		Lens4	V	
+164	TPS_Lens5	DBL	RW	TPS	TOFSupply_Write		Lens5	V	
+165	TPS_Lens6	DBL	RW	TPS	TOFSupply_Write		Lens6	V	
+166	TPS_Lens7	DBL	RW	TPS	TOFSupply_Write		Lens7	V	
+167	TPS_Push_L	DBL	RW	TPS	TOFSupply_Write		Push Low	V	
+168	TPS_Push_H	DBL	RW	TPS	TOFSupply_Write		Push High	V	
+169	TPS_Pull_L	DBL	RW	TPS	TOFSupply_Write		Pull Low	V	
+170	TPS_Pull_H	DBL	RW	TPS	TOFSupply_Write		Pull High	V	
+171	TPS_Grid	DBL	RW	TPS	TOFSupply_Write		Grid	V	
+172	TPS_Cage	DBL	RW	TPS	TOFSupply_Write		Cage	V	
+173	TPS_Refl_Grid	DBL	RW	TPS	TOFSupply_Write		Refl Grid	V	
+174	TPS_Refl_Back	DBL	RW	TPS	TOFSupply_Write		Refl Back	V	
+175	TPS_MCP_F	DBL	RW	TPS	TOFSupply_Write		MCP front	V	
+176	TPS_MCP_B	DBL	RW	TPS	TOFSupply_Write		MCP back	V	
+177	TPS_Hex1Enabled	BOOL	RW	TPS	TOFSupply_Write		Hex1 En		
+178	TPS_Hex1Ampl	DBL	RW	TPS	TOFSupply_Write		Hex1 Amplitude		
+179	TPS_Hex1Offset	DBL	RW	TPS	TOFSupply_Write		Hex1 Offset		
+180	TPS_Hex1spare			TPS	TOFSupply_Write				
+181	TPS_Hex2Enabled	BOOL	RW	TPS	TOFSupply_Write		Hex2 En		
+182	TPS_Hex2Ampl	DBL	RW	TPS	TOFSupply_Write		Hex2 Amplitude		
+183	TPS_Hex2Offset	DBL	RW	TPS	TOFSupply_Write		Hex2 Offset		
+184	TPS_Hex2Spare			TPS	TOFSupply_Write				
+185	TPS_FC1	DBL	RW	TPS	TOFSupply_Write				
+186	TPS_FC2	DBL	RW	TPS	TOFSupply_Write				
+187	TPS_FC3	DBL	RW	TPS	TOFSupply_Write				
+188	TPS_FC4	DBL	RW	TPS	TOFSupply_Write				
+189	TPS_Press1	DBL	R	TPS	TOFSupply_Write				
+190	TPS_Press2	DBL	R	TPS	TOFSupply_Write				
+191	TPS_Press3	DBL	R	TPS	TOFSupply_Write				
+192	TPS_Filename			TPS	TOFSupply_Write				
+193	TPS_AllOn	BOOL	RW	TPS	TOFSupply_Write				
+194	TPS_DLG_TuneMCP		W	TPS	TOFSupply_Write				
+195	TPS_DLG_ConditionMCP		W	TPS	TOFSupply_Write				
+196	TPS_DLG_SoftStartMCP		W	TPS	TOFSupply_Write				
+197	Spare_197 								
+198	Spare_198 								
+199	Spare_199 								
+200	Turbo1_Rotspeed	DBL	R	PTR			TP1 Rotspeed	Hz	
+201	Turbo1_Current	DBL	R	PTR			TP1 Current	A	
+202	Turbo1_Temp1	DBL	R	PTR			TP1 Temp1	°C	
+203	Turbo1_Temp2	DBL	R	PTR			TP1 Temp2	°C	
+204	Turbo2_Rotspeed	DBL	R	PTR			TP2 Rotspeed	Hz	
+205	Turbo2_Current	DBL	R	PTR			TP2 Current	A	
+206	Turbo2_Temp1	DBL	R	PTR			TP2 Temp1	°C	
+207	Turbo2_Temp2	DBL	R	PTR			TP2 Temp2	°C	
+208	Turbo3_Rotspeed	DBL	R	PTR			TP3 Rotspeed	Hz	
+209	Turbo3_Current	DBL	R	PTR			TP3 Current	A	
+210	Turbo3_Temp1	DBL	R	PTR			TP3 Temp1	°C	
+211	Turbo3_Temp2	DBL	R	PTR			TP3 Temp2	°C	
+212	Turbo4_Rotspeed	DBL	R	PTR			TP4 Rotspeed	Hz	
+213	Turbo4_Current	DBL	R	PTR			TP4 Current	A	
+214	Turbo4_Temp1	DBL	R	PTR			TP4 Temp1	°C	
+215	Turbo4_Temp2	DBL	R	PTR			TP4 Temp2	°C	
+216	Turbo1_Power	BOOL	RW	PTR	PTR_Write		TP1 Power		
+217	Turbo2_Power	BOOL	RW	PTR	PTR_Write		TP2 Power		
+218	Turbo3_Power	BOOL	RW	PTR	PTR_Write		TP3 Power		
+219	Turbo4_Power	BOOL	RW	PTR	PTR_Write		TP4 Power		
+220	Spare_220								
+221	Spare_221								
+222	Spare_222								
+223	Spare_223								
+224	Spare_224								
+225	Spare_225								
+226	Spare_226								
+227	Spare_227								
+228	Spare_228								
+229	Spare_229								
+230	Spare_230								
+231	Spare_231								
+232	IoniRF_1_U_Offset	DBL	RW	PTR					
+233	IoniRF_1_U_DCDC	DBL	RW	PTR					
+234	IoniRF_1_U_DCDCen	BOOL	RW	PTR					
+235	IoniRF_1_U_LogicEn	BOOL	RW	PTR					
+236	IoniRF_2_U_Offset	DBL	RW	PTR					
+237	IoniRF_2_U_DCDC	DBL	RW	PTR					
+238	IoniRF_2_U_DCDCen	BOOL	RW	PTR					
+239	IoniRF_2_U_LogicEn	BOOL	RW	PTR					
+240	IoniRF_3_U_Offset	DBL	RW	PTR					
+241	IoniRF_3_U_DCDC	DBL	RW	PTR					
+242	IoniRF_3_U_DCDCen	BOOL	RW	PTR					
+243	IoniRF_3_U_LogicEn	BOOL	RW	PTR					
+244	IoniFunnel_1_U_offset	DBL	RW	PTR					
+245	IoniFunnel_2_U_offset	DBL	RW	PTR					
+246	IoniFunnel_3_U_offset	DBL	RW	PTR					
+247	IoniFunnel_1_U_DCD	DBL	RW	PTR					
+248	IoniFunnel_2_U_DCD	DBL	RW	PTR					
+249	IoniFunnel_3_U_DCD	DBL	RW	PTR					
+250	IoniFunnel_1_DCDCen	BOOL	RW	PTR					
+251	IoniFunnel_2_DCDCen	BOOL	RW	PTR					
+252	IoniFunnel_3_DCDCen	BOOL	RW	PTR					
+253	IoniFunnel_1_LogicEn	BOOL	RW	PTR					
+254	IoniFunnel_2_LogicEn	BOOL	RW	PTR					
+255	IoniFunnel_3_LogicEn	BOOL	RW	PTR					
+256	IoniFunnel_1_CurrProg	DBL	RW	PTR					
+257	IoniFunnel_2_CurrProg	DBL	RW	PTR					
+258	IoniFunnel_3_CurrProg	DBL	RW	PTR					
+259	IoniFunnel_1_Sampler	DBL	RW	PTR					
+260	IoniFunnel_2_Sampler	DBL	RW	PTR					
+261	IoniFunnel_3_Sampler	DBL	RW	PTR					
+262	IoniFunnel_1_FunnelOut	DBL	RW	PTR					
+263	IoniFunnel_2_FunnelOut	DBL	RW	PTR					
+264	IoniFunnel_3_FunnelOut	DBL	RW	PTR					
+265	IoniFunnel_1_En_Funnel	BOOL	RW	PTR					
+266	IoniFunnel_2_En_Funnel	BOOL	RW	PTR					
+267	IoniFunnel_3_En_Funnel	BOOL	RW	PTR					
+268	IntFunnelOnOff	BOOL	RW	PTR					
+269	Spare_269 								
+270	TPS_I-Push L	DBL	R	TPS			I-Push Low	mA	
+271	TPS_I-Push H	DBL	R	TPS			I-Push High	mA	
+272	TPS_I-Pull L	DBL	R	TPS			I-Pull Low	mA	
+273	TPS_I-Pull H	DBL	R	TPS			I-Pull High	mA	
+274	TPS_I-Grid	DBL	R	TPS			I-Grid	µA	
+275	TPS_I-Cage	DBL	R	TPS			I-Cage	µA	
+276	TPS_I-Refl. Grid	DBL	R	TPS			I-Refl Grid	µA	
+277	TPS_I-Refl. Back	DBL	R	TPS			I-Refl Back	µA	
+278	TPS_I-MCP F	DBL	R	TPS			I-MCP Front	µA	
+279	TPS_I-MCP B	DBL	R	TPS			I-MCP Back	µA	
+280	TPS_LensesEn	BOOL	R	TPS			Lenses On		
+281	TPS_Push_L_En	BOOL	R	TPS			Push Low On		
+282	TPS_Push_H_En	BOOL	R	TPS			Push High On		
+283	TPS_Pull_L_En	BOOL	R	TPS			Pull Low On		
+284	TPS_Pull_H_En	BOOL	R	TPS			Pull High On		
+285	TPS_Grid_En	BOOL	R	TPS			Grid On		
+286	TPS_Cage_En	BOOL	R	TPS			Cage On		
+287	TPS_ReflGrid_En	BOOL	R	TPS			Refl Grid On		
+288	TPS_ReflBack_En	BOOL	R	TPS			Refl Back On		
+289	TPS_MCP_F_En	BOOL	R	TPS			MCP Front On		
+290	TPS_MCP_B_En	BOOL	R	TPS			MCP Back On		
+291	TPS_SetFullFile	STRING	RW	TPS					
+292	Spare_292 								
+293	Spare_293 								
+294	Spare_294 								
+295	Spare_295 								
+296	Spare_296 								
+297	Spare_297 								
+298	Spare_298 								
+299	Spare_299 								
+300	EmptyID								
+301	GC1_Runtime	DBL	RW	PTR			GC Runtime		
+302	GC1_ColTemp	DBL	R	PTR			GC Col Temp		
+303	GC1_CaseTemp	DBL	R	PTR			GC Case Temp		
+304	GC1_HeatingPower	DBL	RW	PTR			GC Heat Power		
+305	GC1_CarrierFlow	DBL	RW	PTR			GC Carrier Flow		
+306	Spare306								
+307	Spare307								
+308	Spare308								
+309	Spare309								
+310	Spare310								
+311	GC1_CMD	DBL	RW	PTR					
+312	GC1_Mode	DBL	RW	PTR			GC Mode		
+313	GC1_TempSet	DBL	RW	PTR			GC Temp Set		
+314	GC1_InjectTimeSet	DBL	RW	PTR			GC Injecttime Set		
+315	GC1_MeasureTimeSet	DBL	RW	PTR			GC Measuretime Set		
+316	GC1_FC4GCset	DBL	RW	PTR			GC FC set		
+317	GC2_Enable	BOOL	RW	PTR			GC2 Enable		
+318	GC2_StartRamp	BOOL	RW	PTR			GC2 Start Ramp		
+319	GC2_StartConstantTemperature	BOOL	RW	PTR			GC2 Start Temp		
+320	GC2_InjectTime	DBL	RW	PTR			GC2 Inject Time Set		
+321	GC2_ConstantTemperature	DBL	RW	PTR			GC2 Temp Set		
+322	GC2_FC	DBL	RW	PTR			FC GC		
+323	GC2_FC_Makeup	DBL	RW	PTR			FC FastGC Makeup		
+324	Spare324								
+325	Spare325								
+326	Spare326								
+327	Spare327								
+328	Spare328								
+329	Spare329								
+330	EC_Hex_OnOff	BOOL	RW	PTR			Hex On		
+331	EC_Hex_Frequency	DBL	RW	PTR			Hex Freq	Mhz	
+332	EC_Hex_Amplitude	DBL	RW	PTR			Hex Ampl		
+333	EC_Hex_Offset	DBL	RW	PTR			Hex Offset	V	
+334	EC_Hex_OffsPositive	DBL	RW	PTR			Hex Offset Pol		
+335	EC_Funnel_OnOff	BOOL	RW	PTR			Funnel On		
+336	EC_Funnel_Frequency	DBL	RW	PTR			Funnel Freq	Mhz	
+337	EC_Funnel_Amplitude	DBL	RW	PTR			Funnel Ampl		
+338	EC_Funnel_U1	DBL	RW	PTR			Funnel U1	V	
+339	EC_Funnel_U2	DBL	RW	PTR			Funnel U2	V	
+340	EC_TemperatureValue	DBL	RW	PTR					
+341	EC_TemperatureMode	DBL	RW	PTR					
+342	EC_TemperaturePID	DBL	RW	PTR					
+343	Spare343								
+344	ACQ_SRV_Schedule_Clear	BOOL	W	DataCollection					
+345	ACQ_SRV_Schedule	STRUCT	R	DataCollection					
+346	ACQ_SRV_PeakTableFile	STRING	RW	DataCollection					
+347	ACQ_SRV_PeakCenters	ARRAY of DBL	R	DataCollection					
+348	ACQ_SRV_PeakNames	ARRAY of Strings	R	DataCollection					
+349	ACQ_SRV_SpecFitFunction	U8	RW	DataCollection			Spec FitFunction		
+350	ACQ_SRV_SpecTime_ms	DBL	RW	DataCollection			Spec Duration	ms	
+351	ACQ_SRV_ExtractTime	DBL	RW	DataCollection			Extractiontime	µs	
+352	ACQ_SRV_MaxFlighttime	DBL	RW	DataCollection			Max Flighttime	µs	
+353	ACQ_SRV_ExpectMRange	DBL	R	DataCollection			Exp Massrange	amu	
+354	ACQ_SRV_MassCal_a	DBL	RW	DataCollection			MassCal a		
+355	ACQ_SRV_MassCal_b	DBL	RW	DataCollection			MassCal b		
+356	ACQ_SRV_NumberOfTimeBins	DBL	RW	DataCollection			Nr of Tbins		
+357	ACQ_SRV_AutoCalOnOff	DBL	RW	DataCollection			Autocal On		
+358	ACQ_SRV_AutoCalPeriod_sec	DBL	RW	DataCollection			Autocal Periode	s	
+359	Spare359								
+360	EC_RFSup_Frequency	DBL	RW	PTR				Mhz	
+361	EC_RFSup_Amplitude-1	DBL	RW	PTR					
+362	EC_RFSup_Amplitude-2	DBL	RW	PTR					
+363	EC_RFSup_Amplitude-3	DBL	RW	PTR					
+364	EC_RFSup_Phase-2	DBL	RW	PTR					
+365	EC_RFSup_Phase-3	DBL	RW	PTR					
+366	EC_RFSup_E_Over_N	DBL	R	PTR					
+367	EC_RFSup_PresetIdx	DBL	RW	PTR					
+368	Spare368								
+369	Spare369								
+370	EC_Hex_PresetIdx	DBL	RW	PTR					
+371	EC_FC_PresetIdx	DBL	RW	PTR					
+372	EC_Xtras_AO_PresetIdx	DBL	RW	PTR					
+373	EC_Xtras_DO_PresetIdx	DBL	RW	PTR					
+374	Spare374								
+375	Spare375								
+376	Spare376								
+377	Spare377								
+378	Spare378								
+379	Spare379								
+380	Spare380								
+381	Spare381								
+382	Spare382								
+383	Spare383								
+384	Capno5_CurrentCO2	DBL	R	PTR			CO2		
+385	Capno5_BreathDetected	DBL	R	PTR			Breath Detected		
+386	Capno5_RespirationRate	DBL	R	PTR			Respiration Rate		
+387	Capno5_EndTidalCO2	DBL	R	PTR			Endtidal CO2		
+388	Capno5_InspiredCO2	DBL	R	PTR			Inspired CO2		
+389	Capno5_CurrentCO2_raw	DBL	R	PTR			CO2 raw		
+390	Capno5_Start CO2 WaveformMode	DBL	R	PTR					
+391	Capno5_StartCO2/O2 Waveform	DBL	R	PTR					
+392	Capno5_Zero	DBL	R	PTR					
+393	Capno5_StopContinousMode	DBL	R	PTR					
+394	Capno5_ResetNoBreathDetectedFlag	DBL	R	PTR					
+395	Capno5_Reset	DBL	RW	PTR					
+396	Spare396								
+397	Spare397								
+398	Spare398								
+399	Spare399								
+400	ADDON_DO1	BOOL	RW	ADDON			Add. DO1		
+401	ADDON_DO2	BOOL	RW	ADDON			Add. DO2		
+402	ADDON_DO3	BOOL	RW	ADDON			Add. DO3		
+403	ADDON_DO4	BOOL	RW	ADDON			Add. DO4		
+404	ADDON_DO5	BOOL	RW	ADDON			Add. DO5		
+405	ADDON_DO6	BOOL	RW	ADDON			Add. DO6		
+406	ADDON_DO7	BOOL	RW	ADDON			Add. DO7		
+407	ADDON_DO8	BOOL	RW	ADDON			Add. DO8		
+408	ADDON_DO9	BOOL	RW	ADDON			Add. DO9		
+409	ADDON_DO10	BOOL	RW	ADDON			Add. DO10		
+410	ADDON_DO11	BOOL	RW	ADDON			Add. DO11		
+411	ADDON_DO12	BOOL	RW	ADDON			Add. DO12		
+412	ADDON_AO1	DBL	RW	ADDON			Add. AO1		
+413	ADDON_AO2	DBL	RW	ADDON			Add. AO2		
+414	ADDON_AO3	DBL	RW	ADDON			Add. AO3		
+415	ADDON_AO4	DBL	RW	ADDON			Add. AO4		
+416	ADDON_AO5	DBL	RW	ADDON			Add. AO5		
+417	ADDON_AO6	DBL	RW	ADDON			Add. AO6		
+418	ADDON_AO7	DBL	RW	ADDON			Add. AO7		
+419	ADDON_AO8	DBL	RW	ADDON			Add. AO8		
+420	ADDON_AO9	DBL	RW	ADDON			Add. AO9		
+421	ADDON_AO10	DBL	RW	ADDON			Add. AO10		
+422	ADDON_AO11	DBL	RW	ADDON			Add. AO11		
+423	ADDON_AO12	DBL	RW	ADDON			Add. AO12		
+424	ADDON_Temp1	DBL	RW	ADDON			Add. Temp1		
+425	ADDON_Temp2	DBL	RW	ADDON			Add. Temp2		
+426	ADDON_Temp3	DBL	RW	ADDON			Add. Temp3		
+427	ADDON_Temp4	DBL	RW	ADDON			Add. Temp4		
+428	ADDON_Temp5	DBL	RW	ADDON			Add. Temp5		
+429	ADDON_Temp6	DBL	RW	ADDON			Add. Temp6		
+430	ADDON_Temp7	DBL	RW	ADDON			Add. Temp7		
+431	ADDON_Temp8	DBL	RW	ADDON			Add. Temp8		
+432	ADDON_PCFC1	DBL	RW	ADDON			Add. PC/FC 1		
+433	ADDON_PCFC2	DBL	RW	ADDON			Add. PC/FC 2		
+434	ADDON_PCFC3	DBL	RW	ADDON			Add. PC/FC 3		
+435	ADDON_PCFC4	DBL	RW	ADDON			Add. PC/FC 4		
+436	ADDON_PCFC5	DBL	RW	ADDON			Add. PC/FC 5		
+437	ADDON_PCFC6	DBL	RW	ADDON			Add. PC/FC 6		
+438	ADDON_PCFC7	DBL	RW	ADDON			Add. PC/FC 7		
+439	ADDON_PCFC8	DBL	RW	ADDON			Add. PC/FC 8		
+440	ADDON_LFC1	DBL	RW	ADDON			Add. LFC 1		
+441	ADDON_LFC2	DBL	RW	ADDON			Add. LFC 2		
+442	ADDON_LFC3	DBL	RW	ADDON			Add. LFC 3		
+443	ADDON_LFC4	DBL	RW	ADDON			Add. LFC 4		
+444	ADDON_LFC5	DBL	RW	ADDON			Add. LFC 5		
+445	ADDON_LFC6	DBL	RW	ADDON			Add. LFC 6		
+446	ADDON_LFC7	DBL	RW	ADDON			Add. LFC 7		
+447	ADDON_LFC8	DBL	RW	ADDON			Add. LFC 8		
+448	ADDON_MPV1	DBL	RW	ADDON			Add. MPV 1		
+449	ADDON_MPV2	DBL	RW	ADDON			Add. MPV 2		
+450	ADDON_MPV3	DBL	RW	ADDON			Add. MPV 3		
+451	ADDON_MPV4	DBL	RW	ADDON			Add. MPV 4		
+452	Spare452								
+453	Spare453								
+454	Spare454								
+455	Spare455								
+456	Spare456								
+457	Spare457								
+458	Spare458								
+459	Spare459								
+460	Q1_CIgas	DBL	RW	PTR					
+461	Q1_In	DBL	RW	PTR					
+462	Q1_Out	DBL	RW	PTR					
+463	Q2_CIgas	DBL	RW	PTR					
+464	Q2_In	DBL	RW	PTR					
+465	Q2_Out	DBL	RW	PTR					
+466	Q3_CIgas	DBL	RW	PTR					
+467	Q3_In	DBL	RW	PTR					
+468	Q3_Out	DBL	RW	PTR					
+469	FC_Cust11	DBL	RW	PTR					
+470	FC_Cust12	DBL	RW	PTR					
+471	FC_Cust13	DBL	RW	PTR					
+472	FC_Cust14	DBL	RW	PTR					
+473	FC_Cust15	DBL	RW	PTR					
+474	FC_Cust16	DBL	RW	PTR					
+475	FC_Cust17	DBL	RW	PTR					
+476	FC_Cust18	DBL	RW	PTR					
+477	FC_Cust19	DBL	RW	PTR					
+478	FC_Cust20	DBL	RW	PTR					
+479	FC_Cust21	DBL	RW	PTR					
+480	PTR_Source_Us	DBL	RW	PTR			Us	V	
+481	PTR_Source_Usd	DBL	RW	PTR			Usd	V	
+482	PTR_Source_Uso	DBL	RW	PTR			Uso	V	
+483	PTR_DCS_Uinlet	DBL	RW	PTR			Uinlet	V	
+484	PTR_DCS_Utex	DBL	RW	PTR			Utex	V	
+485	PTR_DCS_Udrift	DBL	RW	PTR			Udrift	V	
+486	PTR_DCS_Ufunnel	DBL	RW	PTR			Ufunnel	V	
+487	PTR_DCS_U1_ring	DBL	RW	PTR			U1 ring	V	
+488	PTR_DCS_U2_ring	DBL	RW	PTR			U2 ring	V	
+489	PTR_Source_PresetIdx	DBL	RW	PTR					
+490	PTR_DCS_Preset_Idx	DBL	RW	PTR					
+491	PTR_Source_Is	DBL	RW	PTR			Is	mA	
+492	PTR_Source_Isd	DBL	RW	PTR			Isd	mA	
+493	PTR_Source_Iso	DBL	RW	PTR			Iso	mA	
+494	Spare494								
+495	Spare495								
+496	Spare496								
+497	Spare497								
+498	Spare498								
+499	DLG_ACQ_SRV_Mobility		W				Mobility Dialog		
+500	XtrasOutDescription								
+501	XtrasInDescription								
+502	PrimaryIonSets								
+503	SmartGas1								
+504	SmartGas2								
+505	SmartGas3								
+506	SmartGas4								
+507	PTR_Presets								
+508	Temp_Drift_Para								
+509	Temp_Inlet_Para								
+510	Temp_Opt1_Para								
+511	Temp_Opt2_Para								
+512	Transmission								
+513	AfterStartUpAction								
+514	GC1_Ramp								
+515	GC2_Ramp								
+516	iTOFsupRF1								
+517	iTOFsupRF2								
+518	iTOFsupHEX1								
+519	iTOFsupHEX2								
+520	PTRpreset[0]								
+521	PTRpreset[1]								
+522	PTRpreset[2]								
+523	PTRpreset[3]								
+524	PTRpreset[4]								
+525	PTRpreset[5]								
+526	PTRpreset[6]								
+527	PTRpreset[7]								
+528	PTRpreset[8]								
+529	PTRpreset[9]								
+530	PTRpreset_Name								
+531	PTRpreset_PI_Index								
+532	PTRpreset_DPS_PCU								
+533	PTRpreset_MixSet								
+534	PTRpreset_FCs								
+535	PTRpreset_Temps								
+536	PTRpreset_AOs								
+537	PTRpreset_DOs								
+538	PTRpreset_MPV								
+539	PTRpreset_Funnel								
+540	PTRpreset_Trans								
+541	ACQ_AI_Mean								
+542	ACQ_AI_Max								
+543	ACQ_AI_Min								
+544	ACQ_SRV_FineMassCal	BOOL	W	DataCollection	DataCollection_Write				
+545	ACQ_SRV_DLG_LogBook								
+546	ACQ_SRV_SaveCalibration								
+547	ACQ_SRV_DLG_RebootRestart								
+548	ACQ_SRV_ChangeFlightPara								
+549	ACQ_SRV_ADC_Write_PeakFilter								
+550	ACQ_SRV_Write_AutoCalSet								
+551	ACQ_SRV_Open_Settings								
+552	ACQ_SRV_Save_Settings								
+553	ACQ_SRV_Edit_Settings								
+554	DLG_ACQ_SRV_Peaktable_Overview								
+555	ACQ_SRV_SetFullStorageFile	STRING	W	DataCollection	DataCollection_Write				
+556	ACQ_SRV_Start_Meas_Quick	BOOL	W	DataCollection	DataCollection_Write				
+557	ACQ_SRV_Start_Meas_Record	STRING	W	DataCollection	DataCollection_Write				
+558	ACQ_SRV_Start_Meas_Auto	STRING	W	DataCollection	DataCollection_Write				
+559	ACQ_SRV_Stop_Meas	BOOL	W	DataCollection	DataCollection_Write				
+560	ACQ_SRV_Load_Peaktable								
+561	DLG_ACQ_SRV_Edit_Peaktable								
+562	ACQ_SRV_Load_Calibration								
+563	DLG_ACQ_SRV_Pref_Window								
+564	ACQ_SRV_Write_MassCalibration								
+565	ACQ_SRV_Show_FP								
+566	ACQ_SRV_Hide_FP								
+567	ACQ_SRV_Reconnect								
+568	ACQ_SRV_Disconnect								
+569	ACQ_SRV_Close_No_Prompt								
+570	ACQ_SRV_Close_With_Prompt								
+571	ACQ_SRV_TDC_Settings								
+572	ACQ_SRV_DI_DO_Dialoges								
+573	ACQ_SRV_CoarseMassCal	BOOL	W	DataCollection	DataCollection_Write				
+574	ACQ_SRV_ACQ_Restart	BOOL	W	DataCollection	DataCollection_Write				
+575	ACQ_SRV_ACQ_Reboot	BOOL	W	DataCollection	DataCollection_Write				
+576	ACQ_SRV_Change_Transmission								
+577	ACQ_SRV_Change_DataSaveSet								
+578	ACQ_SRV_Change_AutoCalSet								
+579	ACQ_SRV_CurrentState	STRING	R	DataCollection	DataCollection_Write				
+580	ACQ_SRV_Load_CalcTraces								
+581	ACQ_SRV_Edit_CalcTraces								
+582	ACQ_SRV_Delete_CalcTraces								
+583	AME_Run								
+584	AME_Load								
+585	AME_Start								
+586	AME_Stop								
+587	AUTO_Run	BOOL	W	Automation					
+588	AUTO_Stop	BOOL	W	Automation					
+589	AUTO_Start	BOOL	W	Automation					
+590	PLUGIN_Run								
+591	AUTO_StepNumber	I32	RW	Automation					
+592	AUTO_RunNumber	I32	RW	Automation					
+593	AUTO_UseMean	I32	RW	Automation					
+594	AUTO_StartCycleMean	I32	RW	Automation					
+595	AUTO_StopCycleMean	I32	RW	Automation					
+596	AME_ActionNumber	I32	RW	Automation					
+597	AME_UserNumber	I32	RW	Automation					
+598	AME_RecipeNumber	I32	RW	Automation					
+599	AME_StepNumber	I32	RW	Automation					
+600	AME_RunNumber	I32	RW	Automation					
+601	DLG_PTR_Edit_Settings								
+602	DLG_PTR_HW_Prefs								
+603	DLG_PTR_SW_Prefs								
+604	DLG_PTR_TurboSmall								
+605	DLG_PTR_TurboBig								
+606	DLG_PTR_SourceVoltage								
+607	DLG_PTR_IonCurrents								
+608	DLG_PTR_ForelinePressure								
+609	DLG_PTR_SkimmerPressure								
+610	DLG_PTR_TempCFG								
+611	DLG_PTR_Edit_Transmission								
+612	DLG_PTR_Edit_PrimaryIons								
+613	DLG_PTR_Edit_PC_FC_Cal								
+614	DLG_PTR_Capnostat CO2 Ctrl								
+615	DLG_PTR_Capnostat CO2 small								
+616	DLG_PTR_FGC_Control								
+617	DLG_Auto_Edit_XtrasOut								
+618	DLG_Auto_Edit_MV								
+619	DLG_Auto_Edit_PTRpresets								
+620	DLG_Auto_Edit_OptBox								
+621	DLG_Auto_Edit_FCs								
+622	DLG_Auto_Edit_MDU								
+623	DLG_Auto_Edit_Automation_Sampler								
+624	DLG_Auto_Edit_MasterAuto								
+625	DLG_Auto_AutomationStarter								
+626	DLG_RestartPLC_OS								
+627	DLG_ShutdownPLC_PC								
+628	DLG_PTR_PowerSwitches								
+629	DLG_PTR_ReleaseNotes								
+630	DLG_PTR_AfterStartupAction								
+631	DLG_PTR_About								
+632	DLG_PTR_UseCurrent_as_Preset								
+633	DLG_PTR_InletFlowMeterCtrl								
+634	DLG_PTR_InletFlowMeterCalib								
+635	DLG_PTR_Inlet_FC_Tune								
+636	PTR_Open_PTRset								
+637	PTR_Save_PTRset								
+638	PTR_SaveAs_PTRset								
+639	EC_Hex_Show								
+640	DLG_PTR_PressOV_Std								
+641	DLG_PTR_PressOV_Wiesel								
+642	Charon_ADL			Charon			Charon ADL		
+643	Charon_DIR			Charon			Charon DIR		
+644	Charon_HEPA			Charon			Charon HEPA		
+645	Charon_Denuder			Charon			Charon Denuder		
+646	Charon_VOC			Charon			Charon VOC		
+647	Charon_AnalogValve			Charon			Charon Analog Valve		
+648	Charon_TC1			Charon			Charon Temp 1		
+649	Charon_TC2			Charon			Charon Temp 2		
+650	Charon_ValveMode			Charon			Charon Valvemode		
+651	Charon_ADLPressure			Charon			Charon ADL press		
+652	Charon_DriftPressure			Charon			Charon Drift press		
+653	GPS_Lat			GPS			Lat		
+654	GPS_Lon			GPS			Lon		
+655	GPS_Alt			GPS			Alt		
+656	GPS_Speed[km/h]			GPS			Speed[km/h]		
+657	GPS_UTC			GPS			UTC time		
+658	IA_Flowmeter_Flow	DBL		PTR					
+659	IA_Flowmeter_Temp								
+660	SensSFM_OffsetTemp								
+661	SensSFM_ScaleTemp								
+662	SensSFM_Temp								
+663	SensSFM_RawFlow								
+664	SensSFM_Flow								
+665	spare665								
+666	CommonWriteCMD	STRING	W	IC_Command			CommonWriteCommand		
+667	CommonScheduledCMD	STRING	W	IC_Command			CommonScheduledCommand		
+668	spare668								
+669	spare669								
+670	FUS_SRC_IQ								
+671	FUS_SRC_US								
+672	FUS_SRC_UL								
+673	spare673								
+674	spare674								
+675	FUS_DC_UInlet								
+676	FUS_DC_U1								
+677	FUS_DC_U2								
+678	FUS_DC_UF1								
+679	FUS_DC_U4								
+680	FUS_DC_U5								
+681	FUS_DC_UF2								
+682	spare682								
+683	spare683								
+684	spare684								
+685	spare685								
+686	spare686								
+687	spare687								
+688	spare688								
+689	spare689								
+690	AUTO_StepSwitchTime1								
+691	AUTO_StepSwitchTime2								
+692	spare692								
+693	spare693								
+694	spare694								
+695	spare695								
+696	spare696								
+697	spare697								
+698	spare698								
+699	ACQ_SRV_MassCalibrationMode								
+700	ACQ_SRV_DLG_Optimize								
+701	ACQ_SRV_DLG_MonitorPeaks								
+702	QUAD_setV1								
+703	QUAD_setV2								
+704	QUAD_setV3								
+705	QUAD_setV4								
+706	QUAD_setV5								
+707	QUAD_setV6								
+708	QUAD_setV7								
+709	QUAD_setV8								
+710	QUAD_setTime								
+711	QUAD_setDatapumpMode								
+712	QUAD_setEmissionCurrent								
+713	QUAD_setDetProtection								
+714	QUAD_setIS_ActFil								
+715	QUAD_setIS_RF_Polarity								
+716	QUAD_setIS_ActParSet								
+717	QUAD_setIS_Type								
+718	QUAD_setProtectionCurrent								
+719	QUAD_setMassCalSlope								
+720	QUAD_setMassCalOffset								
+721	QUAD_setNumberCycles								
+722	QUAD_setSimulationMode								
+723	QUAD_setClearDatapumpBuffer								
+724	QUAD_setSEMonOff								
+725	QUAD_setComSEMVolt								
+726	QUAD_ShwChSetDlg								
+727	QUAD_ShwQuadSetDlg								
+728	QUAD_WriteChannelSettings								
+729	ACQ_AdjustCounter								

@@ -11,6 +11,7 @@ from itertools import tee
 
 from pyModbusTCP import client
 
+from . import _par_id_file
 from .._base.ioniclient import IoniClientBase
 
 log = logging.getLogger(__name__)
@@ -18,13 +19,10 @@ log = logging.getLogger(__name__)
 __all__ = ['IoniconModbus']
 
 
-_root = os.path.abspath(os.path.dirname(__file__))
-_par_id_list = os.path.join(_root, '..', 'data', 'par_ID_list.txt')
-
-with open(_par_id_list) as f:
+with open(_par_id_file) as f:
     it = iter(f)
-    assert next(it) == 'ID\tName\n', 'Modbus parameter file %s is corrupt!' % _par_id_list
-    _id_to_descr = {int(id_): name for id_, name in (line.strip().split('\t') for line in it)}
+    assert next(it).startswith('ID\tName'), "Modbus parameter file is corrupt: " + f.name
+    _id_to_descr = {int(id_): name for id_, name, *_ in (line.strip().split('\t') for line in it)}
 
 # look-up-table for c_structs (see docstring of struct-module for more info).
 # Note: almost *all* parameters used by IoniTOF (esp. AME) are 'float', with

@@ -1,18 +1,26 @@
 import os
 import time
-import logging
 import json
+import queue
+from collections import deque, namedtuple
+from datetime import datetime
 from functools import wraps
 from itertools import cycle, chain, zip_longest
-from collections import deque, namedtuple
-import queue
 from threading import Condition, RLock
-from datetime import datetime as dt
 
+from . import _logging
+from . import _par_id_file, enable_extended_logging
 from .._base.mqttclient import MqttClientBase
 
 
-log = logging.getLogger(__name__)
+with open(_par_id_file) as f:
+    it = iter(f)
+    assert next(it).startswith('ID\tName'), "Modbus parameter file is corrupt: " + f.name
+    assert next(it).startswith('0\tnone'),  "Modbus parameter file is corrupt: " + f.name
+    _par_id_names = {name for id_, name, *_ in (line.strip().split('\t') for line in it)}
+
+
+log = _logging.getLogger(__name__)
 
 __all__ = ['MqttClient', 'MqttClientBase']
 
@@ -20,7 +28,7 @@ __all__ = ['MqttClient', 'MqttClientBase']
 ## >>>>>>>>    adaptor functions    <<<<<<<< ##
 
 def _build_header():
-    ts = dt.now()
+    ts = datetime.now()
     header = {
         "TimeStamp": {
             "Str": ts.isoformat(),
@@ -355,7 +363,7 @@ def follow_sourcefile(client, self, msg):
 
 follow_sourcefile.topics = ["DataCollection/Act/ACQ_SRV_SetFullStorageFile"]
 
-def follow_set(client, self, msg):
+def follow_act_values(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
         return
@@ -363,9 +371,8 @@ def follow_set(client, self, msg):
     try:
         payload = json.loads(msg.payload.decode())
         *_, parID = msg.topic.split('/')
-        if parID == "PTR_CalcConzInfo":
-            return
-        self.act_values[parID] = _parse_data_element(payload["DataElement"])
+        if parID in _par_id_names:
+            self.act_values[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError as exc:
         log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
         raise
@@ -376,7 +383,7 @@ def follow_set(client, self, msg):
         log.error(f"while parsing [{parID}] :: {str(exc)}")
         pass
 
-follow_set.topics = ["DataCollection/Set/#", "Automation/Act/#", "PTR/Act/#", "TPS/Act/#"]
+follow_act_values.topics = ["Automation/Act/#", "PTR/Act/#", "TPS/Act/#"]
 
 def follow_cycle(client, self, msg):
     if not msg.payload:

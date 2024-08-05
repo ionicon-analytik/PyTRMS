@@ -1,13 +1,13 @@
 import os
 import json
 from contextlib import contextmanager
-import logging
 
 import requests
 
-from . import database_url
+from . import _logging
+from . import database_url, par_id_list_txt, enable_extended_logging
 
-log = logging.getLogger(__name__)
+log = _logging.getLogger(__name__)
 
 # TODO :: sowas waer auch ganz cool: die DBAPI bietes sich geradezu an,
 #  da mehr object-oriented zu arbeiten:
