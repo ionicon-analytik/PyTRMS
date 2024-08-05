@@ -41,12 +41,17 @@ class MqttClientBase(IoniClientBase):
     @property
     @abstractmethod
     def is_connected(self):
-        '''Returns `True` if connection to IoniTOF could be established.'''
+        '''Returns `True` if connected to the server.
+
+        Note: this property will be polled on initialization and should
+         return `True` if a connection could be established!
+        '''
         return (True
             and self.client.is_connected())
 
     def __init__(self, host, subscriber_functions,
-            on_connect, on_subscribe, on_publish):
+            on_connect, on_subscribe, on_publish, 
+            connect_timeout_s=10):
         super().__init__(host, port=1883)
         # configure connection...
         self.client = mqtt.Client(clean_session=True)
@@ -70,7 +75,7 @@ class MqttClientBase(IoniClientBase):
         self.client.user_data_set(self)
         # ...and connect to the server:
         try:
-            self.connect()
+            self.connect(connect_timeout_s)
         except TimeoutError as exc:
             log.warn(f"{exc} (retry connecting when the Instrument is set up)")
 
@@ -86,7 +91,14 @@ class MqttClientBase(IoniClientBase):
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError(f"[{self}] no connection to IoniTOF");
+            raise TimeoutError(f"[{self}] no connection to IoniTOF")
+
+    def publish_with_ack(self, *args, timeout_s=10, **kwargs):
+        # Note: this is important when publishing just before exiting the application
+        #  to ensure that all messages get through (timeout_s is set on `.__init__()`)
+        msg = self.client.publish(*args, **kwargs)
+        msg.wait_for_publish(timeout=timeout_s)
+        return msg
 
     def disconnect(self):
         self.client.loop_stop()

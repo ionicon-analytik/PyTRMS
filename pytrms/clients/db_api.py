@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import requests
 
 from . import _logging
-from . import database_url, par_id_list_txt, enable_extended_logging
+from . import database_url, enable_extended_logging
 
 log = _logging.getLogger(__name__)
 

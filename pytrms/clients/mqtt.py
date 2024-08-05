@@ -402,11 +402,6 @@ _subscriber_functions = [fun for name, fun in list(vars().items())
     if callable(fun) and name.startswith('follow_')]
 
 
-def _publish_with_ack(client, *args, **kwargs):
-    msg = client.publish(*args, **kwargs)
-    msg.wait_for_publish(timeout=10)
-    return msg
-
 _NOT_INIT = object()
 
 
@@ -519,7 +514,7 @@ class MqttClient(MqttClientBase):
             "Header":      _build_header(),
             "DataElement": _build_data_element(new_value, unit),
         }
-        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
+        return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def filter_schedule(self, parID):
         '''Returns a list with the upcoming write commands for 'parID' in ascending order.'''
@@ -537,7 +532,7 @@ class MqttClient(MqttClientBase):
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
+        return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
@@ -576,7 +571,7 @@ class MqttClient(MqttClientBase):
             "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
-        return _publish_with_ack(self.client, topic, json.dumps(payload), qos=qos, retain=retain)
+        return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
