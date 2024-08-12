@@ -114,6 +114,15 @@ class IoniconModbus(IoniClientBase):
         ('n_ame_mean',       (26002, '>d', True)),
     ])
 
+    @classmethod
+    def use_legacy_input_registers(klaas, use_input_reg = True):
+        """Read from input- instead of holding-registers (legacy method to be compatible with AME1.0)."""
+        use_holding = not use_input_reg
+        modded = dict()
+        for key, vals in klaas.address.items():
+            modded[key] = vals[0], vals[1], use_holding
+        klaas.address.update(modded)
+
     @property
     def _alive_counter(self):
         return self._read_reg(*self.address['alive_counter'])
@@ -170,13 +179,6 @@ class IoniconModbus(IoniClientBase):
         except TimeoutError as exc:
             log.warn(f"{exc} (retry connecting when the Instrument is set up)")
         self._addresses = {}
-
-    def use_all_input_registers(self):
-        """Read from input- instead of holding-registers (legacy method to be compatible with AME1.0)."""
-        modded = dict()
-        for key, vals in self.address.items():
-            modded[key] = vals[0], vals[1], False
-        self.address.update(modded)
 
     def connect(self, timeout_s=10):
         log.info(f"[{self}] connecting to Modbus server...")
