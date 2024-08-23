@@ -5,6 +5,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
+from .._base import _table_setting
+
 __all__ = ['IoniTOFReader', 'GroupNotFoundError']
 
 def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
@@ -105,6 +107,33 @@ class IoniTOFReader:
     def __init__(self, path):
         self.hf = h5py.File(path, 'r', swmr=True)
         self.filename = os.path.abspath(self.hf.filename)
+
+    table_locs = {
+        'primary_ions': '/PTR-PrimaryIons',
+        'transmission': '/PTR-Transmission',
+    }
+
+    def get_table(self, table_name):
+        try:
+            grp = self.hf.get(IoniTOFReader.table_locs[table_name])
+            assert grp is not None, "missing dataset in hdf5 file"
+        except KeyError as exc:
+            raise KeyError(str(exc) + f", possible values: {list(IoniTOFReader.table_locs.keys())}")
+
+        rv = []
+        for i, name in enumerate(s.decode('latin-1') for s in grp['Descriptions']):
+            # Note: the dataset is 10 x 2 x 10 by default, but we remove all empty rows...
+            if not len(name):
+                continue
+
+            dset = grp['Masses_Factors'][i]
+            # ...and columns:
+            filled = np.all(dset, axis=0)
+            masses = dset[0, filled]
+            values = dset[1, filled]
+            rv.append(_table_setting(name, list(zip(masses, values))))
+
+        return rv
 
     def read_addtraces(self, matches=None, index='abs_cycle'):
         """Reads all /AddTraces into a DataFrame.

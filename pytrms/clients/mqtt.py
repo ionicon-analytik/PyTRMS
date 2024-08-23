@@ -10,6 +10,7 @@ from threading import Condition, RLock
 
 from . import _logging
 from . import _par_id_file, enable_extended_logging
+from .._base import _table_setting
 from .._base.mqttclient import MqttClientBase
 
 
@@ -254,8 +255,6 @@ class FullCycle:
         return rv(*chain(map(float, value_list[:4]), map(int, value_list[4:])))
 
 
-table_setting = namedtuple('mass_mapping', ['name', 'mass2value'])
-
 class CalcConzInfo:
 
     def __init__(self):
@@ -276,7 +275,7 @@ class CalcConzInfo:
 
             masses = map(float, filter(lambda x: x > 0, li["PriIonSetMasses"]))
             values = map(float, li["PriIonSetMultiplier"])
-            cc.tables["primary_ions"].append(table_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
+            cc.tables["primary_ions"].append(_table_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
 
         for li in j["DataElement"]["Value"]["TransSets"]["Transsets"]:
             if not li["Name"]:
@@ -286,7 +285,7 @@ class CalcConzInfo:
             masses = map(float, filter(lambda x: x > 0, li["Mass"]))
             values = map(float, li["Value"])
             # float(li["Voltage"])  # (not used)
-            cc.tables["transmission"].append(table_setting(str(li["Name"]), list(zip(masses, values))))
+            cc.tables["transmission"].append(_table_setting(str(li["Name"]), list(zip(masses, values))))
 
         return cc
 
