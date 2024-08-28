@@ -105,22 +105,25 @@ class Peak:
     """
 
     def __init__(self, center, label='', formula='', parent=None, borders=(),
-                 isotopic_abundance=1.0, k_rate=2.0, multiplier=1.0):
+                 isotopic_abundance=1.0, k_rate=2.0, multiplier=1.0,
+                 resolution=1000, shift=0):
         self.center = round(float(center), ndigits=4)
         if not label:
             label = 'm{:.4f}'.format(self.center)
         self.label = str(label)
         self.formula = formula
         if isinstance(parent, Peak):
-            self.parent = parent.label
+            self.parent = str(parent.label)
         elif parent is not None:
             self.parent = str(parent)
         else:
             self.parent = ''
         self._borders = tuple(map(lambda x: round(float(x), ndigits=4), borders))
-        self.isotopic_abundance = isotopic_abundance
-        self.k_rate = k_rate
-        self.multiplier = multiplier
+        self.isotopic_abundance = float(isotopic_abundance)
+        self.k_rate = float(k_rate)
+        self.multiplier = float(multiplier)
+        self.resolution = float(resolution)
+        self.shift = float(shift)
 
     @property
     def is_unitmass(self):
@@ -152,7 +155,8 @@ class Peak:
         return self.center
 
     def __repr__(self):
-        return '<%s [%s] @ %.4f>' % (self.__class__.__name__, self.label, self.center)
+        return '<%s [%s <~ %s] @ %.4f+%.4f>' % (self.__class__.__name__,
+                self.label, self.parent, self.center, self.shift)
 
 
 class PeakTable:
@@ -275,7 +279,7 @@ class PeakTable:
     @staticmethod
     def _parse_ionipt(file):
         
-        def _make_peak(ioni_p, borders, parent=None):
+        def _make_peak(ioni_p, borders, shift, parent=None):
             return Peak(ioni_p["center"],
                 label=ioni_p["name"],
                 formula=ioni_p["ionic_isotope"],
@@ -283,16 +287,33 @@ class PeakTable:
                 borders=borders,
                 isotopic_abundance=ioni_p["isotopic_abundance"],
                 k_rate=ioni_p["k_rate"],
-                multiplier=ioni_p["multiplier"])
+                multiplier=ioni_p["multiplier"],
+                resolution=ioni_p["resolution"],
+                shift=shift)
 
         peak_list = json.load(file)
         peaks = []
         for item in peak_list:
             border_peak = item["border_peak"]
             borders = (item["low"], item["high"])
-            peaks.append(_make_peak(border_peak, borders))
-            for p in item["peak"]:
-                peaks.append(_make_peak(p, borders, border_peak["name"]))
+            shift = item["shift"]
+            parent = None
+            MODE = int(item["mode"])
+            IGNORE    = 0b00
+            INTEGRATE = 0b01
+            FIT_PEAKS = 0b10
+            if bool(MODE == IGNORE):
+                continue
+            if bool(MODE & INTEGRATE):
+                parent = _make_peak(border_peak, borders, shift)
+                peaks.append(parent)
+            if bool(MODE & FIT_PEAKS):
+                for ioni_peak in item["peak"]:
+                    if parent is None:
+                        # Note: we denote a peak w/ parent as a "fitted" peak..
+                        #  as a workaround, use the first as (its own) parent:
+                        parent = ioni_peak["name"]
+                    peaks.append(_make_peak(ioni_peak, borders, shift, parent))
 
         return PeakTable(peaks)
 
@@ -307,7 +328,7 @@ class PeakTable:
         fp.write(s)
 
     def _write_ipt(self, fp, fileversion='1.0'):
-        if fileversion != '1.0':
+        if fileversion not in ['1.0', '1.1']:
             raise NotImplementedError("Can't write .ipt version %s!" % fileversion)
 
         out = csv.writer(fp, dialect='excel-tab')
@@ -316,8 +337,10 @@ class PeakTable:
         _number_format = lambda x: '{:>10.4f}'.format(x)
         _string_format = lambda x: '{:<12s}'.format(x)
         for p in self:
-            out.writerow([_string_format(p.label)] + list(map(_number_format,
-                [p.center] + list(p.borders) + [p.multiplier, p.k_rate])))
+            columns = [p.center] + list(p.borders) + [p.multiplier, p.k_rate]
+            if float(fileversion) >= 1.1:
+                columns += [p.resolution, p.shift]
+            out.writerow([_string_format(p.label)] + list(map(_number_format, columns)))
 
     def _write_ipta(self, fp, fileversion='1.0'):
         if fileversion != '1.0':
@@ -370,7 +393,12 @@ class PeakTable:
 
     @property
     def nominals(self):
-        peaks = [peak for peak in self.peaks if peak.center == round(peak.center)]
+        peaks = [peak for peak in self.peaks if not peak.parent]
+        return PeakTable(peaks)
+
+    @property
+    def fitted(self):
+        peaks = [peak for peak in self.peaks if peak.parent]
         return PeakTable(peaks)
 
     @property
