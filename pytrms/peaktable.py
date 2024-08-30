@@ -103,11 +103,12 @@ class Peak:
     - `multiplier`:  specify a multiplier
 
     """
+    _exact_decimals = 4
 
     def __init__(self, center, label='', formula='', parent=None, borders=(),
                  isotopic_abundance=1.0, k_rate=2.0, multiplier=1.0,
                  resolution=1000, shift=0):
-        self.center = round(float(center), ndigits=4)
+        self.center = round(float(center), ndigits=Peak._exact_decimals)
         if not label:
             label = 'm{:.4f}'.format(self.center)
         self.label = str(label)
@@ -137,16 +138,10 @@ class Peak:
             return self.center - 0.5, self.center + 0.5
 
     def __lt__(self, other):
-        if hasattr(other, 'exact_mass'):
-            return self.center < other.exact_mass
-        else:
-            return self.center < other
+        return self.center < round(float(other), Peak._exact_decimals)
 
     def __eq__(self, other):
-        if hasattr(other, 'exact_mass'):
-            return self.center == other.exact_mass
-        else:
-            return self.center == other
+        return self.center == round(float(other), Peak._exact_decimals)
 
     def __hash__(self):
         return hash(str(self.center))  # + self.label)
@@ -409,31 +404,22 @@ class PeakTable:
     def mass_labels(self):
         return [peak.label for peak in self.peaks]
 
-    def get(self, center):
-        """Return the peak with `center` or None if not found."""
-        if isinstance(center, Peak):
-            center = center.center
-        try:
-            return self[self.find(center)]
-        except KeyError:
-            return None
+    def find_by_mass(self, exact_mass):
+        """Return the peak at `exact_mass` up to 4 decimal digits precision.
 
-    def find(self, center):
-        """Return the index of peak `center`. Raise KeyError if not found."""
-        if isinstance(center, Peak):
-            center = center.center
-
+        Raises KeyError if not found.
+        """
         lo, hi = 0, len(self) - 1
         while lo <= hi:
             mid = (lo + hi) // 2
-            if center == self[mid].center:
-                return mid
-            elif center > self[mid].center:
+            if self[mid] == exact_mass:
+                return self[mid]
+            elif self[mid] < exact_mass:
                 lo = mid + 1
-            elif center < self[mid].center:
+            elif self[mid] > exact_mass:
                 hi = mid - 1
 
-        raise KeyError("No such peak at %s!" % str(center))
+        raise KeyError("No such peak at %s!" % str(exact_mass))
 
     def group(self):
         groups = defaultdict(list)
