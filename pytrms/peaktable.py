@@ -387,7 +387,7 @@ class PeakTable:
         self.peaks = sorted(peaks)
 
     @property
-    def nominals(self):
+    def nominal(self):
         peaks = [peak for peak in self.peaks if not peak.parent]
         return PeakTable(peaks)
 
