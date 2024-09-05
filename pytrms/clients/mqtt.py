@@ -10,7 +10,7 @@ from threading import Condition, RLock
 
 from . import _logging
 from . import _par_id_file, enable_extended_logging
-from .._base import _table_setting
+from .._base import itype
 from .._base.mqttclient import MqttClientBase
 
 
@@ -112,7 +112,7 @@ def _parse_data_element(elm):
         return str(elm["Value"])
     raise ParsingError("unknown datatype: " + str(elm["Datatype"]))
 
-def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
+def _parse_fullcycle(byte_string, need_add_data=False):
     '''Parses 'timecycle', 'intensity', 'mass_cal' and 'add_data' from bytes.
 
     Important: the byteorder of the parsed arrays will be big-endian! This
@@ -120,29 +120,19 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
      but is not automatically performed to avoid any extra copy.
 
     @params
-    - add_data a dictionary that will be filled or `None` if not needed
-    - need_masscal if `False`, the 'mass_cal' returned will be None
+    - need_add_data if `False`, the 'mass_cal' and 'add_data' returned will be None
 
     Parsing the AddData-cluster is much slower than parsing the intensity-array!
      This may be skipped to improve performance, but is necessary for loading
      the 'mass_cal' anyway. For orientation:
 
     performance (on a Intel Core i5, 8th Gen Ubuntu Linux):
-      < 2 ms  when `add_data=None, need_masscal=False` (default)
+      < 2 ms  when `need_add_data=False` (default)
       6-7 ms  when needing to parse the AddData-cluster (else)
     
-    @returns a tuple ('timecycle', 'intensity', 'mass_cal')
+    @returns a namedtuple ('timecycle', 'intensity', 'mass_cal', 'add_data')
     '''
     import numpy as np
-
-    tc_tup = namedtuple('timecycle',
-            ['rel_cycle','abs_cycle','abs_time','rel_time', 'run', 'cpx'])
-    ad_tup = namedtuple('add_data',
-            ['value', 'name', 'unit', 'view'])
-    mc_tup = namedtuple('masscal',
-            ['mode', 'masses', 'timebins', 'cal_pars', 'cal_segs'])
-    rv_tup = namedtuple('fullcycle',
-            ['timecycle', 'intensity', 'mass_cal'])
 
     _f32 = np.dtype(np.float32).newbyteorder('>')
     _f64 = np.dtype(np.float64).newbyteorder('>')
@@ -179,15 +169,16 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
         nonlocal offset
         return rd_arr1d(dtype=_chr).tobytes().decode('latin-1').lstrip('\x00')
     
-    tc_cluster      = rd_arr1d(dtype=_f64, count=6)
+    tc_cluster      = rd_arr1d(dtype=_f64, count=4)
+    run__, cpx__    = rd_arr1d(dtype=_f64, count=2)  # (discarded)
     # SpecData #
     intensity       = rd_arr1d(dtype=_f32)
     sum_inty        = rd_arr1d(dtype=_f32)  # (discarded)
     mon_peaks       = rd_arr2d(dtype=_f32)  # (discarded)
     
-    if add_data is None and not need_masscal:
+    if not need_add_data:
         # skip costly parsing of Trace- and Add-Data cluster:
-        return rv_tup(tc_tup(*tc_cluster), intensity, None)
+        return itype.fullcycle_t(itype.timecycle_t(*tc_cluster), intensity, None, None)
 
     # TraceData #  (as yet discarded)
     tc_cluster2     = rd_arr1d(dtype=_f64, count=6)
@@ -201,6 +192,7 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
         calc_names  = rd_arr1d(dtype=_chr)
     peak_centrs     = rd_arr1d(dtype=_f32)
     # AddData #
+    add_data = dict()
     n_add_data      = rd_single()
     for i in range(n_add_data):
         grp_name    = rd_string()
@@ -214,13 +206,7 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
         view        = rd_arr1d(dtype=_chr)
         n_lv_times  = rd_single()
         offset += 16 * n_lv_times  # skipping LabVIEW timestamp
-        if add_data is None:
-            # Note: the AddData is discarded, but if the caller
-            #  needs the mass-cal then we have to do the parsing,
-            #  because of the unknown length of arrays and strings..
-            pass
-        else:
-            add_data[grp_name] = [ad_tup(*tup) for tup in zip_longest(data, descr, units, view)]
+        add_data[grp_name] = [itype.add_data_item_t(*tup) for tup in zip_longest(data, descr, units, view)]
 
     # MassCal #
     mc_masses       = rd_arr1d(dtype=_f64)
@@ -228,31 +214,9 @@ def _parse_fullcycle(byte_string, add_data=None, need_masscal=False):
     cal_paras       = rd_arr1d(dtype=_f64)
     segmnt_cal_pars = rd_arr2d(dtype=_f64)
     mcal_mode       = rd_single(dtype=_i16)
-    mass_cal = mc_tup(mcal_mode, mc_masses, mc_tbins, cal_paras, segmnt_cal_pars)
+    mass_cal = itype.masscal_t(mcal_mode, mc_masses, mc_tbins, cal_paras, segmnt_cal_pars)
 
-    return rv_tup(tc_tup(*tc_cluster), intensity, mass_cal)
-
-
-class FullCycle:
-
-    add_data = dict()
-    timecycle = None
-    intensity = None
-    mass_cal = None
-
-    @staticmethod
-    def load_bytes(byte_string):
-        rv = FullCycle()
-        rv.timecycle, rv.intensity, rv.mass_cal = _parse_fullcycle(byte_string,
-            rv.add_data, need_masscal=True)
-        return rv
-
-    @property
-    def ptr_reaction(self):
-        rv = namedtuple('PTR_reaction', ['Udrift', 'pDrift', 'Tdrift', 'E_N', 'pi_index', 'tm_index'])
-        value_list = [data.value for data in self.add_data["PTR-Reaction"]]  # may raise KeyError!
-
-        return rv(*chain(map(float, value_list[:4]), map(int, value_list[4:])))
+    return itype.fullcycle_t(itype.timecycle_t(*tc_cluster), intensity, mass_cal, add_data)
 
 
 class CalcConzInfo:
@@ -275,7 +239,7 @@ class CalcConzInfo:
 
             masses = map(float, filter(lambda x: x > 0, li["PriIonSetMasses"]))
             values = map(float, li["PriIonSetMultiplier"])
-            cc.tables["primary_ions"].append(_table_setting(str(li["PriIonSetName"]), list(zip(masses, values))))
+            cc.tables["primary_ions"].append(itype.table_setting_t(str(li["PriIonSetName"]), list(zip(masses, values))))
 
         for li in j["DataElement"]["Value"]["TransSets"]["Transsets"]:
             if not li["Name"]:
@@ -285,7 +249,7 @@ class CalcConzInfo:
             masses = map(float, filter(lambda x: x > 0, li["Mass"]))
             values = map(float, li["Value"])
             # float(li["Voltage"])  # (not used)
-            cc.tables["transmission"].append(_table_setting(str(li["Name"]), list(zip(masses, values))))
+            cc.tables["transmission"].append(itype.table_setting_t(str(li["Name"]), list(zip(masses, values))))
 
         return cc
 
@@ -660,7 +624,7 @@ class MqttClient(MqttClientBase):
 
         def callback(client, self, msg):
             try:
-                q.put_nowait(FullCycle.load_bytes(msg.payload))
+                q.put_nowait(_parse_fullcycle(msg.payload, need_add_data=True))
                 log.debug(f"received fullcycle, buffer at ({q.qsize()}/{q.maxsize})")
             except queue.Full:
                 # DO NOT FAIL INSIDE THE CALLBACK!

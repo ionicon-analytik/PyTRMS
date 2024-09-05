@@ -1,11 +1,12 @@
 import os.path
 from functools import partial, lru_cache
+from itertools import islice
 
 import h5py
 import numpy as np
 import pandas as pd
 
-from .._base import _table_setting
+from .._base import itype
 
 __all__ = ['IoniTOFReader', 'GroupNotFoundError']
 
@@ -131,7 +132,7 @@ class IoniTOFReader:
             filled = np.all(dset, axis=0)
             masses = dset[0, filled]
             values = dset[1, filled]
-            rv.append(_table_setting(name, list(zip(masses, values))))
+            rv.append(itype.table_setting_t(name, list(zip(masses, values))))
 
         return rv
 
@@ -224,8 +225,31 @@ class IoniTOFReader:
     def __len__(self):
         return self.hf['SPECdata/Intensities'].shape[0]
 
-    def __iter__(self):
-        return self.read_all(kind='conc', index='abs_cycle', force_original=False).iterrows()
+    def iter_specdata(self, start=None, stop=None):
+        has_mc_segments = False # self.hf.get('MassCal') is not None
+
+        add_data_dicts = {ad_info.split('/')[1]: self.read_addtraces(ad_info)
+            for ad_info in self._locate_datainfo()
+            if ad_info.startswith('AddTraces')}
+
+        for i in islice(range(len(self)), start, stop):
+            tc = itype.timecycle_t(*self.hf['SPECdata/Times'][i])
+            iy = self.hf['SPECdata/Intensities'][i]
+            if has_mc_segments:
+                raise NotImplementedError("new style mass-cal")
+            else:
+                mc_map = self.hf['CALdata/Mapping']
+                mc_pars = self.hf['CALdata/Spectrum'][i]
+                mc_segs = mc_pars.reshape((1, mc_pars.size))
+                mc = itype.masscal_t(0, mc_map[:, 0], mc_map[:, 1], mc_pars, mc_segs)
+            ad = dict()
+            for ad_info, ad_frame in add_data_dicts.items():
+                ad_series = ad_frame.iloc[i]
+                unit = ''
+                view = 1
+                ad[ad_info] = [itype.add_data_item_t(val, name, unit, view)
+                    for name, val in ad_series.items()]
+            yield itype.fullcycle_t(tc, iy, mc, ad)
 
     def list_file_structure(self):
         """Lists all hdf5 group- and dataset-names."""
