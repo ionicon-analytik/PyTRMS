@@ -47,6 +47,25 @@ class IoniConnect:
     def put(self, endpoint, payload):
         return self._create_object(endpoint, payload, 'put')
 
+    def iter_events(self):
+        """Follow the server-sent-events (SSE) on the DB-API."""
+        r = self.session.request('GET', self.url + "/api/events",
+                headers={'accept': 'text/event-stream'}, stream=True)
+        r.raise_for_status()
+        kv_pair = dict()
+        for line in r.iter_lines():
+            # empty newlines serve as keep-alive and end-of-entry:
+            if not line:
+                if kv_pair:
+                    yield kv_pair
+                    kv_pair = dict()
+                else:
+                    log.debug("sse: still kept alive...")
+                continue
+
+            key, val = line.decode().split(':')
+            kv_pair[key] = val.strip()
+
     def _create_object(self, endpoint, payload, method='post'):
         data = json.dumps(payload)
         r = self.session.request(method, self.url + endpoint, data=data,
@@ -84,21 +103,6 @@ class IoniConnect:
 
         timecycles = self.get(endpoint, params)
         self.current_avg_endpoint = self.post('/api/averages', timecycles)
-
-    def create_timecycle(self, rel_cycle, abs_cycle, abs_time, rel_time,
-            sourcefile_path, automation):
-        self.post('/api/times', payload={
-            "RelCycle": int(rel_cycle),
-            "AbsCycle": int(abs_cycle),
-            "AbsTime": float(abs_time),
-            "RelTime": float(rel_time),
-            "_embedded": {
-                "sourcefile": {
-                    "path": str(sourcefile_path),
-                },
-                "automation": dict(automation)
-            }
-        })
 
     def save_component_values(self, new_values):
         """
