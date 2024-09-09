@@ -609,16 +609,19 @@ class MqttClient(MqttClientBase):
 
         return self._overallcycle[0]
 
-    def iter_specdata(self, cycle_buffer=300):
+    def iter_specdata(self, timeout_s=None, buffer_size=300):
         '''Returns an iterator over the fullcycle-data as long as it is available.
 
-        Elements will be buffered up to a maximum of `cycle_buffer` cycles (default: 300).
-
-        Important: when the buffer runs full, a `queue.Full` exception will be raised!
-         Therefore, the caller should consume the iterator as soon as possible while the
-         measurement is running.
+        * This will wait up to `timeout_s` (or indefinitely if `None`) for a
+          measurement to start or raise a TimeoutError (default: None).
+        * Elements will be buffered up to a maximum of `buffer_size` cycles (default: 300).
+        * Cycles recorded prior to calling `next()` on the iterator may be missed,
+          so ideally this should be set up before any measurement is running.
+        * [Important]: When the buffer runs full, a `queue.Full` exception will be raised!
+          Therefore, the caller should consume the iterator as soon as possible while the
+          measurement is running.
         '''
-        q = queue.Queue(cycle_buffer)
+        q = queue.Queue(buffer_size)
         topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
         qos = 2
 
@@ -640,13 +643,14 @@ class MqttClient(MqttClientBase):
         #  and we might miss the first cycles...
         self.client.message_callback_add(topic, callback)
         self.client.subscribe(topic, qos)
-        yield q.get()  # (waiting indefinitely for measurement to run)
         try:
+            # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
+            #  if block is true and timeout is None, [the q.get()] operation goes into an
+            #  uninterruptible wait on an underlying lock. This means that no exceptions
+            #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
+            yield q.get(block=True, timeout=timeout_s)  # waiting for measurement to run...
+
             while self.is_running or not q.empty():
-                # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
-                # if block is true and timeout is None, this operation goes into an
-                # uninterruptible wait on an underlying lock. This means that no exceptions
-                # can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
                 if q.full():
                     # re-raise what we swallowed in the callback..
                     raise queue.Full
@@ -655,7 +659,14 @@ class MqttClient(MqttClientBase):
                     # no more data will come, so better prevent a deadlock:
                     break
 
-                yield q.get()  # (blocks indefinitely, see above)
+                try:
+                    yield q.get(block=True, timeout=1.0)  # seconds
+                except queue.Empty:
+                    continue
+
+        except queue.Empty:
+            assert timeout_s is not None, "this should never happen"
+            raise TimeoutError("no measurement running after {timeout_s} seconds")
 
         finally:
             #  ...also, when using more than one iterator, the first to finish will
