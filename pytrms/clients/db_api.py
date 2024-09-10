@@ -29,23 +29,42 @@ class IoniConnect:
         self.current_avg_endpoint = None
         self.comp_dict = dict()
 
-    def get(self, endpoint, params=None):
+    def get(self, endpoint, **kwargs):
+        return self._get_object(endpoint, **kwargs).json()
+
+    def post(self, endpoint, data, **kwargs):
+        return self._create_object(endpoint, data, 'post', **kwargs).headers.get('Location')
+
+    def put(self, endpoint, data, **kwargs):
+        return self._create_object(endpoint, data, 'put', **kwargs).headers.get('Location')
+
+    def _get_object(self, endpoint, **kwargs):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
-        if params is None:
-            params = dict()
-
-        r = self.session.get(self.url + endpoint, params=params,
-            headers={'content-type': 'application/hal+json'})
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {'content-type': 'application/hal+json'}
+        elif 'content-type' not in (k.lower() for k in kwargs['headers']):
+            kwargs['headers'].update({'content-type': 'application/hal+json'})
+        r = self.session.request('get', self.url + endpoint, **kwargs)
         r.raise_for_status()
         
-        return r.json()
+        return r
 
-    def post(self, endpoint, payload):
-        return self._create_object(endpoint, payload, 'post')
+    def _create_object(self, endpoint, data, method='post', **kwargs):
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+        if not isinstance(data, str):
+            data = json.dumps(data)
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {'content-type': 'application/hal+json'}
+        elif 'content-type' not in (k.lower() for k in kwargs['headers']):
+            kwargs['headers'].update({'content-type': 'application/hal+json'})
+        r = self.session.request(method, self.url + endpoint, data=data, **kwargs)
+        if not r.ok:
+            log.error(f"POST {endpoint}\n{data}\n\nreturned [{r.status_code}]: {r.content}")
+            r.raise_for_status()
 
-    def put(self, endpoint, payload):
-        return self._create_object(endpoint, payload, 'put')
+        return r
 
     def iter_events(self):
         """Follow the server-sent-events (SSE) on the DB-API."""
@@ -65,17 +84,6 @@ class IoniConnect:
 
             key, val = line.decode().split(':')
             kv_pair[key] = val.strip()
-
-    def _create_object(self, endpoint, payload, method='post'):
-        data = json.dumps(payload)
-        r = self.session.request(method, self.url + endpoint, data=data,
-            headers={'content-type': 'application/hal+json'})
-        if not r.ok:
-            log.error(f"POST {endpoint}\n{data}\n\n"
-                      f"returned [{r.status_code}]: {r.content}")
-            r.raise_for_status()
-
-        return r.headers.get('Location')
 
     def refresh_comp_dict(self):
         j = self.get('/api/components')
