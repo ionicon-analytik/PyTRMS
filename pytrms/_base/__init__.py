@@ -1,5 +1,8 @@
 from collections import namedtuple
 
+from .mqttclient import MqttClientBase
+from .ioniclient import IoniClientBase
+
 class itype:
 
     table_setting_t = namedtuple('mass_mapping', ['name', 'mass2value'])

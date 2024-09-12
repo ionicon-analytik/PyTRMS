@@ -1,10 +1,5 @@
 _version = '0.2.1'
 
-import logging as _logging
-
-_logging.TRACE = 0  # overwrites logging.NOTSET
-_logging.basicConfig(format='[%(levelname)s]\t%(message)s')
-
 __all__ = ['load', 'connect']
 
 

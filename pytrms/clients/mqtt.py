@@ -9,9 +9,8 @@ from itertools import cycle, chain, zip_longest
 from threading import Condition, RLock
 
 from . import _logging
-from . import _par_id_file, enable_extended_logging
-from .._base import itype
-from .._base.mqttclient import MqttClientBase
+from . import _par_id_file
+from .._base import itype, MqttClientBase
 
 
 with open(_par_id_file) as f:

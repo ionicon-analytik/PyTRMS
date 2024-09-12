@@ -1,31 +1,47 @@
 import os
 import json
-from contextlib import contextmanager
 
 import requests
 
 from . import _logging
-from . import database_url, enable_extended_logging
+from .._base import IoniClientBase
 
 log = _logging.getLogger(__name__)
 
 # TODO :: sowas waer auch ganz cool: die DBAPI bietes sich geradezu an,
 #  da mehr object-oriented zu arbeiten:
-
 #   currentVariable = get_component(currentComponentNameAction, ds)
 #   currentVariable.save_value({'value': currentValue})
 
-class IoniConnect:
+class IoniConnect(IoniClientBase):
 
-    def __init__(self, url='', session=None):
-        if not url:
-            url = database_url
+    @property
+    def is_connected(self):
+        '''Returns `True` if connection to IoniTOF could be established.'''
+        try:
+            self.get("/api/status")
+            return True
+        except:
+            return False
 
+    @property
+    def is_running(self):
+        '''Returns `True` if IoniTOF is currently acquiring data.'''
+        raise NotImplementedError("is_running")
+
+    def connect(self, timeout_s):
+        pass
+
+    def disconnect(self):
+        pass
+
+    def __init__(self, host='127.0.0.1', port=5066, session=None):
+        super().__init__(host, port)
+        self.url = f"http://{self.host}:{self.port}"
         if session is None:
             session = requests.sessions.Session()
-
-        self.url = url
         self.session = session
+        # ??
         self.current_avg_endpoint = None
         self.comp_dict = dict()
 
@@ -37,6 +53,18 @@ class IoniConnect:
 
     def put(self, endpoint, data, **kwargs):
         return self._create_object(endpoint, data, 'put', **kwargs).headers.get('Location')
+
+    def upload(self, endpoint, filename):
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+        with open(filename) as f:
+            # Note (important!): this is a "form-data" entry, where the server
+            #  expects the "name" to be 'file' and rejects it otherwise:
+            name = 'file'
+            r = self.session.post(self.url + endpoint, files=[(name, (filename, f, ''))])
+            r.raise_for_status()
+
+        return r
 
     def _get_object(self, endpoint, **kwargs):
         if not endpoint.startswith('/'):
