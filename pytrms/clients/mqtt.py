@@ -271,7 +271,11 @@ follow_settings.topics = ["PTR/Act/PTR_CalcConzInfo"]
 
 def follow_schedule(client, self, msg):
     with follow_schedule._lock:
-        if msg.topic.startswith("DataCollection"):
+        if msg.topic.endswith("SRV_ScheduleClear"):
+                self._sched_cmds.clear()
+                return
+
+        if msg.topic.endswith("SRV_Schedule"):
             if not msg.payload:
                 log.warn("empty ACQ_SRV_Schedule payload has cleared retained topic")
                 self._sched_cmds.clear()
@@ -297,7 +301,11 @@ def follow_schedule(client, self, msg):
             payload = json.loads(msg.payload.decode())
             self._sched_cmds.extend(payload["CMDs"])
 
-follow_schedule.topics = ["DataCollection/Act/ACQ_SRV_Schedule", "IC_Command/Write/Scheduled"]
+follow_schedule.topics = [
+    "DataCollection/Act/ACQ_SRV_Schedule",
+    "DataCollection/Set/ACQ_SRV_ScheduleClear",
+    "IC_Command/Write/Scheduled"
+]
 follow_schedule._lock = RLock()
 
 def follow_state(client, self, msg):
