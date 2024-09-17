@@ -376,6 +376,13 @@ _NOT_INIT = object()
 
 
 class MqttClient(MqttClientBase):
+    """a simplified client for the Ionicon MQTT API.
+
+    >>> mq = MqttClient()
+    >>> mq.write('TCP_MCP_B', 3400)
+    ValueError()
+
+    """
 
     _sched_cmds   = deque([_NOT_INIT], maxlen=None)
     _server_state = deque([_NOT_INIT], maxlen=1)
@@ -383,6 +390,10 @@ class MqttClient(MqttClientBase):
     _sf_filename  = deque([""],        maxlen=1)
     _overallcycle = deque([0],         maxlen=1)
     act_values    = dict()
+
+    set_value_limit = {
+        "TCP_MCP_B": 3200.0,
+    }
     
     @property
     def is_connected(self):
@@ -478,6 +489,8 @@ class MqttClient(MqttClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
+        raise NotImplementedError("DataCollection/Set, did you mean .write(parID)?")
+
         topic, qos, retain = "DataCollection/Set/" + str(parID), 2, True
         log.info(f"setting '{parID}' ~> [{new_value}]")
         payload = {
@@ -494,6 +507,12 @@ class MqttClient(MqttClientBase):
         '''Write a 'new_value' to 'parID' directly.'''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
+
+        if parID not in _par_id_names:
+            raise KeyError(parID)
+
+        if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
+            raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
         topic, qos, retain = "IC_Command/Write/Direct", 2, False
         log.info(f"writing '{parID}' ~> [{new_value}]")
@@ -513,6 +532,9 @@ class MqttClient(MqttClientBase):
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
+
+        if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
+            raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
         if (future_cycle == 0 and not self.is_running):
             # Note: ioniTOF40 doesn't handle scheduling for the 0th cycle!
