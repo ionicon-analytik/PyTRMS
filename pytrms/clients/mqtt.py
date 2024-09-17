@@ -465,9 +465,22 @@ class MqttClient(MqttClientBase):
         self._overallcycle = MqttClient._overallcycle
         self.act_values    = MqttClient.act_values
 
-    def get(self, parID):
-        '''Return the last value for the given 'parID' or None if not known.'''
-        return self.act_values.get(parID)
+    def get(self, parID, default=None, timeout_s=10):
+        '''Return the last known value for the given `parID` or `default` if not known.
+
+        The act-values may need time to be populated, that's why the `timeout_s`
+        is respected before returning the `default`.
+        '''
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            try:
+                return self.act_values[parID]
+            except KeyError as exc:
+                continue
+
+            time.sleep(10e-3)
+        else:
+            return default
 
     def get_table(self, table_name):
         timeout_s = 10
