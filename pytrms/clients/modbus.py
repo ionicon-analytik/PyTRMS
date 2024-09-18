@@ -107,6 +107,9 @@ class IoniconModbus(IoniClientBase):
         ('run_number',       (13904, '>i', True)),
         ('use_mean',         (13906, '>i', True)),
         ('action_number',    (13912, '>i', True)),
+        ('version_major',    (13918, '>h', True)),
+        ('version_minor',    (13919, '>h', True)),
+        ('version_patch',    (13920, '>h', True)),
         ('ame_state',        (13914, '>i', True)),  # Running 0=Off; 1=On (not implemented!)
         ('n_components',     (14000, '>f', True)),
         ('component_names',  (14002, '>f', True)),
@@ -367,6 +370,12 @@ class IoniconModbus(IoniClientBase):
         values = self._read_reg_multi(start_reg, c_fmt, self.n_components, _is_holding)
 
         return dict(zip(self.read_component_names(), values))
+
+    def read_ame_version(self):
+        start_reg, c_fmt, _is_holding = self.address['version_major']
+        major, minor, patch = self._read_reg_multi(start_reg, c_fmt, 3, _is_holding)
+
+        return f"{major}.{minor}.{patch}"
 
     def read_ame_alarms(self):
         start_reg, c_fmt, _is_holding = self.address['ame_alarms']
