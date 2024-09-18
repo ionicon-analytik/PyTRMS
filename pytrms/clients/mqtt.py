@@ -258,6 +258,7 @@ class CalcConzInfo:
 def follow_settings(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
+        self._calcconzinfo = MqttClient._calcconzinfo
         return
 
     if not self._calcconzinfo[0] is _NOT_INIT:
@@ -272,8 +273,8 @@ follow_settings.topics = ["PTR/Act/PTR_CalcConzInfo"]
 def follow_schedule(client, self, msg):
     with follow_schedule._lock:
         if msg.topic.endswith("SRV_ScheduleClear"):
-                self._sched_cmds.clear()
-                return
+            self._sched_cmds.clear()
+            return
 
         if msg.topic.endswith("SRV_Schedule"):
             if not msg.payload:
@@ -311,6 +312,7 @@ follow_schedule._lock = RLock()
 def follow_state(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
+        self._server_state = MqttClient._server_state
         return
 
     payload = json.loads(msg.payload.decode())
@@ -325,6 +327,11 @@ def follow_state(client, self, msg):
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
 def follow_sourcefile(client, self, msg):
+    if not msg.payload:
+        # empty payload will clear a retained topic
+        self._sf_filename = MqttClient._sf_filename
+        return
+
     payload = json.loads(msg.payload.decode())
     path = payload["DataElement"]["Value"]
     log.debug(f"[{self}] new source-file: " + str(path))
