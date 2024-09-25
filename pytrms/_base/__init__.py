@@ -14,5 +14,11 @@ class itype:
     AME_RUN    = 8
     AME_STEP   = 7
     AME_ACTION = 5
-    USE_MEAN   = 2
+    USE_MEAN   = 2  # (only in AUTO_UseMean)
+
+    REACT_Udrift = 0
+    REACT_pDrift = 1
+    REACT_Tdrift = 2
+    REACT_PI_Idx = 4  # skipping E/N = 3
+    REACT_TM_Idx = 5
 
