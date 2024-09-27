@@ -14,7 +14,6 @@ assert os.path.exists(_par_id_file), "par-id file not found: please re-install P
 import logging as _logging
 
 _logging.TRACE = 0  # overwrites logging.NOTSET
-_logging.basicConfig(format='[%(levelname)s]\t%(message)s')
 
 def enable_extended_logging(log_level=_logging.DEBUG):
     '''make output of http-requests more talkative.
