@@ -531,7 +531,7 @@ class MqttClient(MqttClientBase):
 
         raise NotImplementedError("DataCollection/Set, did you mean .write(parID)?")
 
-        topic, qos, retain = "DataCollection/Set/" + str(parID), 2, True
+        topic, qos, retain = "DataCollection/Set/" + str(parID), 1, True
         log.info(f"setting '{parID}' ~> [{new_value}]")
         payload = {
             "Header":      _build_header(),
@@ -554,7 +554,7 @@ class MqttClient(MqttClientBase):
         if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
             raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
-        topic, qos, retain = "IC_Command/Write/Direct", 2, False
+        topic, qos, retain = "IC_Command/Write/Direct", 1, False
         log.info(f"writing '{parID}' ~> [{new_value}]")
         cmd = _build_write_command(parID, new_value)
         payload = {
@@ -596,7 +596,7 @@ class MqttClient(MqttClientBase):
             log.warn(f"attempting to schedule past cycle, hope you know what you're doing");
             pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
 
-        topic, qos, retain = "IC_Command/Write/Scheduled", 2, False
+        topic, qos, retain = "IC_Command/Write/Scheduled", 1, False
         log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
         cmd = _build_write_command(parID, new_value, future_cycle)
         payload = {
