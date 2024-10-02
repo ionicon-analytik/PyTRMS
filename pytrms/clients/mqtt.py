@@ -255,7 +255,7 @@ class CalcConzInfo:
 
 ## >>>>>>>>    callback functions    <<<<<<<< ##
 
-def follow_settings(client, self, msg):
+def follow_calc_conz_info(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
         self._calcconzinfo = MqttClient._calcconzinfo
@@ -268,7 +268,7 @@ def follow_settings(client, self, msg):
     log.debug(f"updating tm-/pi-table from {msg.topic}...")
     self._calcconzinfo.append(CalcConzInfo.load_json(msg.payload.decode('latin-1')))
 
-follow_settings.topics = ["PTR/Act/PTR_CalcConzInfo"]
+follow_calc_conz_info.topics = ["PTR/Act/PTR_CalcConzInfo"]
 
 def follow_schedule(client, self, msg):
     with follow_schedule._lock:
@@ -340,16 +340,30 @@ def follow_sourcefile(client, self, msg):
 
 follow_sourcefile.topics = ["DataCollection/Act/ACQ_SRV_SetFullStorageFile"]
 
-def follow_act_values(client, self, msg):
+def follow_act_set_values(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
         return
 
     try:
+        server, kind, parID = msg.topic.split('/')
+        if server == "DataCollection":
+            # Note: this topic doesn't strictly follow the convention and is handled separately
+            return
+
+        if parID == "PTR_CalcConzInfo":
+            # another "special" topic handled in 'follow_calc_conz_info' ...
+            return
+
+        if parID not in _par_id_names:
+            log.warning(f"unknown par-ID in [{msg.topic}]")
+            return
+
         payload = json.loads(msg.payload.decode())
-        *_, parID = msg.topic.split('/')
-        if parID in _par_id_names:
+        if kind == "Act":
             self.act_values[parID] = _parse_data_element(payload["DataElement"])
+        if kind == "Set":
+            self.set_values[parID] = _parse_data_element(payload["DataElement"])
     except json.decoder.JSONDecodeError as exc:
         log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
         raise
@@ -360,7 +374,7 @@ def follow_act_values(client, self, msg):
         log.error(f"while parsing [{parID}] :: {str(exc)}")
         pass
 
-follow_act_values.topics = ["Automation/Act/#", "PTR/Act/#", "TPS/Act/#"]
+follow_act_set_values.topics = ["+/Act/+", "+/Set/+"]
 
 def follow_cycle(client, self, msg):
     if not msg.payload:
@@ -397,6 +411,7 @@ class MqttClient(MqttClientBase):
     _sf_filename  = deque([""],        maxlen=1)
     _overallcycle = deque([0],         maxlen=1)
     act_values    = dict()
+    set_values    = dict()
 
     set_value_limit = {
         "TCP_MCP_B": 3200.0,
@@ -471,17 +486,22 @@ class MqttClient(MqttClientBase):
         self._sf_filename  = MqttClient._sf_filename
         self._overallcycle = MqttClient._overallcycle
         self.act_values    = MqttClient.act_values
+        self.set_values    = MqttClient.set_values
 
-    def get(self, parID, default=None, timeout_s=10):
+    def get(self, parID, default=None, kind="set", timeout_s=10):
         '''Return the last known value for the given `parID` or `default` if not known.
 
-        The act-values may need time to be populated, that's why the `timeout_s`
-        is respected before returning the `default`.
+        - default: sentinel value in case of failure
+        - kind: one of 'set'/'act' (default: 'set')
+
+        Note: The values may need time to be populated from the MQTT topics, that's why
+         the `timeout_s` is respected before returning the `default`.
         '''
+        _lut = self.act_values if kind.lower() == "act" else self.set_values
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
             try:
-                return self.act_values[parID]
+                return _lut[parID]
             except KeyError as exc:
                 continue
 
