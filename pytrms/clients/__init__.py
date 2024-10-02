@@ -1,11 +1,5 @@
 import os
 
-ionitof_host = str(os.environ.get('IONITOF_HOST', '127.0.0.1'))
-
-database_host = str(os.environ.get('DATABASE_HOST', '127.0.0.1'))
-database_port = int(os.environ.get('DATABASE_PORT', 5066))
-
-
 _root = os.path.dirname(__file__)
 _par_id_file = os.path.abspath(os.path.join(_root, '..', 'data', 'ParaIDs.csv'))
 assert os.path.exists(_par_id_file), "par-id file not found: please re-install PyTRMS package"

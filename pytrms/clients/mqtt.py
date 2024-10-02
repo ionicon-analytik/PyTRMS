@@ -13,16 +13,21 @@ from . import _par_id_file
 from .._base import itype, MqttClientBase
 
 
-with open(_par_id_file) as f:
-    it = iter(f)
-    assert next(it).startswith('ID\tName'), "Modbus parameter file is corrupt: " + f.name
-    assert next(it).startswith('0\tnone'),  "Modbus parameter file is corrupt: " + f.name
-    _par_id_names = {name for id_, name, *_ in (line.strip().split('\t') for line in it)}
-
-
 log = _logging.getLogger(__name__)
 
 __all__ = ['MqttClient', 'MqttClientBase']
+
+
+with open(_par_id_file) as f:
+    from pandas import read_csv, isna
+
+    _par_id_info = read_csv(f, sep='\t').drop(0).set_index('Name')
+    if isna(_par_id_info.at['MPV_1', 'Access']):
+        log.warning(f'filling in read-properties still missing in {os.path.basename(_par_id_file)}')
+        _par_id_info.at['MPV_1', 'Access'] = 'RW'
+        _par_id_info.at['MPV_2', 'Access'] = 'RW'
+        _par_id_info.at['MPV_3', 'Access'] = 'RW'
+
 
 
 ## >>>>>>>>    adaptor functions    <<<<<<<< ##
@@ -355,7 +360,7 @@ def follow_act_set_values(client, self, msg):
             # another "special" topic handled in 'follow_calc_conz_info' ...
             return
 
-        if parID not in _par_id_names:
+        if parID not in _par_id_info.index:
             log.warning(f"unknown par-ID in [{msg.topic}]")
             return
 
@@ -495,9 +500,17 @@ class MqttClient(MqttClientBase):
         - kind: one of 'set'/'act' (default: 'set')
 
         Note: The values may need time to be populated from the MQTT topics, that's why
-         the `timeout_s` is respected before returning the `default`.
+         the `timeout_s` is respected before returning the `default`. A `KeyError` will
+         be raised if the given `parID` is unknown altogether!
         '''
+        if not self.is_connected:
+            raise Exception(f"[{self}] no connection to instrument");
+
         _lut = self.act_values if kind.lower() == "act" else self.set_values
+        is_read_only = 'W' not in _par_id_info.loc[parID].Access  # may raise KeyError!
+        if _lut is self.set_values and is_read_only:
+            raise ValueError(f"'{parID}' is read-only, did you mean `kind='act'`?")
+
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
             try:
@@ -548,8 +561,8 @@ class MqttClient(MqttClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
-        if parID not in _par_id_names:
-            raise KeyError(parID)
+        if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
+            raise ValueError(f"'{parID}' is read-only")
 
         if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
             raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
@@ -572,6 +585,9 @@ class MqttClient(MqttClientBase):
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
+
+        if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
+            raise ValueError(f"'{parID}' is read-only")
 
         if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
             raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
