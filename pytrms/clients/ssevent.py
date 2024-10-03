@@ -1,5 +1,6 @@
-from collections.abc import Iterable
+import re
 import logging
+from collections.abc import Iterable
 
 import requests
 
@@ -15,18 +16,23 @@ class SSEventListener(Iterable):
             endpoint = ionitof_url + '/api/timing/stream'
         self.endpoint = endpoint
         self._response = None
-        self.subscriptions = []
+        self.subscriptions = set()
 
     def subscribe(self, event='cycle'):
+        """Listen for events matching the given string or regular expression.
+
+        This will already match if the string is contained in the event-topic.
+        """
         if self._response is None:
-            r = requests.get(self.endpoint, stream=True)
+            r = requests.get(self.endpoint, headers={'accept': 'text/event-stream'}, stream=True)
             if not r.ok:
                 log.error(f"no connection to {self.endpoint} (got [{r.status_code}])")
                 r.raise_for_status()
 
             self._response = r
 
-        self.subscriptions.append(event)
+        regex = re.compile('.*' + event + '.*')  # be rather loose with matching..
+        self.subscriptions.add(regex)
 
     def unsubscribe(self, event='cycle'):
         self.subscriptions.remove(event)
@@ -45,6 +51,10 @@ class SSEventListener(Iterable):
                 yield line
                 line = ''
 
+    def items(self):
+        for msg in self:
+            yield self.event, msg
+
     def __iter__(self):
         if self._response is None:
             raise Exception("call .subscribe() first to listen for events")
@@ -57,7 +67,8 @@ class SSEventListener(Iterable):
             msg = msg.strip()
             if key == 'event':
                 self.event = msg
-                if msg not in self.subscriptions:
+
+                if not any(sub.match(self.event) for sub in self.subscriptions):
                     log.debug(f"skipping event <{msg}>")
                     continue
 

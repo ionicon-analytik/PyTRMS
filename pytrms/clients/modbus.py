@@ -11,18 +11,18 @@ from itertools import tee
 
 from pyModbusTCP import client
 
+from . import _par_id_file
+from .._base.ioniclient import IoniClientBase
+
 log = logging.getLogger(__name__)
 
 __all__ = ['IoniconModbus']
 
 
-_root = os.path.abspath(os.path.dirname(__file__))
-_par_id_list = os.path.join(_root, '..', 'data', 'par_ID_list.txt')
-
-with open(_par_id_list) as f:
+with open(_par_id_file) as f:
     it = iter(f)
-    assert next(it) == 'ID\tName\n', 'Modbus parameter file %s is corrupt!' % _par_id_list
-    _id_to_descr = {int(id_): name for id_, name in (line.strip().split('\t') for line in it)}
+    assert next(it).startswith('ID\tName'), "Modbus parameter file is corrupt: " + f.name
+    _id_to_descr = {int(id_): name for id_, name, *_ in (line.strip().split('\t') for line in it)}
 
 # look-up-table for c_structs (see docstring of struct-module for more info).
 # Note: almost *all* parameters used by IoniTOF (esp. AME) are 'float', with
@@ -88,62 +88,121 @@ def _pack(value, format='>f'):
     return struct.unpack(reg_format, struct.pack(c_format, value))
 
 
-class IoniconModbus:
+class IoniconModbus(IoniClientBase):
 
     address = dict([
-        ('server_state', (0, '>f')),      # 0: Not ready, 1: Ready, 2: Startup
-        ('measure_state', (2, '>f')),     # 0: Not running | 1: running | 2: Just Started | 3: Just Stopped
-        ('instrument_state', (4, '>f')),  # 0: Not Ok, 1: Ok, 2: Error, 3: Warning
-        ('alive_counter', (6, '>H')),     # (updated every 500 ms)
-        ('n_parameters', (2000, '>H')),
-        ('tc_raw', (4000, '>f')),
-        ('tc_conc', (6000, '>f')),
-        ('n_masses', (8000, '>f')),
-        # ('n_corr', (7000, '>i')),       # not implemented?
-        ('tc_components', (10000, '>f')),
-        ('user_number', (13900, '>i')),
-        ('step_number', (13902, '>i')),
-        ('run_number', (13904, '>i')),
-        ('use_mean', (13906, '>i')),
-        ('action_number', (13912, '>i')),
-        ('ame_state', (13914, '>i')),     # Running 0=Off; 1=On (not implemented!)
-        ('n_components', (14000, '>f')),
-        ('component_names', (14002, '>f')),
+        ('server_state',     (    0, '>f', True)),  # 0: Not ready, 1: Ready, 2: Startup
+        ('measure_state',    (    2, '>f', True)),  # 0: Not running | 1: running | 2: Just Started | 3: Just Stopped
+        ('instrument_state', (    4, '>f', True)),  # 0: Not Ok, 1: Ok, 2: Error, 3: Warning
+        ('alive_counter',    (    6, '>H', True)),  # (updated every 500 ms)
+        ('n_parameters',     ( 2000, '>H', True)),
+        ('tc_raw',           ( 4000, '>f', True)),
+        ('tc_conc',          ( 6000, '>f', True)),
+        ('n_masses',         ( 8000, '>f', True)),
+        # ('n_corr',         ( 7000, '>i', True)),  # not implemented?
+        ('tc_components',    (10000, '>f', True)),
+        ('ame_alarms',       (12000, '>f', True)),
+        ('user_number',      (13900, '>i', True)),
+        ('step_number',      (13902, '>i', True)),
+        ('run_number',       (13904, '>i', True)),
+        ('use_mean',         (13906, '>i', True)),
+        ('action_number',    (13912, '>i', True)),
+        ('version_major',    (13918, '>h', True)),
+        ('version_minor',    (13919, '>h', True)),
+        ('version_patch',    (13920, '>h', True)),
+        ('ame_state',        (13914, '>i', True)),  # Running 0=Off; 1=On (not implemented!)
+        ('n_components',     (14000, '>f', True)),
+        ('component_names',  (14002, '>f', True)),
+        ('ame_mean_data',    (26000, '>f', True)),
+        ('n_ame_mean',       (26002, '>d', True)),
     ])
 
+    @classmethod
+    def use_legacy_input_registers(klaas, use_input_reg = True):
+        """Read from input- instead of holding-registers (legacy method to be compatible with AME1.0)."""
+        use_holding = not use_input_reg
+        modded = dict()
+        for key, vals in klaas.address.items():
+            modded[key] = vals[0], vals[1], use_holding
+        klaas.address.update(modded)
+
     @property
-    def is_alive(self):
-        """Wait for the IoniTOF alive-counter to change (1 second max)."""
-        initial_count = self._read_reg(*self.address['alive_counter'])
-        for i in range(10):
-            if initial_count != self._read_reg(*self.address['alive_counter']):
+    def _alive_counter(self):
+        return self._read_reg(*self.address['alive_counter'])
+
+    @property
+    def is_connected(self):
+        if not self.mc.is_open:
+            return False
+
+        # wait for the IoniTOF alive-counter to change (1 second max)...
+        initial_count = self._alive_counter
+        timeout_s = 3  # counter should increase every 500 ms, approximately
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if initial_count != self._alive_counter:
                 return True
 
-            time.sleep(.1)
-
+            time.sleep(10e-3)
         return False
 
     @property
-    def is_open(self):
-        return self.mc.is_open
+    def is_running(self):
+        return 1.0 == self._read_reg(*self.address['measure_state'])
+
+    @property
+    def error_state(self):
+        value = self._read_reg(*self.address['instrument_state'])
+        return IoniconModbus._instrument_states.get(value, value)
+
+    _instrument_states = {
+            0.0: "Not Okay",
+            1.0: "Okay",
+            2.0: "Error",
+            3.0: "Warning",
+    }
+
+    @property
+    def server_state(self):
+        value = self._read_reg(*self.address['server_state'])
+        return IoniconModbus._server_states.get(value, value)
+
+    _server_states = {
+            0.0: "Not Ready",
+            1.0: "Ready",
+            2.0: "Startup",
+    }
 
     def __init__(self, host='localhost', port=502):
-        self.mc = client.ModbusClient(host=host, port=port)
-        if not self.mc.open():
-            raise IOError("Cannot connect to modbus socket @ %s:%d!" % (str(host), port))
-
+        super().__init__(host, port)
+        self.mc = client.ModbusClient(host=self.host, port=self.port)
+        # try connect immediately:
+        try:
+            self.connect()
+        except TimeoutError as exc:
+            log.warn(f"{exc} (retry connecting when the Instrument is set up)")
         self._addresses = {}
 
-    def open(self):
-        if not self.mc.is_open:
-            self.mc.open()
+    def connect(self, timeout_s=10):
+        log.info(f"[{self}] connecting to Modbus server...")
+        self.mc.timeout = timeout_s
+        self.mc.auto_open = True
+        if not self.mc.open():
+            raise TimeoutError(f"[{self}] no connection to modbus socket")
 
-    def close(self):
-        if self.mc.open():
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if self.is_connected:
+                break
+
+            time.sleep(10e-3)
+        else:
+            self.disconnect()
+            raise TimeoutError(f"[{self}] no connection to IoniTOF");
+
+    def disconnect(self):
+        if self.mc.is_open:
             self.mc.close()
-
-    def __del__(self):
-        self.close()
 
     @property
     @lru_cache
@@ -166,14 +225,12 @@ class IoniconModbus:
         For example, after calling `.read_components()`, one can call
         `.read_parameter('DPS_Udrift')` to get only this value with no overhead.
         """
-        self.open()
         try:
             return self._read_reg(*self.address[par_name])
         except KeyError as exc:
             raise KeyError("did you call one of .read_instrument_data(), .read_traces(), et.c. first?")
 
     def read_instrument_data(self):
-        self.open()
 
         # Each block consists of 6 registers:
         # Register 1: Parameter ID
@@ -187,8 +244,9 @@ class IoniconModbus:
         rv = dict()
         # read 20 parameters at once to save transmission..
         for superblock in range(0, blocksize*self.n_parameters, superblocksize):
-            input_regs = self.mc.read_input_registers(
-                start_register + superblock, superblocksize)
+            offset = start_register + superblock
+            # always using input_register
+            input_regs = self.mc.read_input_registers(offset, superblocksize)
             # ..and handle one block per parameter:
             for block in range(0, superblocksize, blocksize):
                 par_id, set1, set2, act1, act2, state = input_regs[block:block+6]
@@ -210,14 +268,43 @@ class IoniconModbus:
 
         return rv
 
+    def write_instrument_data(self, par_id, new_value, timeout_s=10):
+
+        # Each command-block consists of 3 registers:
+        # Register 1: Parameter ID
+        # Register 2-3: Parameter Set Value as float(real)
+        start_register = 40000
+        blocksize = 3
+
+        if isinstance(par_id, str):
+            try:
+                par_id = next(k for k, v in _id_to_descr.items() if v == par_id)
+            except StopIteration as exc:
+                raise KeyError(str(par_id))
+        par_id = int(par_id)
+        if par_id not in _id_to_descr:
+            raise IndexError(str(par_id))
+
+        start_register += blocksize * par_id
+
+        retry_time = 0
+        while retry_time < timeout_s:
+            # a value of 0 indicates ready-to-write:
+            if self.mc.read_holding_registers(start_register) == [0]:
+                break
+            retry_time += 0.5
+            time.sleep(0.5)
+        else:
+            raise TimeoutError(f'register {start_register} timed out after {timeout_s}s')
+
+        reg_values = [start_register] + list(_pack(new_value))
+        self.mc.write_multiple_registers(start_register, reg_values)
+
     @lru_cache
     def read_masses(self, update_address_at=None, with_format='>f'):
-        self.open()
-        start_reg, _ = self.address['n_masses']
+        start_reg, c_fmt, _ = self.address['n_masses']
         start_reg += 2  # number of components as float..
-
-        masses = self._read_reg_multi(start_reg, '>f', self.n_masses)
-
+        masses = self._read_reg_multi(start_reg, c_fmt, self.n_masses)  # input_register
         if update_address_at:
             n_bytes, c_fmt, _ = _get_fmt(with_format)
             self.address.update({
@@ -230,14 +317,13 @@ class IoniconModbus:
     def read_traces(self, kind='conc'):
         """Returns the current traces, where `kind` is one of 'conc', 'raw', 'components'.
         """
-        self.open()
-        start_reg, _ = self.address['tc_' + kind]
+        start_reg, c_fmt, _is_holding = self.address['tc_' + kind]
         start_reg += 14  # skipping timecycles..
 
         # update the address-space with the current kind
         #  for later calls to `.read_parameter()`:
         masses = self.read_masses(update_address_at=start_reg)
-        values = self._read_reg_multi(start_reg, '>f', self.n_masses)
+        values = self._read_reg_multi(start_reg, c_fmt, self.n_masses, _is_holding)
 
         return dict(zip(
             ("{0:.4}".format(mass) for mass in masses), values
@@ -249,42 +335,54 @@ class IoniconModbus:
         Absolute time as double (8 bytes), seconds since 01.01.1904, 01:00 am.
         Relative time as double (8 bytes) in seconds since measurement start.
         """
-        self.open()
-        start_reg, _ = self.address['tc_' + kind]
+        start_reg, _, _is_holding = self.address['tc_' + kind]
 
         return _timecycle(
-            int(self._read_reg(start_reg + 2, '>f')),
-            int(self._read_reg(start_reg + 4, '>f')),
-            float(self._read_reg(start_reg + 6, '>d')),
-            float(self._read_reg(start_reg + 10, '>d')),
+            int(  self._read_reg(start_reg +  2, '>f', _is_holding)),
+            int(  self._read_reg(start_reg +  4, '>f', _is_holding)),
+            float(self._read_reg(start_reg +  6, '>d', _is_holding)),
+            float(self._read_reg(start_reg + 10, '>d', _is_holding)),
         )
 
     @lru_cache
     def read_component_names(self):
-        self.open()
         # 14002 ff: Component Names (maximum length per name:
         # 32 chars (=16 registers), e.g. 14018 to 14033: "Isoprene")
-        start_reg, _ = self.address['component_names']
-        value_start_reg, c_fmt = self.address['tc_components']
-        value_start_reg += 14  # skip timecycle info..
+        name_start_reg, _, _is_holding = self.address['component_names']
+        data_start_reg, c_fmt, _       = self.address['tc_components']
+        data_start_reg += 14  # skip timecycle info..
 
+        _read = self.mc.read_holding_registers if _is_holding else self.mc.read_input_registers
         rv = []
         for index in range(self.n_components):
             n_bytes, c_format, reg_format = _get_fmt('>16H')
-            input_reg = self.mc.read_input_registers(start_reg + index * 16, n_bytes)
-            chars = struct.pack(reg_format, *input_reg)
+            register = _read(name_start_reg + index * 16, n_bytes)
+            chars = struct.pack(reg_format, *register)
             decoded = chars.decode('latin-1').strip('\x00')
-            self.address[decoded] = (value_start_reg + index * 2, c_fmt)
+            self.address[decoded] = (data_start_reg + index * 2, c_fmt, _is_holding)
             rv.append(decoded)
 
         return rv
 
     def read_components(self):
-        self.open()
-        start_reg = 10014  # AME Data (skipping timecycles)
-        values = self._read_reg_multi(start_reg, '>f', self.n_components)
+        start_reg, c_fmt, _is_holding = self.address['tc_components']
+        start_reg += 14  # skipping timecycles...
+        values = self._read_reg_multi(start_reg, c_fmt, self.n_components, _is_holding)
 
         return dict(zip(self.read_component_names(), values))
+
+    def read_ame_version(self):
+        start_reg, c_fmt, _is_holding = self.address['version_major']
+        major, minor, patch = self._read_reg_multi(start_reg, c_fmt, 3, _is_holding)
+
+        return f"{major}.{minor}.{patch}"
+
+    def read_ame_alarms(self):
+        start_reg, c_fmt, _is_holding = self.address['ame_alarms']
+        n_alarms = int(self._read_reg(start_reg, c_fmt, _is_holding))
+        values = self._read_reg_multi(start_reg + 2, c_fmt, n_alarms, _is_holding)
+
+        return dict(zip(self.read_component_names(), map(bool, values)))
 
     def read_ame_timecycle(self):
         return self.read_timecycle(kind='components')
@@ -298,7 +396,6 @@ class IoniconModbus:
     ])
 
     def read_ame_numbers(self):
-        self.open()
         return IoniconModbus._ame_parameter(
             int(self._read_reg(*self.address['step_number'])),
             int(self._read_reg(*self.address['run_number'])),
@@ -316,14 +413,19 @@ class IoniconModbus:
         'std_error',
     ])
 
+    def write_ame_action(self, action_number):
+        start_reg, c_fmt, _ = self.address['action_number']
+        set_value = _pack(action_number, c_fmt)
+        self.mc.write_multiple_registers(start_reg, set_value)
+
     def read_ame_mean(self, step_number=None):
-        self.open()
-        data_ok = int(self._read_reg(26000, '>f'))
+        start_reg, c_fmt, _is_holding = self.address['ame_mean_data']
+        data_ok = int(self._read_reg(start_reg, c_fmt, _is_holding))
         if not data_ok:
             return IoniconModbus._ame_mean(data_ok, 0, 0, 0, [], [])
 
-        n_masses = int(self._read_reg(26006, '>f'))
-        n_steps = int(self._read_reg(26008, '>f'))
+        n_masses = int(self._read_reg(start_reg + 6, c_fmt, _is_holding))
+        n_steps  = int(self._read_reg(start_reg + 8, c_fmt, _is_holding))
 
         if step_number is None:
             step_number = int(self._read_reg(*self.address['step_number']))
@@ -331,33 +433,38 @@ class IoniconModbus:
             raise IndexError(f"step_number [{step_number}] out of bounds: 0 < step <= [{n_steps}]")
 
         datablock_size = 1 + 1 + n_masses + n_masses
-        start_addr = (26010
+        start_addr = (start_reg
+                + 10
                 + n_masses * 2  # skip the masses, same as everywhere
                 + (step_number-1) * datablock_size * 2)  # select datablock
 
         return IoniconModbus._ame_mean(
             data_ok,
-            self._read_reg(26002, '>d'),
-            self._read_reg(start_addr + 0, '>f'),
-            self._read_reg(start_addr + 2, '>f'),
-            self._read_reg_multi(start_addr + 4, '>f', n_masses),
-            self._read_reg_multi(start_addr + 4 + n_masses * 2, '>f', n_masses),
+            self._read_reg(*self.address['n_ame_mean']),
+            self._read_reg(start_addr + 0, c_fmt, _is_holding),
+            self._read_reg(start_addr + 2, c_fmt, _is_holding),
+            self._read_reg_multi(start_addr + 4,                c_fmt, n_masses, _is_holding),
+            self._read_reg_multi(start_addr + 4 + n_masses * 2, c_fmt, n_masses, _is_holding),
         )
 
-    def _read_reg(self, addr, c_format):
+    def _read_reg(self, addr, c_format, is_holding_register=False):
         n_bytes, c_format, reg_format = _get_fmt(c_format)
-        input_reg = self.mc.read_input_registers(addr, n_bytes)
-        if input_reg is None and self.is_open:
+        _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
+        
+        register = _read(addr, n_bytes)
+        if register is None and self.mc.is_open:
             raise IOError(f"unable to read ({n_bytes}) registers at [{addr}] from connection")
-        elif input_reg is None and not self.is_open:
+        elif register is None and not self.mc.is_open:
             raise IOError("trying to read from closed Modbus-connection")
 
-        return _unpack(input_reg, c_format)
+        return _unpack(register, c_format)
 
-    def _read_reg_multi(self, addr, c_format, n_values):
+    def _read_reg_multi(self, addr, c_format, n_values, is_holding_register=False):
         rv = []
         if not n_values > 0:
             return rv
+
+        _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
 
         n_bytes, c_format, reg_format = _get_fmt(c_format)
         n_regs = n_bytes * n_values
@@ -369,10 +476,10 @@ class IoniconModbus:
                     for block in range(0, n_regs, 120))
 
         for block in blocks:
-            input_reg = self.mc.read_input_registers(*block)
-            if input_reg is None and self.is_open:
+            register = _read(*block)
+            if register is None and self.is_connected:
                 raise IOError(f"unable to read ({block[1]}) registers at [{block[0]}] from connection")
-            elif input_reg is None and not self.is_open:
+            elif register is None and not self.is_connected:
                 raise IOError("trying to read from closed Modbus-connection")
 
             # group the register-values by n_bytes, e.g. [1,2,3,4,..] ~> [(1,2),(3,4),..]
@@ -380,7 +487,7 @@ class IoniconModbus:
             # https://docs.python.org/3.8/library/itertools.html?highlight=itertools#itertools-recipes
             # note, that the iterator is cloned n-times and therefore 
             # all clones advance in parallel and can be zipped below:
-            batches = [iter(input_reg)] * n_bytes
+            batches = [iter(register)] * n_bytes
 
             rv += [_unpack(reg, c_format) for reg in zip(*batches)]
 
