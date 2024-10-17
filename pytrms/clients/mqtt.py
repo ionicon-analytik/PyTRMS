@@ -493,34 +493,38 @@ class MqttClient(MqttClientBase):
         self.act_values    = MqttClient.act_values
         self.set_values    = MqttClient.set_values
 
-    def get(self, parID, default=None, kind="set", timeout_s=10):
-        '''Return the last known value for the given `parID` or `default` if not known.
+    def get(self, parID, kind="set"):
+        '''Return the last known value for the given `parID`.
 
-        - default: sentinel value in case of failure
         - kind: one of 'set'/'act' (default: 'set')
 
-        Note: The values may need time to be populated from the MQTT topics, that's why
-         the `timeout_s` is respected before returning the `default`. A `KeyError` will
-         be raised if the given `parID` is unknown altogether!
+        A `KeyError` will be raised if the given `parID` is unknown!
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
         _lut = self.act_values if kind.lower() == "act" else self.set_values
-        is_read_only = 'W' not in _par_id_info.loc[parID].Access  # may raise KeyError!
+        is_read_only = ('W' not in _par_id_info.loc[parID].Access)  # may raise KeyError!
         if _lut is self.set_values and is_read_only:
             raise ValueError(f"'{parID}' is read-only, did you mean `kind='act'`?")
 
-        started_at = time.monotonic()
-        while time.monotonic() < started_at + timeout_s:
-            try:
-                return _lut[parID]
-            except KeyError as exc:
-                continue
+        # Note: The values should need NO! time to be populated from the MQTT topics,
+        #  because all topics are published as *retained* by the PTR-server.
+        #  However, a short timeout is respected before raising a `KeyError`:
+        try:
+            return _lut[parID]
+        except KeyError as exc:
+            time.sleep(200e-3)
+            rv = _lut.get(parID)
+            if rv is not None:
+                return rv
 
-            time.sleep(10e-3)
-        else:
-            return default
+            # still not found? give some useful hints for the user not to go crazy:
+            error_hint = (
+                "act" if parID in self.act_values else
+                "set" if parID in self.set_values else
+                "")
+            raise KeyError(str(parID) + (' (did you mean `kind="%s"`?)' % error_hint) if error_hint else "")
 
     def get_table(self, table_name):
         timeout_s = 10
