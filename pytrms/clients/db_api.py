@@ -82,7 +82,7 @@ class IoniConnect(IoniClientBase):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
         if not isinstance(data, str):
-            data = json.dumps(data)
+            data = json.dumps(data, ensure_ascii=False)  # default is `True`, escapes Umlaute!
         if 'headers' not in kwargs:
             kwargs['headers'] = {'content-type': 'application/hal+json'}
         elif 'content-type' not in (k.lower() for k in kwargs['headers']):
@@ -93,6 +93,85 @@ class IoniConnect(IoniClientBase):
             r.raise_for_status()
 
         return r
+
+    def sync(self, peaktable):
+        """Compare and upload any differences in `peaktable` to the database."""
+        from pytrms.peaktable import Peak, PeakTable
+        from operator import attrgetter
+
+        # Note: a `Peak` is a hashable object that serves as a key that
+        #  distinguishes between peaks as defined by PyTRMS:
+        make_key = lambda peak: Peak(center=peak['center'], label=peak['name'], shift=peak['shift'])
+
+        if isinstance(peaktable, str):
+            log.info(f"loading peaktable '{peaktable}'...")
+            peaktable = PeakTable.from_file(peaktable)
+
+        # get the PyTRMS- and IoniConnect-peaks on the same page:
+        conv = {
+            'name':   attrgetter('label'),
+            'center': attrgetter('center'),
+            'kRate':  attrgetter('k_rate'),
+            'low':    lambda p: p.borders[0],
+            'high':   lambda p: p.borders[1],
+            'shift':  attrgetter('shift'),
+            'multiplier': attrgetter('multiplier'),
+        }
+        # normalize the input argument and create a hashable set:
+        updates = dict()
+        for peak in peaktable:
+            update = {k: conv[k](peak) for k in conv}
+            updates[make_key(update)] = update
+
+        # create a comparable collection of peaks already on the database by
+        # reducing the keys in the response to what we actually want to update:
+        _embedded_peaks = self.get('/api/peaks')['_embedded']['peaks'] 
+        db_peaks = {make_key(p): {
+                    'payload': {k: p[k] for k in conv.keys()},
+                    'href': p['_links']['self']['href'],
+                    } for p in _embedded_peaks}
+
+        to_update = updates.keys() & db_peaks.keys()
+        to_upload = updates.keys() - db_peaks.keys()
+        updated = 0
+        for key in sorted(to_update):
+            # check if an existing peak needs an update
+            peak_update = updates[key]
+            if db_peaks[key]['payload'] == peak_update:
+                # nothing to do..
+                log.debug(f"up-to-date: {key}")
+                continue
+
+            log.info(f"updating {key}")
+            self.put(db_peaks[key]['href'], peak_update)
+            updated += 1
+
+        # finally, upload everything else, BUT beware of
+        # Note: POSTing the embedded-collection is *miles faster* than
+        #  doing separate requests for each peak!
+        payload = {'_embedded': {'peaks': [updates[key] for key in sorted(to_upload)]}}
+        # Note: this disregards the peak-parent-relationship, but in
+        #  order to implement this correctly, one would need to check
+        #  if the parent-peak with a specific 'parentID' is already
+        #  uploaded... TODO :: maybe later implement parent-peaks!
+        uploaded = 0
+        try:
+            self.post('/api/peaks', payload)
+            uploaded = len(to_upload)
+            if log.level >= _logging.INFO:
+                for key in sorted(to_upload):
+                    log.info(f"uploaded {key}")
+        except requests.exceptions.HTTPError as exc:
+            log.warning("it seems that an exact-mass has been modified w/o changing the name")
+            # TODO :: what now? is that an error? or can we handle it? this is actually so
+            # common that we should have a solution... MAYBE the Name need not be UNIQUE
+            # after all ????????????
+
+        return {
+                'uploaded': uploaded,
+                'updated': updated,
+                'up-to-date': len(to_update) - updated,
+        }
 
     def iter_events(self):
         """Follow the server-sent-events (SSE) on the DB-API."""
@@ -112,75 +191,4 @@ class IoniConnect(IoniClientBase):
 
             key, val = line.decode().split(':')
             kv_pair[key] = val.strip()
-
-    def refresh_comp_dict(self):
-        j = self.get('/api/components')
-        self.comp_dict = {component["shortName"]: component
-            for component in j["_embedded"]["components"]}
-    
-    def get_component(self, short_name):
-        if not len(self.comp_dict):
-            self.refresh_comp_dict()
-    
-        return self.comp_dict[short_name]
-
-    def create_component(self, short_name):
-        payload = {
-            "shortName": short_name
-        }
-        self.post('/api/components', payload)
-        self.refresh_comp_dict()
-
-    def create_average(self, endpoint, run, step, action=0, use_mean=True):
-
-        params = {'run': int(run), 'step': int(step), 'usemean': bool(use_mean)}
-        if (action != 0):
-            params['action'] = int(action)
-
-        timecycles = self.get(endpoint, params)
-        self.current_avg_endpoint = self.post('/api/averages', timecycles)
-
-    def save_component_values(self, new_values):
-        """
-        Post Components to the database.
-
-        `new_values`    dictionary {name~>value}
-        """
-        if self.current_avg_endpoint is None:
-            raise Exception("create average first")
-    
-        payload = {
-            "quantities": [
-                {
-                    "componentID": self.get_component(name)["componentID"],
-                    "value": value
-                } for name, value in new_values.items()
-            ]
-        }
-        endpoint = self.current_avg_endpoint + '/component_traces'
-        self.put(endpoint, payload)
-
-    def save_instrument_values(self, new_values):
-        """
-        Post Parameters to the database.
-
-        `new_values`    dictionary {name~>value}
-        """
-        # 13.07.: SCHNELL, SCHNELL (es ist 17 Uhr 57 und ich will die Modbus-instrument
-        #  daten noch hochladen):
-        #  this expects a namedtuple as defined in Modbus client: .set, .act, .par_id
-        if self.current_avg_endpoint is None:
-            raise Exception("create average first")
-    
-        payload = {
-            "quantities": [
-                {
-                    "parameterID": item.par_id,
-                    "setValue": item.set,
-                    "actMean": item.act
-                } for name, item in new_values.items()
-            ]
-        }
-        endpoint = self.current_avg_endpoint + '/parameter_traces'  # on the DB it's called parameter... :\
-        self.put(endpoint, payload)
 
