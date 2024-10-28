@@ -144,14 +144,14 @@ class Peak:
         return self.center == round(float(other), Peak._exact_decimals)
 
     def __hash__(self):
-        return hash(str(self.center))  # + self.label)
+        return hash(str(self.center) + self.label)
 
     def __float__(self):
         return self.center
 
     def __repr__(self):
-        return '<%s [%s <~ %s] @ %.4f+%.4f>' % (self.__class__.__name__,
-                self.label, self.parent, self.center, self.shift)
+        return '<%s @ %.4f+%.4f [%s]>' % (self.__class__.__name__,
+                self.center, self.shift, self.label)
 
 
 class PeakTable:

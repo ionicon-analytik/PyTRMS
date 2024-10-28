@@ -120,55 +120,49 @@ class IoniConnect(IoniClientBase):
         # normalize the input argument and create a hashable set:
         updates = dict()
         for peak in peaktable:
-            update = {k: conv[k](peak) for k in conv}
-            updates[make_key(update)] = update
+            payload = {k: conv[k](peak) for k in conv}
+            updates[make_key(payload)] = {'payload': payload}
 
+        log.info(f"fetching current peaktable from the server...")
         # create a comparable collection of peaks already on the database by
         # reducing the keys in the response to what we actually want to update:
-        _embedded_peaks = self.get('/api/peaks')['_embedded']['peaks'] 
         db_peaks = {make_key(p): {
                     'payload': {k: p[k] for k in conv.keys()},
-                    'href': p['_links']['self']['href'],
-                    } for p in _embedded_peaks}
+                    'self':   p['_links']['self'],
+                    'parent': p['_links'].get('parent'),
+                    } for p in self.get('/api/peaks')['_embedded']['peaks']}
 
         to_update = updates.keys() & db_peaks.keys()
         to_upload = updates.keys() - db_peaks.keys()
         updated = 0
         for key in sorted(to_update):
             # check if an existing peak needs an update
-            peak_update = updates[key]
-            if db_peaks[key]['payload'] == peak_update:
+            if db_peaks[key]['payload'] == updates[key]['payload']:
                 # nothing to do..
                 log.debug(f"up-to-date: {key}")
                 continue
 
-            log.info(f"updating {key}")
-            self.put(db_peaks[key]['href'], peak_update)
+            self.put(db_peaks[key]['self']['href'], updates[key]['payload'])
+            log.info(f"updated:    {key}")
             updated += 1
 
-        # finally, upload everything else, BUT beware of
-        # Note: POSTing the embedded-collection is *miles faster* than
-        #  doing separate requests for each peak!
-        payload = {'_embedded': {'peaks': [updates[key] for key in sorted(to_upload)]}}
+        if len(to_upload):
+            # Note: POSTing the embedded-collection is *miles faster*
+            #  than doing separate requests for each peak!
+            payload = {'_embedded': {'peaks': [updates[key]['payload'] for key in sorted(to_upload)]}}
+            self.post('/api/peaks', payload)
+            for key in sorted(to_upload): log.info(f"added new:  {key}")
+
         # Note: this disregards the peak-parent-relationship, but in
         #  order to implement this correctly, one would need to check
         #  if the parent-peak with a specific 'parentID' is already
-        #  uploaded... TODO :: maybe later implement parent-peaks!
-        uploaded = 0
-        try:
-            self.post('/api/peaks', payload)
-            uploaded = len(to_upload)
-            if log.level >= _logging.INFO:
-                for key in sorted(to_upload):
-                    log.info(f"uploaded {key}")
-        except requests.exceptions.HTTPError as exc:
-            log.warning("it seems that an exact-mass has been modified w/o changing the name")
-            # TODO :: what now? is that an error? or can we handle it? this is actually so
-            # common that we should have a solution... MAYBE the Name need not be UNIQUE
-            # after all ????????????
+        #  uploaded and search it.. there's an endpoint
+        #   'LINK /api/peaks/{parentID} Location: /api/peaks/{childID}'
+        #  to link a child to its parent, but it remains complicated.
+        # TODO :: maybe later implement parent-peaks!?
 
         return {
-                'uploaded': uploaded,
+                'added': len(to_upload),
                 'updated': updated,
                 'up-to-date': len(to_update) - updated,
         }
