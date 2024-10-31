@@ -165,7 +165,7 @@ print(meas)  # prints FinishedMeasurement
 ## Getting started
 
 Download and install the latest Python version if you have not done so. **Ionicon**
-recommends to [download Python 3.8 for Windows](https://www.python.org/ftp/python/3.8.10/python-3.8.10-amd64.exe).
+recommends to [download Python 3.12 for Windows](https://www.python.org/ftp/python/3.12.6/python-3.12.6-amd64.exe).
 This will install the Python executable along with the package manager *pip*. 
 Using *pip* is the preferred way to get the latest version of *PyTRMS*, but other
 solutions like *Anaconda* should also work. In a terminal type
