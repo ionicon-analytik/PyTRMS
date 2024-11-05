@@ -325,9 +325,14 @@ def follow_state(client, self, msg):
     log.debug(f"[{self}] new server-state: " + str(state))
     # replace the current state with the new element:
     self._server_state.append(state)
-    if state == "ACQ_Aquire":  # yes, there's a typo, plz keep it :)
-        self._calcconzinfo.append(_NOT_INIT)  # invalidate
-        # Note: this signals to the relevant thread that we need an update
+    meas_running = (state == "ACQ_Aquire")  # yes, there's a typo, plz keep it :)
+    just_started = (meas_running and not msg.retain)
+    if meas_running:
+        # signal the relevant thread(s) that we need an update:
+        self._calcconzinfo.append(_NOT_INIT)
+    if just_started:
+        # invalidate the source-file until we get a new one:
+        self._sf_filename.append(_NOT_INIT)
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 
@@ -463,11 +468,27 @@ class MqttClient(MqttClientBase):
 
     @property
     def current_sourcefile(self):
-        '''Returns the path to the hdf5-file that is currently (or soon to be) written.
+        '''Returns the path to the hdf5-file that is currently being written.
         
-        May be an empty string if no sourcefile has yet been set.
+        Returns an empty string if no measurement is running.
         '''
-        return self._sf_filename[0]
+        if not self.is_running:
+            return ""
+
+        if self._sf_filename[0] is not _NOT_INIT:
+            return self._sf_filename[0]
+
+        # Note: '_NOT_INIT' is set by us on start of acquisition, so we'd expect
+        #  to receive the source-file-topic after a (generous) timeout:
+        timeout_s = 15
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if self._sf_filename[0] is not _NOT_INIT:
+                return self._sf_filename[0]
+    
+            time.sleep(10e-3)
+        else:
+            raise TimeoutError(f"[{self}] unable to retrieve source-file after ({timeout_s = })");
 
     @property
     def current_cycle(self):
