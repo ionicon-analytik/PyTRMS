@@ -529,12 +529,10 @@ class MqttClient(MqttClientBase):
         if _lut is self.set_values and is_read_only:
             raise ValueError(f"'{parID}' is read-only, did you mean `kind='act'`?")
 
-        # Note: The values should need NO! time to be populated from the MQTT topics,
-        #  because all topics are published as *retained* by the PTR-server.
-        #  However, a short timeout is respected before raising a `KeyError`:
-        try:
-            return _lut[parID]
-        except KeyError as exc:
+        if not parID in _lut:
+            # Note: The values should need NO! time to be populated from the MQTT topics,
+            #  because all topics are published as *retained* by the PTR-server.
+            #  However, a short timeout is respected before raising a `KeyError`:
             time.sleep(200e-3)
             rv = _lut.get(parID)
             if rv is not None:
@@ -546,6 +544,7 @@ class MqttClient(MqttClientBase):
                 "set" if parID in self.set_values else
                 "")
             raise KeyError(str(parID) + (' (did you mean `kind="%s"`?)' % error_hint) if error_hint else "")
+        return _lut[parID]
 
     def get_table(self, table_name):
         timeout_s = 10
