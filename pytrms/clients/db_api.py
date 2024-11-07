@@ -4,6 +4,7 @@ import json
 import requests
 
 from . import _logging
+from .ssevent import SSEventListener
 from .._base import IoniClientBase
 
 log = _logging.getLogger(__name__)
@@ -167,22 +168,8 @@ class IoniConnect(IoniClientBase):
                 'up-to-date': len(to_update) - updated,
         }
 
-    def iter_events(self):
+    def iter_events(self, event_re=None):
         """Follow the server-sent-events (SSE) on the DB-API."""
-        r = self.session.request('GET', self.url + "/api/events",
-                headers={'accept': 'text/event-stream'}, stream=True)
-        r.raise_for_status()
-        kv_pair = dict()
-        for line in r.iter_lines():
-            # empty newlines serve as keep-alive and end-of-entry:
-            if not line:
-                if kv_pair:
-                    yield kv_pair
-                    kv_pair = dict()
-                else:
-                    log.debug("sse: still kept alive...")
-                continue
-
-            key, val = line.decode().split(':')
-            kv_pair[key] = val.strip()
+        yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events",
+                session=self.session)
 
