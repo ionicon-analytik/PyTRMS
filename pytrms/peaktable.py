@@ -35,7 +35,7 @@ other custom formats.
 >>> pt
 <PeakTable (1) [21.0u]>
 >>> pt[0]
-<Peak [H3O+] @ 21.0219>
+<Peak @ 21.0219+0.0000 [H3O+]>
 
 Peaks may be modified and the PeakTable exported in the same format:
 >>> pt[0].formula = 'H3O'
@@ -56,7 +56,9 @@ Peaks may be modified and the PeakTable exported in the same format:
       "parent": "?",
       "isotopic_abundance": 0.678,
       "k_rate": 2.1,
-      "multiplier": 488
+      "multiplier": 488.0,
+      "resolution": 1000.0,
+      "shift": 0.0
     }
   ]
 }

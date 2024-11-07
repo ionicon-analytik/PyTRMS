@@ -59,10 +59,10 @@ def _unpack(registers, format='>f'):
     representation, respectively.
 
     >>> _unpack([17448, 0], 'float')
-    672.
+    672.0
 
     >>> _unpack([17446, 32768], 'float')
-    666.
+    666.0
     
     >>> _unpack([16875, 61191, 54426, 37896], 'double')
     3749199524.83057

@@ -23,7 +23,6 @@ def connect(host=None, method='webapi'):
     returns an `Instrument` if connected successfully.
     '''
     from .instrument import Instrument
-    from .helpers import PTRConnectionError
 
     if method.lower() == 'webapi':
         from .clients.ioniclient import IoniClient

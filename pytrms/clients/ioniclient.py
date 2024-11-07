@@ -18,17 +18,17 @@ class IoniClient:
     Access the Ionicon WebAPI.
 
     Usage:
-    >>> client = IoniClient()
-    >>> client.get('TPS_Pull_H')
+    > client = IoniClient()
+    > client.get('TPS_Pull_H')
     {'TPS_Pull_H': 123.45, ... }
 
-    >>> client.set('TPS_Pull_H', 42)
+    > client.set('TPS_Pull_H', 42)
     {'TPS_Pull_H': 42.0, ... }
 
-    >>> client.start_measurement()
+    > client.start_measurement()
     ACK
 
-    >>> client.host, client.port
+    > client.host, client.port
     ('localhost', 8002)
     
     '''
@@ -85,19 +85,3 @@ class IoniClient:
 
     def stop_measurement(self):
         return self.set('ACQ_SRV_Stop_Meas', 1)
-
-
-if __name__ == '__main__':
-    import sys
-    client = IoniClient()
-
-    if len(sys.argv) == 2:
-        print(client.get(sys.argv[1]))
-    elif len(sys.argv) == 3:
-        print(client.set(sys.argv[1], sys.argv[2]))
-    else:
-        print(f"""\
-                usage:
-                  python {sys.argv[0]} <varname> [<value>]
-              """)
-

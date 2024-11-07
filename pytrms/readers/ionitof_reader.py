@@ -7,19 +7,10 @@ import numpy as np
 import pandas as pd
 
 from .._base import itype
+from ..helpers import convert_labview_to_posix
 
 __all__ = ['IoniTOFReader', 'GroupNotFoundError']
 
-def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
-    '''Create a `pandas.Timestamp` from LabView time.'''
-    # change epoch from 01.01.1904 to 01.01.1970:
-    posix_time = lv_time_utc - 2082844800
-    # the tz must be specified in isoformat like '+02:30'..
-    tz_sec = int(utc_offset_sec)
-    tz_designator = '{0}{1:02d}:{2:02d}'.format(
-            '+' if tz_sec >= 0 else '-', tz_sec // 3600, tz_sec % 3600 // 60)
-
-    return pd.Timestamp(posix_time, unit='s', tz=tz_designator)
 
 class GroupNotFoundError(KeyError):
     pass

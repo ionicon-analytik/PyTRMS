@@ -46,7 +46,7 @@ BeepStop()
 
 ptr.stop()
 
-filename = time.strftime(, time.localtime())
+filename = time.strftime(filename, time.localtime())
 path = os.path.join(folder, filename)
 
 print('commencing with BG measurement in 1 minute...')

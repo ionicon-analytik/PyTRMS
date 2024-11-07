@@ -409,8 +409,8 @@ _NOT_INIT = object()
 class MqttClient(MqttClientBase):
     """a simplified client for the Ionicon MQTT API.
 
-    >>> mq = MqttClient()
-    >>> mq.write('TCP_MCP_B', 3400)
+    > mq = MqttClient()
+    > mq.write('TCP_MCP_B', 3400)
     ValueError()
 
     """

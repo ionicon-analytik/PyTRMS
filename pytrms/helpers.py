@@ -1,13 +1,20 @@
-import requests.exceptions
+"""@file helpers.py
 
-__all__ = [
-    'PTRConnectionError',
-    'setup_measurement_dir',
-]
+common helper functions.
+"""
 
+def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
+    '''Create a `pandas.Timestamp` from LabView time.'''
+    from pandas import Timestamp
+    
+    # change epoch from 01.01.1904 to 01.01.1970:
+    posix_time = lv_time_utc - 2082844800
+    # the tz must be specified in isoformat like '+02:30'..
+    tz_sec = int(utc_offset_sec)
+    tz_designator = '{0}{1:02d}:{2:02d}'.format(
+            '+' if tz_sec >= 0 else '-', tz_sec // 3600, tz_sec % 3600 // 60)
 
-class PTRConnectionError(requests.exceptions.ConnectionError):
-    pass
+    return Timestamp(posix_time, unit='s', tz=tz_designator)
 
 
 def setup_measurement_dir(config_dir=None, data_root_dir='D:/Data', suffix='',
