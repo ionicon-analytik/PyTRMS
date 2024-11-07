@@ -77,15 +77,34 @@ class Composition(Iterable):
     >>> list(co.sequence())
     [(8, {'Eins': 1}), (18, {'Zwei': 2})]
     
-    ...with an action-number at the start...
+    ...with an action-number at the start (note, that AME-numbers are 1 cycle ahead)...
     >>> co.start_action = 7
     >>> list(co.sequence())
-    [(8, {'AME_ActionNumber': 7}), (8, {'Eins': 1}), (18, {'Zwei': 2})]
+    [(9, {'AME_ActionNumber': 7}), (8, {'Eins': 1}), (18, {'Zwei': 2})]
 
     ...or with automation numbers, where the 'start_delay' comes into play:
     >>> co.generate_automation = True
-    >>> list(co.sequence())
-    [(8, {'AME_ActionNumber': 7}), (8, {'Eins': 1, 'AME_StepNumber': 1, 'AME_RunNumber': 1}), (8, {'AUTO_UseMean': 0}), (10, {'AUTO_UseMean': 1}), (18, {'Zwei': 2, 'AME_StepNumber': 2}), (18, {'AUTO_UseMean': 0}), (21, {'AUTO_UseMean': 1})]
+    >>> seq = co.sequence()
+    >>> next(seq)
+    (9, {'AME_ActionNumber': 7})
+    
+    >>> next(seq)
+    (8, {'Eins': 1})
+
+    >>> next(seq)
+    (9, {'AME_StepNumber': 1, 'AME_RunNumber': 1, 'AUTO_UseMean': 0})
+
+    >>> next(seq)
+    (11, {'AUTO_UseMean': 1})
+
+    >>> next(seq)
+    (18, {'Zwei': 2})
+
+    >>> next(seq)
+    (19, {'AME_StepNumber': 2, 'AUTO_UseMean': 0})
+
+    >>> next(seq)
+    (22, {'AUTO_UseMean': 1})
     
     '''
 
@@ -130,27 +149,31 @@ class Composition(Iterable):
         The first 'future_cycle' is 0 unless otherwise specified with class-parameter 'start_cycle'.
         This generates AME_Run/Step-Number and AUTO_UseMean unless otherwise specified.
         '''
+        _offset_ame = True  # whether ame-numbers should mark the *next* cycle, see [#2897]
+        
         future_cycle = self.start_cycle
         if self.start_action is not None:
-            yield future_cycle, dict([(self.ACTION_MARKER, int(self.start_action))])
+            yield future_cycle + int(_offset_ame), dict([(self.ACTION_MARKER, int(self.start_action))])
         
-        for run, step, current in self:
-            automation = {self.STEP_MARKER: step}
-            if step == 1:
-                automation[self.RUN_MARKER] = run
+        for run, step, step_info in self:
+            yield future_cycle, dict(step_info.set_values)
 
-            set_values = dict(current.set_values)
             if self.generate_automation:
-                set_values = dict(**set_values, **automation)
+                automation = {self.STEP_MARKER: step}
+                if step == 1:
+                    automation[self.RUN_MARKER] = run
 
-            yield future_cycle, set_values
+                if step_info.start_delay == 0:
+                    # all cycles get the AUTO_UseMean flag set to True:
+                    automation[self.USE_MARKER] = 1
+                    yield future_cycle + int(_offset_ame), automation
+                else:
+                    # split into two updates for AUTO_UseMean flag:
+                    automation[self.USE_MARKER] = 0
+                    yield future_cycle + int(_offset_ame), automation
+                    yield future_cycle + int(_offset_ame) + step_info.start_delay, {self.USE_MARKER: 1}
 
-            # insert two updates for AUTO_UseMean flag:
-            if self.generate_automation and current.start_delay > 0:
-                yield future_cycle, {self.USE_MARKER: 0}
-                yield future_cycle + current.start_delay, {self.USE_MARKER: 1}
-
-            future_cycle = future_cycle + current.duration
+            future_cycle = future_cycle + step_info.duration
 
     @coroutine
     def schedule_routine(self, schedule_fun):
