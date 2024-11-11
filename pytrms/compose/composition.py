@@ -4,6 +4,7 @@ import itertools
 import logging
 from collections.abc import Iterable
 from collections import namedtuple
+from itertools import tee
 from functools import wraps
 
 __all__ = ['Step', 'Composition']
@@ -30,14 +31,19 @@ class Step:
     >>> step.set_values
     {'DPS_Udrift': 500}
 
-    Note, that no Automation-numbers can be defined in the step:
+    Note, that no Automation-numbers can be defined in the step..
     >>> Step("H50", {'AUTO_UseMean': 0}, 10, start_delay=2)
     Traceback (most recent call last):
       ...
     AssertionError: Automation numbers cannot be defined
 
-    '''
+    ..and neither can a 'OP_Mode' alongside anything else:
+    >>> Step("Odd2", {'DPS_Udrift': 345, 'OP_Mode': 2}, 10, start_delay=2)
+    Traceback (most recent call last):
+      ...
+    AssertionError: if 'OP_Mode' is specified, nothing else can be
 
+    '''
     protected_keys = ['AME_RunNumber', 'AME_StepNumber', 'AUTO_UseMean'] 
     
     def __init__(self, name, set_values, duration, start_delay):
@@ -51,8 +57,13 @@ class Step:
         assert self.start_delay >= 0
         assert self.start_delay < self.duration
 
-        for key in self.set_values.keys():
+        for key in self.set_values:
             assert key not in Step.protected_keys, "Automation numbers cannot be defined"
+        if 'OP_Mode' in self.set_values:
+            assert len(self.set_values) == 1, "if 'OP_Mode' is specified, nothing else can be"
+
+    def __repr__(self):
+        return f"{self.name}: ({self.start_delay}/{self.duration}) sec ~> {self.set_values}"
 
 
 class Composition(Iterable):
@@ -140,6 +151,67 @@ class Composition(Iterable):
 
     def dump(self, ofstream):
         json.dump(self, ofstream, indent=2, default=vars)
+
+    def translate_op_modes(self, preset_items, check=True):
+        '''Given the `preset_items` (from a presets-file), compile a list of set_values.
+
+        >>> presets = {}
+        >>> presets[0] = ('H3O+', {('Drift', 'Global_System.DriftPressureSet', 'FLOAT'): 2.6})
+        >>> presets[2] = ('O3+', {('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'): 75.0})
+
+        next, define a couple of Steps that use the presets (a.k.a. 'OP_Mode'):
+        >>> steps = []
+        >>> steps.append(Step('uno', {'OP_Mode': 0}, 10, 2))  # set p-Drift by OP_Mode
+        >>> steps.append(Step('due', {'Udrift': 420.0, 'T-Drift': 81.0}, 10, 2))
+        >>> steps.append(Step('tre', {'OP_Mode': 2}, 10, 2))  # set T-Drift by OP_Mode
+
+        the Composition of these steps will translate to the output underneath.
+        note, that the set-value for Pdrift_Ctrl is carried along with each step:
+        >>> co = Composition(steps)
+        >>> co.translate_op_modes(presets, check=False)
+        [{'DPS_Pdrift_Ctrl_Val': 2.6}, {'Udrift': 420.0, 'T-Drift': 81.0, 'DPS_Pdrift_Ctrl_Val': 2.6}, {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}]
+
+        Since we didn't specify the full set of reaction-parameters, the self-check will fail:
+        >>> co.translate_op_modes(presets, check=True)
+        Traceback (most recent call last):
+            ...
+        AssertionError: reaction-data missing in presets
+
+        '''
+        if preset_items is None:
+            raise ValueError('preset_items is None')
+
+        # Note: the `preset_items` is a dict[step_index] ~> (name, preset_items)
+        #  and in the items one would expect these keys:
+        preset_keys = {
+            'PrimionIdx':       ('PrimionIdx', '', 'INT'),
+            'TransmissionIdx':  ('TransmissionIdx', '', 'INT'),
+            'DPS_Udrift':       ('UDrift', 'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift', 'FLOAT'),
+            'DPS_Pdrift_Ctrl_Val': ('Drift', 'Global_System.DriftPressureSet', 'FLOAT'),
+            'T-Drift':          ('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'),
+        }
+        # make a deep copy of the `set_values`:
+        set_values = [dict(step.set_values) for step in self.steps]
+        carry = dict()
+        for entry in set_values:
+            # replace OP_Mode with the stuff found in preset_items
+            if 'OP_Mode' in entry:
+                index = entry['OP_Mode']
+                name, items = preset_items[index]
+                for parID, key in preset_keys.items():
+                    if key in items:
+                        entry[parID] = items[key]
+                del entry['OP_Mode']
+
+            # Note: each preset is only an update of set-values over what has already
+            #  been set. thus, when following the sequence of OP_Modes, each one must
+            #  carry with it the set-values of all its predecessors:
+            carry.update(entry)
+            entry.update(carry)
+            if check:
+                assert all(key in entry for key in preset_keys), "reaction-data missing in presets"
+        
+        return set_values
 
     def sequence(self):
         '''A (possibly infinite) iterator over this Composition's future_cycles and steps.
