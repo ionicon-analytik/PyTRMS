@@ -9,7 +9,7 @@ from collections import namedtuple
 from functools import lru_cache
 from itertools import tee
 
-from pyModbusTCP import client
+import pyModbusTCP.client
 
 from . import _par_id_file
 from .._base.ioniclient import IoniClientBase
@@ -19,9 +19,28 @@ log = logging.getLogger(__name__)
 __all__ = ['IoniconModbus']
 
 
+def _patch_is_open():
+    # Note: the .is_open and .timeout attributes were changed
+    #  from a function to a property!
+    # 
+    # 0.2.0 2022-06-05
+    # 
+    #  - ModbusClient: parameters are now properties instead of methods (more intuitive).
+    # 
+    # from the [changelog](https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES):
+    major, minor, patch = pyModbusTCP.__version__.split('.')
+    if int(minor) < 2:
+        return lambda mc: mc.is_open()
+    else:
+        return lambda mc: mc.is_open
+
+_is_open = _patch_is_open()
+
 with open(_par_id_file) as f:
     it = iter(f)
-    assert next(it).startswith('ID\tName'), "Modbus parameter file is corrupt: " + f.name
+    assert next(it).startswith('ID\tName'), ("Modbus parameter file is corrupt: "
+            + f.name
+            + "\n\ntry re-installing the PyTRMS python package to fix it!")
     _id_to_descr = {int(id_): name for id_, name, *_ in (line.strip().split('\t') for line in it)}
 
 # look-up-table for c_structs (see docstring of struct-module for more info).
@@ -132,7 +151,7 @@ class IoniconModbus(IoniClientBase):
 
     @property
     def is_connected(self):
-        if not self.mc.is_open:
+        if not _is_open(self.mc):
             return False
 
         # wait for the IoniTOF alive-counter to change (1 second max)...
@@ -175,7 +194,18 @@ class IoniconModbus(IoniClientBase):
 
     def __init__(self, host='localhost', port=502):
         super().__init__(host, port)
-        self.mc = client.ModbusClient(host=self.host, port=self.port)
+        # Note: we patch the behaviour such, that it behaves like pre-0.2
+        #  (from the time of development of this module), BUT we skip the
+        #  auto_close-feature for the sake of speed:
+        # 
+        # 0.2.0 2022-06-05
+        # 
+        #  - ModbusClient: now TCP auto open mode is active by default (auto_open=True, auto_close=False).
+        #
+        # from the [changelog](https://github.com/sourceperl/pyModbusTCP/blob/master/CHANGES)
+        self.mc = pyModbusTCP.client.ModbusClient(host=self.host, port=self.port,
+                auto_open = False, auto_close = False
+        )
         # try connect immediately:
         try:
             self.connect()
@@ -185,8 +215,11 @@ class IoniconModbus(IoniClientBase):
 
     def connect(self, timeout_s=10):
         log.info(f"[{self}] connecting to Modbus server...")
-        self.mc.timeout = timeout_s
-        self.mc.auto_open = True
+        # Note: .timeout-attribute changed to a property with 0.2.0 (see comments above)
+        if callable(self.mc.timeout):
+            self.mc.timeout(timeout_s)
+        else:
+            self.mc.timeout = timeout_s
         if not self.mc.open():
             raise TimeoutError(f"[{self}] no connection to modbus socket")
 
@@ -201,7 +234,7 @@ class IoniconModbus(IoniClientBase):
             raise TimeoutError(f"[{self}] no connection to IoniTOF");
 
     def disconnect(self):
-        if self.mc.is_open:
+        if _is_open(self.mc):
             self.mc.close()
 
     @property
@@ -452,9 +485,9 @@ class IoniconModbus(IoniClientBase):
         _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
         
         register = _read(addr, n_bytes)
-        if register is None and self.mc.is_open:
+        if register is None and _is_open(self.mc):
             raise IOError(f"unable to read ({n_bytes}) registers at [{addr}] from connection")
-        elif register is None and not self.mc.is_open:
+        elif register is None and not _is_open(self.mc):
             raise IOError("trying to read from closed Modbus-connection")
 
         return _unpack(register, c_format)

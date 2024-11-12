@@ -15,7 +15,7 @@ h5py = "^3.12.1"
 matplotlib = "^3.9.2"
 requests = "^2.32.3"
 pandas = "^2.2.3"
-pyModbusTCP = "~0.3.0"
+pyModbusTCP = ">=0.1.9"
 paho-mqtt = "~1.6.1"
 
 [tool.poetry.group.test.dependencies]
