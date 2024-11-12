@@ -168,8 +168,11 @@ class IoniConnect(IoniClientBase):
                 'up-to-date': len(to_update) - updated,
         }
 
-    def iter_events(self, event_re=None):
-        """Follow the server-sent-events (SSE) on the DB-API."""
+    def iter_events(self, event_re=r".*"):
+        """Follow the server-sent-events (SSE) on the DB-API.
+
+        `event_re`  a regular expression to filter events (default: matches everything)
+        """
         yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events",
                 session=self.session)
 
