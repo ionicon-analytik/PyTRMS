@@ -172,6 +172,11 @@ class IoniConnect(IoniClientBase):
         """Follow the server-sent-events (SSE) on the DB-API.
 
         `event_re`  a regular expression to filter events (default: matches everything)
+
+        Note: This will block until a matching event is received.
+         Especially, it cannot be cancelled by KeyboardInterrupt (due to the `requests`
+         stream-implementation), unless the server sends a keep-alive at regular
+         intervals (as every well-behaved server should be doing)!
         """
         yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events",
                 session=self.session)

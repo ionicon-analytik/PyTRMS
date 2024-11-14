@@ -68,10 +68,13 @@ class SSEventListener(Iterable):
                 continue
 
             key, val = line.split(':', maxsplit=1)
-            if key == 'event':
-                event = val.strip()
+            if not key:
+                # this is a comment, starting with a colon ':' ...
+                log.log(_logging.TRACE, "sse:" + val)
+            elif key == 'event':
+                event = val.lstrip()
             elif key == 'data':
-                msg += val.strip()
+                msg += val.lstrip()
             else:
                 log.warning(f"unknown SSE-key <{key}> in stream")
 
