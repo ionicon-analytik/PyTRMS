@@ -49,10 +49,10 @@ class MqttClientBase(IoniClientBase):
         return (True
             and self.client.is_connected())
 
-    def __init__(self, host, subscriber_functions,
+    def __init__(self, host, port, subscriber_functions,
             on_connect, on_subscribe, on_publish, 
             connect_timeout_s=10):
-        super().__init__(host, port=1883)
+        super().__init__(host, port)
         # configure connection...
         self.client = mqtt.Client(clean_session=True)
         # clean_session is a boolean that determines the client type. If True,

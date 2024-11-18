@@ -497,9 +497,9 @@ class MqttClient(MqttClientBase):
             return self._overallcycle[0]
         return 0
 
-    def __init__(self, host='127.0.0.1'):
+    def __init__(self, host='127.0.0.1', port=1883):
         # this sets up the mqtt connection with default callbacks:
-        super().__init__(host, _subscriber_functions, None, None, None)
+        super().__init__(host, port, _subscriber_functions, None, None, None)
         log.debug(f"connection check ({self.is_connected}) :: {self._server_state = } / {self._sched_cmds = }");
 
     def disconnect(self):
