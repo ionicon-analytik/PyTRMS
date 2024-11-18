@@ -8,7 +8,7 @@ from threading import Condition, RLock
 from datetime import datetime as dt
 from abc import ABC, abstractmethod
 
-import paho.mqtt.client as mqtt
+import paho.mqtt.client
 
 from .ioniclient import IoniClientBase
 
@@ -53,8 +53,22 @@ class MqttClientBase(IoniClientBase):
             on_connect, on_subscribe, on_publish, 
             connect_timeout_s=10):
         super().__init__(host, port)
-        # configure connection...
-        self.client = mqtt.Client(clean_session=True)
+
+        # Note: Version 2.0 of paho-mqtt introduced versioning of the user-callback to fix
+        #  some inconsistency in callback arguments and to provide better support for MQTTv5.
+        #  VERSION1 of the callback is deprecated, but is still supported in version 2.x.
+        #  If you want to upgrade to the newer version of the API callback, you will need
+        #  to update your callbacks:
+        paho_version = int(paho.mqtt.__version__.split('.')[0])
+        if paho_version == 1:
+            self.client = paho.mqtt.client.Client(clean_session=True)
+        elif paho_version == 2:
+            self.client = paho.mqtt.client.Client(paho.mqtt.client.CallbackAPIVersion.VERSION1,
+                    clean_session=True)
+        else:
+            # see https://eclipse.dev/paho/files/paho.mqtt.python/html/migrations.html
+            raise NotImplementedError("API VERSION2 for MQTTv5 (use paho-mqtt 2.x or implement user callbacks)")
+
         # clean_session is a boolean that determines the client type. If True,
         # the broker will remove all information about this client when it
         # disconnects. If False, the client is a persistent client and
