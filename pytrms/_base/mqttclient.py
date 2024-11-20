@@ -6,7 +6,6 @@ from collections import deque
 from itertools import cycle
 from threading import Condition, RLock
 from datetime import datetime as dt
-from abc import ABC, abstractmethod
 
 import paho.mqtt.client
 
@@ -39,7 +38,6 @@ def _on_publish(client, self, mid):
 class MqttClientBase(IoniClientBase):
 
     @property
-    @abstractmethod
     def is_connected(self):
         '''Returns `True` if connected to the server.
 
@@ -52,6 +50,7 @@ class MqttClientBase(IoniClientBase):
     def __init__(self, host, port, subscriber_functions,
             on_connect, on_subscribe, on_publish, 
             connect_timeout_s=10):
+        assert len(subscriber_functions) > 0, "no subscribers: for some unknown reason this causes disconnects"
         super().__init__(host, port)
 
         # Note: Version 2.0 of paho-mqtt introduced versioning of the user-callback to fix
