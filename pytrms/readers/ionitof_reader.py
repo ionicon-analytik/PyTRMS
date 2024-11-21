@@ -439,14 +439,14 @@ class IoniTOFReader:
             raise ValueError(msg) from exc
 
         try:
-            data = self._read_datainfo(tracedata, prefix=prefix)  # may raise KeyError
-            pt = self._read_datainfo(tracedata, prefix='PeakTable')  # may raise KeyError
-            labels = [b.decode('latin1') for b in pt['label']]
+            data = self._read_datainfo(tracedata, prefix=prefix)
+            pt = self._read_datainfo(tracedata, prefix='PeakTable')
         except KeyError as exc:
             raise KeyError(f'unknown group {exc}. filetype is not supported yet.') from exc
 
+        labels = [b.decode('latin1') for b in pt['label']]
         mapper = dict(zip(data.columns, labels))
-        data.rename(columns=mapper)
+        data.rename(columns=mapper, inplace=True)
         data.index = list(self.iter_index(index))
         
         return data

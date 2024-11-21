@@ -22,7 +22,7 @@ In the following example, the traces (i.e. timeseries data) is loaded from a dat
 >>> import pandas as pd
 
 >>> measurement = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
->>> traces = measurement.read_traces('concentration', index='abs_time')
+>>> traces = measurement.read_traces('concentration')
 >>> water_columns = [col for col in traces.columns if 'H2O' in col]
 >>> for col_name in sorted(water_columns): print(col_name)
 *(FeH2O2)H+
@@ -39,16 +39,40 @@ H2O.H3O+ (Cluster)
 H2O_Act
 H2O_Set
 
->>> traces[['*(H2O)+', '*(H2O)H+', '*(H2O)2H+']].describe()
-           *(H2O)+     *(H2O)H+    *(H2O)2H+
-count   129.000000   129.000000   129.000000
-mean    865.904846   980.209534  6049.917480
-std     320.313477   826.358704  3256.141846
-min     399.933929   170.015930  1947.956299
-25%     584.200745   224.781387  2227.153320
-50%     822.613037   712.026062  8409.678711
-75%    1161.566528  1466.957397  9112.859375
-max    1476.455444  2872.100098  9476.558594
+>>> traces[['H2O.H3O+ (Cluster)', 'm046_o', 'm089_o', 'H2O_Act']].describe()
+       H2O.H3O+ (Cluster)      m046_o      m089_o     H2O_Act
+count          129.000000  129.000000  129.000000  129.000000
+mean            11.239826   10.229387    2.553549    5.001189
+std              9.276476    1.901914    1.029452    0.000408
+min              1.928841    7.397606    1.066777    5.000156
+25%              2.486116    8.636315    1.566666    5.001094
+50%              8.096381    9.788801    2.517548    5.001094
+75%             18.895479   11.597718    3.342328    5.001563
+max             28.722771   14.569857    4.773218    5.002031
+
+```
+
+After processing the sourcefile with the *Ionicon PTRMS Viewer* we get
+a slightly different result for mass 46.0, because the peak was optimized...
+
+```python
+>>> measurement = pytrms.load('examples/data/processed/peter_emmes_2022-03-31_08-51-13.h5')
+>>> traces = measurement.read_traces()
+>>> traces[['H2O.H3O+ (Cluster)', 'm046_o']].mean()
+H2O.H3O+ (Cluster)    11.239826
+m046_o                10.239784
+dtype: float32
+
+```
+
+...but the original measurement can still be read if we insist to:
+
+```python
+>>> traces = measurement.read_traces(force_original=True)
+>>> traces[['H2O.H3O+ (Cluster)', 'm046_o']].mean()
+H2O.H3O+ (Cluster)    11.239826
+m046_o                10.229387
+dtype: float32
 
 ```
 
