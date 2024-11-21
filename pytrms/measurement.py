@@ -153,7 +153,7 @@ class FinishedMeasurement(Measurement):
         self.sourcefiles = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
         self._check(self.sourcefiles)
 
-    def read_traces(self, kind='raw', index='abs_cycle', force_original=False):
+    def read_traces(self, kind='conc', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
 
         'kind' is the type of traces and must be one of 'raw', 'concentration' or

@@ -70,7 +70,7 @@ class IoniTOFReader:
             # well it didn't work..
             pass
         finally:
-            self.hf = h5py.File(path, 'r', swmr=True)
+            self.hf = h5py.File(path, 'r', swmr=False)
 
     @property
     def number_of_timebins(self):
@@ -97,7 +97,7 @@ class IoniTOFReader:
         return float(self.hf.attrs.get('Single Spec Duration (ms)'))
 
     def __init__(self, path):
-        self.hf = h5py.File(path, 'r', swmr=True)
+        self.hf = h5py.File(path, 'r', swmr=False)
         self.filename = os.path.abspath(self.hf.filename)
 
     table_locs = {
