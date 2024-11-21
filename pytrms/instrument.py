@@ -17,7 +17,6 @@ class Instrument(ABC):
     Note, that for every client PTR instrument there is only one instance of this class.
     This is to prevent different instances to be in other states than the instrument.
     '''
-
     __instance = None
 
     def _new_state(self, newstate):
@@ -69,38 +68,41 @@ class Instrument(ABC):
         """Set a variable to a new value."""
         return self.backend.set(varname, value, unit='-')
 
+    _current_sourcefile = ''
+
     def start_measurement(self, filename=''):
         # this method must be implemented by each state
         raise RuntimeError("can't start %s" % self.__class__)
-
-    start_measurement.__doc__ = Measurement.start.__doc__
 
     def stop_measurement(self):
         # this method must be implemented by each state
         raise RuntimeError("can't stop %s" % self.__class__)
 
-    stop_measurement.__doc__ = Measurement.stop.__doc__
-
 
 class IdleInstrument(Instrument):
 
     def start_measurement(self, filename=''):
-        # if we send a filepath to the server that does not exist there, the server will
-        # open a dialog and "hang" (which I'd very much like to avoid).
-        # the safest way is to not send a path at all and start a 'Quick' measurement.
-        # but if the server is the local machine, we do our best to verify the path:
-        if filename and self.is_local:
-            home = os.path.dirname(filename)
-            os.makedirs(home, exist_ok=True)
-            base = os.path.basename(filename)
-            if not base:
-                base = '%Y-%m-%d_%H-%M-%S.h5'
-            base = time.strftime(base)
-            filename = os.path.join(home, base)
+        dirname = os.path.dirname(filename)
+        if dirname and self.is_local:
+            # Note: if we send a filepath to the server that does not exist there, the
+            #  server will open a dialog and "hang" (which I'd very much like to avoid).
+            #  the safest way is to not send a path at all and start a 'Quick' measurement.
+            #  but if the server is the local machine, we do our best to verify the path:
+            os.makedirs(dirname, exist_ok=True)
+
+        if filename:
+            basename = os.path.basename(filename)
+            # this may very well be a directory to record a filename into:
+            if not basename:
+                basename = '%Y-%m-%d_%H-%M-%S.h5'
+                filename = os.path.join(dirname, basename)
+            # finally, pass everything through strftime...
+            filename = time.strftime(filename)
             if os.path.exists(filename):
                 raise RuntimeError(f'filename exists and cannot be overwritten')
 
         self.backend.start_measurement(filename)
+        self._current_sourcefile = filename
         self._new_state(RunningInstrument)
 
         return RunningMeasurement(self)
@@ -111,4 +113,7 @@ class RunningInstrument(Instrument):
     def stop_measurement(self):
         self.backend.stop_measurement()
         self._new_state(IdleInstrument)
+
+        # TODO :: this catches only one sourcefile.. it'll do for simple cases:
+        return FinishedMeasurement(_current_sourcefile)
 

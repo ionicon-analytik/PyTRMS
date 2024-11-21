@@ -1,8 +1,9 @@
 import time
-from glob import glob
 from operator import attrgetter
 from itertools import chain
 from abc import abstractmethod, ABC
+
+import pandas as pd
 
 from .readers import IoniTOFReader
 
@@ -145,16 +146,14 @@ class FinishedMeasurement(Measurement):
     def timebin_width_ps(self):
         return next(iter(self.sourcefiles)).timebin_width_ps
 
-    def __init__(self, filenames, _reader=IoniTOFReader):
-        if isinstance(filenames, str):
-            filenames = glob(filenames)
+    def __init__(self, *filenames, _reader=IoniTOFReader):
         if not len(filenames):
-            raise ValueError("file not found or empty glob expression")
+            raise ValueError("no filename given")
 
         self.sourcefiles = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
         self._check(self.sourcefiles)
 
-    def iter_traces(self, kind='raw', index='abs_cycle', force_original=False):
+    def read_traces(self, kind='raw', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
 
         'kind' is the type of traces and must be one of 'raw', 'concentration' or
@@ -164,8 +163,11 @@ class FinishedMeasurement(Measurement):
         'abs_time' or 'rel_time'.
 
         """
-        return chain.from_iterable(sf.get_all(kind, index, force_original) for sf in self.sourcefiles)
+        return pd.concat(sf.read_all(kind, index, force_original) for sf in self.sourcefiles)
+
+    def __iter__(self):
+        return iter(self.sourcefiles)
 
     def __len__(self):
-        return sum(len(sf) for sf in self.sourcefiles)
+        return len(self.sourcefiles)
 

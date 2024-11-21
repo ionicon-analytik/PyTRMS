@@ -6,14 +6,16 @@ __all__ = ['load', 'connect']
 def load(path):
     '''Open a datafile for post-analysis or batch processing.
 
-    returns a `Measurement`.
+    `path` may be a glob-expression to collect a whole batch.
+
+    returns a `Measurement` instance.
     '''
-    from .measurement import OfflineMeasurement
-    from .readers import IoniTOFReader
+    import glob
+    from .measurement import FinishedMeasurement
 
-    reader = IoniTOFReader(path)
+    files = glob.glob(path)
 
-    return OfflineMeasurement(reader)
+    return FinishedMeasurement(*files)
 
 def connect(host=None, method='webapi'):
     '''Connect a client to a running measurement server.

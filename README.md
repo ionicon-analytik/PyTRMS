@@ -22,7 +22,7 @@ In the following example, the traces (i.e. timeseries data) is loaded from a dat
 >>> import pandas as pd
 
 >>> measurement = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
->>> traces = measurement.get_traces('concentration', index='abs_time')
+>>> traces = measurement.read_traces('concentration', index='abs_time')
 >>> water_columns = [col for col in traces.columns if 'H2O' in col]
 >>> for col_name in sorted(water_columns): print(col_name)
 *(FeH2O2)H+
@@ -39,7 +39,7 @@ H2O.H3O+ (Cluster)
 H2O_Act
 H2O_Set
 
->>> measurement.traces[['*(H2O)+', '*(H2O)H+', '*(H2O)2H+']].describe()
+>>> traces[['*(H2O)+', '*(H2O)H+', '*(H2O)2H+']].describe()
            *(H2O)+     *(H2O)H+    *(H2O)2H+
 count   129.000000   129.000000   129.000000
 mean    865.904846   980.209534  6049.917480
@@ -52,22 +52,20 @@ max    1476.455444  2872.100098  9476.558594
 
 ```
 
-When analysing a bunch of datafiles, we can leverage the full power of Python to
-collect files from a directory tree and use sorting functions to sort our batch e.g.
-by the start time:
+When analysing a bunch of datafiles, we can use a glob-expression to collect files
+from a directory tree and let PyTRMS sort our batch by the start time:
 
 ```python
->>> from glob import iglob
->>> from operator import attrgetter
+>>> batch = pytrms.load('examples/data/peter_emmes*.h5')
+>>> for sourcefile in batch: print(sourcefile)  # doctest: +ELLIPSIS
+<...examples/data\peter_emmes_2022-03-31_08-51-13.h5>
+<...examples/data\peter_emmes_2022-03-31_08-59-30.h5>
+<...examples/data\peter_emmes_2022-03-31_09-10-08.h5>
+<...examples/data\peter_emmes_2022-03-31_09-20-31.h5>
+<...examples/data\peter_emmes_2022-03-31_09-29-40.h5>
 
->>> loader = (pytrms.load(file) for file in iglob('examples/data/*.h5'))
->>> batch = sorted(loader, key=attrgetter('timezero'))
->>> for measurement in batch: print(measurement.filename)
-examples/data/peter_emmes_2022-03-31_08-51-13.h5
-examples/data/peter_emmes_2022-03-31_08-59-30.h5
-examples/data/peter_emmes_2022-03-31_09-10-08.h5
-examples/data/peter_emmes_2022-03-31_09-20-31.h5
-examples/data/peter_emmes_2022-03-31_09-29-40.h5
+>>> len(batch)
+5
 
 ```
 
@@ -82,85 +80,32 @@ measurement.
 
 ```python
 >>> import pytrms
->>> from pytrms.testing import connect_ as connect  # (for testing)
 
 # initialize a connection to a PTR instrument server
-# (when connecting to an instrument use `pytrms.connect(..)`):
->>> ptr = connect('localhost')  # doctest: +ELLIPSIS
-<pytrms.instrument.BusyInstrument object at 0x...>
+# (this would assume that IoniTOF is running locally,
+# but you could also pass in a network address):
+>>> ptr = pytrms.connect('localhost')  # doctest: +ELLIPSIS +SKIP
 <pytrms.instrument.IdleInstrument object at 0x...>
 
->>> ptr  # doctest: +ELLIPSIS
+>>> ptr  # doctest: +ELLIPSIS +SKIP
 <pytrms.instrument.IdleInstrument object at 0x...>
 
-# the instrument is idle, let's start a measurement:
->>> ptr.start('/tmp/pytrms-test/')  # doctest: +ELLIPSIS
-<pytrms.instrument.BusyInstrument object at 0x...>
+# the instrument is idle, let's start a measurement!
+# when passing a filename it may contain placeholders
+# such as %Y, %m, %d that will be filled with the current
+# date and time (google strftime for details):
+>>> ptr.start_measurement('pytrms-test/%Y/%m/')  # doctest: +ELLIPSIS +SKIP
 <pytrms.instrument.RunningInstrument object at 0x...>
 
->>> ptr.wait(1, 'collecting data for a humble second...')
-collecting data for a humble second...
+>>> ptr.wait(10, 'collecting data for ten seconds...')  # doctest: +SKIP
+collecting data for a ten seconds...
 
-# enough, let's stop the measurement:
->>> ptr.stop()  # doctest: +ELLIPSIS
-<pytrms.instrument.BusyInstrument object at 0x...>
+# we got enough data, let's stop the measurement:
+>>> ptr.stop_measurement()  # doctest: +ELLIPSIS +SKIP
 <pytrms.instrument.IdleInstrument object at 0x...>
 
 ```
 
-## Online analysis in real-time (TODO)
-
-The `Measurement` can register callback functions that are executed on every
-cycle with the current trace data:
-
-```python
-import pytrms
-
-m = pytrms.measure('localhost')
-
-def oxygen_watchdog(meas, trace):
-    if trace['O2_level'] < 10_000:
-        print('oxygen level critical! closing valve 1...')
-        meas.set('Valve_1', 0)
-
-def detect_threshold(meas, trace):
-    if trace['H2o_level'] > 20_000:
-        print('water level above threshold! aborting.')
-        meas.stop()
-
-ema = 1
-alpha = 0.2
-file = 'C:/Temp/m_42_avg.dat'
-def moving_average(meas, trace):
-    ema = alpha * trace['m_42'] + (1-alpha) * ema
-    with open(file, 'a') as f:
-        f.write(str(ema) + '\n')
-    
-m.register_callback(oxygen_watchdog)
-m.register_callback(detect_threshold)
-m.register_callback(moving_average)
-
-m.start()
-
-```
-
-## Use as a context manager (TODO)
-
-The `Measurement` serves as a context in which the experiment is running:
-
-```python
-import pytrms
-
-meas = pytrms.measure(host='localhost')
-
-print(meas)  # prints PrepareMeasurement
-
-with meas as running:
-    print(meas)  # prints RunningMeasurement
-    meas.wait(3)
-
-print(meas)  # prints FinishedMeasurement
-```
 
 ## Getting started
 
@@ -171,7 +116,7 @@ Using *pip* is the preferred way to get the latest version of *PyTRMS*, but othe
 solutions like *Anaconda* should also work. In a terminal type
 
 ```
-python -m pip install --upgrade pytrms
+python -m pip install -U pytrms
 ```
 
 to install the latest release from *PyPI*. This command can also be used at any later
