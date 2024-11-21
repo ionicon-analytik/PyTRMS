@@ -60,12 +60,13 @@ class SSEventListener(Iterable):
         event = msg = ''
         for line in self._line_stream(self._connect_response):  # blocks...
             if not line.strip():
+                # an empty line concludes an event
                 if event and any(re.match(sub, event) for sub in self.subscriptions):
                     yield _event_rv(event, msg)
-                    event = msg = ''
-                else:
-                    log.log(_logging.TRACE, "sse: still alive...")
-                continue
+
+                # Note: any further empty lines are ignored (may be used as keep-alive),
+                #  but in either case clear event and msg to rearm for the next event:
+                event = msg = ''
 
             key, val = line.split(':', maxsplit=1)
             if not key:
