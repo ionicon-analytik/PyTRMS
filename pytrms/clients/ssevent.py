@@ -6,7 +6,7 @@ import requests
 
 from . import _logging
 
-log = _logging.getLogger()
+log = _logging.getLogger(__name__)
 
 _event_rv = namedtuple('ssevent', ['event', 'data'])
 
@@ -19,7 +19,7 @@ class SSEventListener(Iterable):
         for bite in response.iter_content(chunk_size=1, decode_unicode=True):
             line += bite
             if bite == '\n':
-                yield line
+                yield line.strip()
                 line = ''
 
     def __init__(self, event_re=None, host_url='http://127.0.0.1:5066',
@@ -59,7 +59,7 @@ class SSEventListener(Iterable):
 
         event = msg = ''
         for line in self._line_stream(self._connect_response):  # blocks...
-            if not line.strip():
+            if not line:
                 # an empty line concludes an event
                 if event and any(re.match(sub, event) for sub in self.subscriptions):
                     yield _event_rv(event, msg)
@@ -67,6 +67,7 @@ class SSEventListener(Iterable):
                 # Note: any further empty lines are ignored (may be used as keep-alive),
                 #  but in either case clear event and msg to rearm for the next event:
                 event = msg = ''
+                continue
 
             key, val = line.split(':', maxsplit=1)
             if not key:
