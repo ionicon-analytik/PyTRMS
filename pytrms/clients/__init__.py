@@ -7,7 +7,7 @@ assert os.path.exists(_par_id_file), "par-id file not found: please re-install P
 
 import logging as _logging
 
-_logging.TRACE = 0  # overwrites logging.NOTSET
+_logging.TRACE = 5  # even more verbose than logging.DEBUG
 
 def enable_extended_logging(log_level=_logging.DEBUG):
     '''make output of http-requests more talkative.
@@ -22,7 +22,7 @@ def enable_extended_logging(log_level=_logging.DEBUG):
         requests_log.setLevel(log_level)
         requests_log.propagate = True
     
-    if log_level == _logging.TRACE:
+    if log_level <= _logging.TRACE:
         # Enabling debugging at http.client level (requests->urllib3->http.client)
         # you will see the REQUEST, including HEADERS and DATA, and RESPONSE with
         # HEADERS but without DATA. the only thing missing will be the response.body,
