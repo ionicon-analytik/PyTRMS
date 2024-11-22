@@ -361,6 +361,10 @@ def follow_act_set_values(client, self, msg):
             # Note: this topic doesn't strictly follow the convention and is handled separately
             return
 
+        if server == "Sequencer":
+            # Note: this is a separate program and will be ignored (has its own AUTO_-numbers et.c.)
+            return
+
         if parID == "PTR_CalcConzInfo":
             # another "special" topic handled in 'follow_calc_conz_info' ...
             return
