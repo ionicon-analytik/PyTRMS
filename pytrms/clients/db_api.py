@@ -74,6 +74,9 @@ class IoniConnect(IoniClientBase):
             kwargs['headers'] = {'content-type': 'application/hal+json'}
         elif 'content-type' not in (k.lower() for k in kwargs['headers']):
             kwargs['headers'].update({'content-type': 'application/hal+json'})
+        if 'timeout' not in kwargs:
+            # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+            kwargs['timeout'] = (6.06, 27)
         r = self.session.request('get', self.url + endpoint, **kwargs)
         r.raise_for_status()
         
@@ -88,6 +91,9 @@ class IoniConnect(IoniClientBase):
             kwargs['headers'] = {'content-type': 'application/hal+json'}
         elif 'content-type' not in (k.lower() for k in kwargs['headers']):
             kwargs['headers'].update({'content-type': 'application/hal+json'})
+        if 'timeout' not in kwargs:
+            # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+            kwargs['timeout'] = (6.06, 27)
         r = self.session.request(method, self.url + endpoint, data=data, **kwargs)
         if not r.ok:
             log.error(f"POST {endpoint}\n{data}\n\nreturned [{r.status_code}]: {r.content}")
