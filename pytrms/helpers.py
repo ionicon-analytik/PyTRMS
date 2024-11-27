@@ -69,17 +69,20 @@ def parse_presets_file(presets_file):
     return {index: (preset_names[index], preset_items[index]) for index in preset_names.keys()}
 
 
-def setup_measurement_dir(config_dir=None, data_root_dir='D:/Data', suffix='',
-        date_fmt = "%Y_%m_%d__%H_%M_%S"):
+def setup_measurement_dir(config_dir=None, data_root_dir="D:/Data", suffix="",
+        date_fmt = "%Y_%m_%d__%H_%M_%S", exclude=r".*\.REPLAY"):
     """Create a new directory for saving the measurement and set it up.
 
     Optional: copy all files from the given config-directory.
 
-    data_root_dir: the base folder for storing new measurement-directories
-    suffix: will be appended to directory and data-file
-    date_fmt: format for the source-folder and -file to be timestamped
+    config_dir - where to copy from
+    data_root_dir - the base folder for storing new measurement-directories
+    suffix - will be appended to directory and data-file
+    date_fmt - format for the source-folder and -file to be timestamped
+    exclude - a regular expression to exclude files from copying
     """
     import os
+    import re
     import glob
     import shutil
     from collections import namedtuple
@@ -108,6 +111,9 @@ def setup_measurement_dir(config_dir=None, data_root_dir='D:/Data', suffix='',
     # ...and copy all files from the master-recipe-dir:
     files2copy = glob.glob(config_dir + "/*")
     for file in files2copy:
+        if exclude and re.match(exclude, file):
+            continue
+
         new_file = shutil.copy(file, new_recipe_dir)
         try:  # remove write permission (a.k.a. make files read-only)
             mode = os.stat(file).st_mode
