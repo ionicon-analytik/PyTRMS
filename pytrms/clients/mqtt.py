@@ -746,6 +746,9 @@ class MqttClient(MqttClientBase):
                 # DO NOT FAIL INSIDE THE CALLBACK!
                 log.error(f"iter_specdata({q.maxsize}): fullcycle buffer overrun!")
                 client.unsubscribe(topic)
+            except Exception as ex:
+                # DO NOT FAIL INSIDE THE CALLBACK!
+                log.warning(f"got {ex!r} while parsing {len(msg.payload) = }")
 
         if not self.is_connected:
             raise Exception("no connection to MQTT broker")
