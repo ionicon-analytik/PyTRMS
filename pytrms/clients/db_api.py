@@ -158,15 +158,24 @@ class IoniConnect(IoniClientBase):
             #  than doing separate requests for each peak!
             payload = {'_embedded': {'peaks': [updates[key]['payload'] for key in sorted(to_upload)]}}
             self.post('/api/peaks', payload)
-            for key in sorted(to_upload): log.info(f"added new:  {key}")
+            for key in sorted(to_upload):
+                log.info(f"added new:  {key}")
 
-        # Note: this disregards the peak-parent-relationship, but in
-        #  order to implement this correctly, one would need to check
-        #  if the parent-peak with a specific 'parentID' is already
-        #  uploaded and search it.. there's an endpoint
-        #   'LINK /api/peaks/{parentID} Location: /api/peaks/{childID}'
-        #  to link a child to its parent, but it remains complicated.
-        # TODO :: maybe later implement parent-peaks!?
+        if len(peaktable.fitted):
+            # Note: until now, we disregarded the peak-parent-relationship, so
+            # make another request to the updated peak-table from the server...
+            db_peaks = {make_key(p): {
+                        'payload': {k: p[k] for k in conv.keys()},
+                        'self':   p['_links']['self'],
+                        'parent': p['_links'].get('parent'),
+                        } for p in self.get('/api/peaks')['_embedded']['peaks']}
+
+            for fitted in peaktable.fitted:
+                fitted_href = db_peaks[fitted]["self"]["href"]
+                parent_href = db_peaks[fitted.parent]["self"]["href"]
+                r = self.session.request('link', self.url + parent_href, headers={"location": fitted_href})
+                r.raise_for_status()
+                log.debug(f"linked parent {parent_href} ~> {fitted_href}")
 
         return {
                 'added': len(to_upload),

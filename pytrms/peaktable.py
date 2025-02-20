@@ -115,12 +115,10 @@ class Peak:
             label = 'm{:.4f}'.format(self.center)
         self.label = str(label)
         self.formula = formula
-        if isinstance(parent, Peak):
-            self.parent = str(parent.label)
-        elif parent is not None:
-            self.parent = str(parent)
-        else:
-            self.parent = ''
+        if parent is not None and not isinstance(parent, Peak):
+            raise ValueError(parent)
+
+        self.parent = parent
         self._borders = tuple(map(lambda x: round(float(x), ndigits=4), borders))
         self.isotopic_abundance = float(isotopic_abundance)
         self.k_rate = float(k_rate)
