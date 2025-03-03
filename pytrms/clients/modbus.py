@@ -303,10 +303,12 @@ class IoniconModbus(IoniClientBase):
 
     def write_instrument_data(self, par_id, new_value, timeout_s=10):
 
+        # This command-structure is written as an array:
+        # Register 0: number of command-blocks to write
         # Each command-block consists of 3 registers:
         # Register 1: Parameter ID
         # Register 2-3: Parameter Set Value as float(real)
-        start_register = 40000
+        start_register = 41000
         blocksize = 3
 
         if isinstance(par_id, str):
@@ -318,8 +320,13 @@ class IoniconModbus(IoniClientBase):
         if par_id not in _id_to_descr:
             raise IndexError(str(par_id))
 
-        start_register += blocksize * par_id
+        # Note: we use only the first command-block for writing:
+        n_blocks = 1
+        reg_values = list(_pack(n_blocks, '>h'))
+        # ...although we could add more command-blocks here:
+        reg_values += list(_pack(par_id, '>h')) + list(_pack(new_value, '>f'))
 
+        # wait for instrument to receive...
         retry_time = 0
         while retry_time < timeout_s:
             # a value of 0 indicates ready-to-write:
@@ -328,9 +335,8 @@ class IoniconModbus(IoniClientBase):
             retry_time += 0.5
             time.sleep(0.5)
         else:
-            raise TimeoutError(f'register {start_register} timed out after {timeout_s}s')
+            raise TimeoutError(f'instrument not ready for writing after ({timeout_s}) seconds')
 
-        reg_values = [start_register] + list(_pack(new_value))
         self.mc.write_multiple_registers(start_register, reg_values)
 
     @lru_cache
@@ -447,9 +453,7 @@ class IoniconModbus(IoniClientBase):
     ])
 
     def write_ame_action(self, action_number):
-        start_reg, c_fmt, _ = self.address['action_number']
-        set_value = _pack(action_number, c_fmt)
-        self.mc.write_multiple_registers(start_reg, set_value)
+        self.write_instrument_data(596, action_number, timeout_s=10)
 
     def read_ame_mean(self, step_number=None):
         start_reg, c_fmt, _is_holding = self.address['ame_mean_data']
