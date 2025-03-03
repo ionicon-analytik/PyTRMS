@@ -174,7 +174,9 @@ class IoniConnect(IoniClientBase):
                 fitted_href = db_peaks[fitted]["self"]["href"]
                 parent_href = db_peaks[fitted.parent]["self"]["href"]
                 r = self.session.request('link', self.url + parent_href, headers={"location": fitted_href})
-                r.raise_for_status()
+                if not r.ok:
+                    log.error(f"LINK {parent_href} to Location: {fitted_href} failed\n\n[{r.status_code}]: {r.content}")
+                    r.raise_for_status()
                 log.debug(f"linked parent {parent_href} ~> {fitted_href}")
 
         return {
