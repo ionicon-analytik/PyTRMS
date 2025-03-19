@@ -326,12 +326,14 @@ def follow_state(client, self, msg):
     # replace the current state with the new element:
     self._server_state.append(state)
     meas_running = (state == "ACQ_Aquire")  # yes, there's a typo, plz keep it :)
-    just_started = (meas_running and not msg.retain)
     if meas_running:
         # signal the relevant thread(s) that we need an update:
         self._calcconzinfo.append(_NOT_INIT)
-    if just_started:
-        # invalidate the source-file until we get a new one:
+    if not meas_running:
+        # Note: the user-interface in `.current_sourcefile` checks for the
+        #  above _server_state and expects an initialized filename if and
+        #  only if the server is running! Therefore, we can safely
+        #  invalidate the source-file until we get a new one:
         self._sf_filename.append(_NOT_INIT)
 
 follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
@@ -730,6 +732,7 @@ class MqttClient(MqttClientBase):
         * Elements will be buffered up to a maximum of `buffer_size` cycles (default: 300).
         * Cycles recorded prior to calling `next()` on the iterator may be missed,
           so ideally this should be set up before any measurement is running.
+        * Once the measurement stops, this iterator will raise `StopIteration`.
         * [Important]: When the buffer runs full, a `queue.Full` exception will be raised!
           Therefore, the caller should consume the iterator as soon as possible while the
           measurement is running.
@@ -740,7 +743,10 @@ class MqttClient(MqttClientBase):
 
         def callback(client, self, msg):
             try:
-                q.put_nowait(_parse_fullcycle(msg.payload, need_add_data=True))
+                _fc = _parse_fullcycle(msg.payload, need_add_data=True)
+                # IoniTOF cycle-indexing starts at 1, while 0 marks idle state:
+                if _fc.timecycle.abs_cycle > 0:
+                    q.put_nowait(_fc)
                 log.debug(f"received fullcycle, buffer at ({q.qsize()}/{q.maxsize})")
             except queue.Full:
                 # DO NOT FAIL INSIDE THE CALLBACK!
@@ -764,7 +770,20 @@ class MqttClient(MqttClientBase):
             #  if block is true and timeout is None, [the q.get()] operation goes into an
             #  uninterruptible wait on an underlying lock. This means that no exceptions
             #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
-            yield q.get(block=True, timeout=timeout_s)  # waiting for measurement to run...
+            if timeout_s is None and not self.is_running:
+                log.warn(f"waiting indefinitely for measurement to run...")
+
+            yield q.get(block=True, timeout=timeout_s)
+
+            # make double sure that there's more to come..
+            _started_at = time.monotonic()
+            while timeout_s is None or time.monotonic() < _started_at + timeout_s:
+                if self.is_running:
+                    break
+
+                time.sleep(10e-3)
+            else:
+                raise TimeoutError(f"[{self}] received specdata, but measurement won't start");
 
             while self.is_running or not q.empty():
                 if q.full():
