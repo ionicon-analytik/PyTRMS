@@ -38,9 +38,9 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 36	DPS_IhcOnOff	BOOL	RW	PTR	PTR_Write		Ihc On/Off		
 37	DPS_Pdrift_Ctrl_OnOff		RW	PTR	PTR_Write		p-drift controlled		
 38	DPS_Pdrift_Ctrl_Val		RW	PTR	PTR_Write		p-drift ctrl Value  		
-39	SourceValve		RW	PTR	PTR_Write		Source Valve		
-40	PrimionIdx		RW	PTR	PTR_Write		Prim Ion Idx		
-41	E/N	DBL	R				E/N	Td	
+39	SourceValve	DBL	RW	PTR	PTR_Write		Source Valve		
+40	PrimionIdx	I32	RW	PTR	PTR_Write		Prim Ion Idx		
+41	E_N	DBL	R				E/N	Td	
 42	FC_H2O	DBL	R	PTR	PTR_Write		FC H2O	sccm	
 43	SmartGAS1_Conc	DBL	R	PTR			Conz1 SG		
 44	SmartGAS2_Conc	DBL	R	PTR			Conz2 SG		
@@ -66,16 +66,16 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 64	Spare_64 								
 65	Spare_65 								
 66	Spare_66 								
-67	Spare_67 								
-68	Spare_68 								
-69	Spare_69 								
+67	MPV_Dir_1	I32		PTR	PTR_Write		MPV Dir		
+68	MPV_Dir_2	I32		PTR	PTR_Write		MPV Dir2		
+69	MPV_Dir_3	I32		PTR	PTR_Write		MPV Dir3		
 70	MPV_1			PTR	PTR_Write		MPValve1		
 71	MPV_2			PTR	PTR_Write		MPValve2		
 72	MPV_3			PTR	PTR_Write		MPValve3		
 73	DPS_Uf	DBL	RW	PTR	PTR_Write		Uf	V	
 74	DPS_U1	DBL	RW	PTR	PTR_Write		UF1	V	
 75	DPS_U2	DBL	RW	PTR	PTR_Write		UF2	V	
-76	Spare_76 								
+76	DPS_IhcOnOff_Neg	BOOL	RW	PTR	PTR_Write		Ihc On/Off		
 77	Spare_77 								
 78	Spare_78 								
 79	Spare_79 								
@@ -323,7 +323,7 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 321	GC2_ConstantTemperature	DBL	RW	PTR			GC2 Temp Set		
 322	GC2_FC	DBL	RW	PTR			FC GC		
 323	GC2_FC_Makeup	DBL	RW	PTR			FC FastGC Makeup		
-324	Spare324								
+324	GC2_FC_Ri	DBL	RW	PTR			FC FastGC Ri		
 325	Spare325								
 326	Spare326								
 327	Spare327								
