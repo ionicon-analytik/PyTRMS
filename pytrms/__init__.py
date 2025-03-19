@@ -1,4 +1,4 @@
-_version = '0.9.3'
+_version = '0.9.4'
 
 __all__ = ['load', 'connect']
 
