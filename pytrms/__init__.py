@@ -17,22 +17,26 @@ def load(path):
 
     return FinishedMeasurement(*files)
 
-def connect(host=None, method='webapi'):
+
+def connect(host='localhost', port=None, method='mqtt'):
     '''Connect a client to a running measurement server.
 
-    'method' is the preferred connection, either 'webapi' (default) or 'modbus'.
+    'method' is the preferred connection, either 'mqtt' (default), 'webapi' or 'modbus'.
 
     returns an `Instrument` if connected successfully.
     '''
     from .instrument import Instrument
 
-    if method.lower() == 'webapi':
-        from .clients.ioniclient import IoniClient
-        return IoniClient(host)
+    if method.lower() == 'mqtt':
+        from .clients.mqtt import MqttClient as _client
+    elif method.lower() == 'webapi':
+        from .clients.ioniclient import IoniClient as _client
+    elif method.lower() == 'modbus':
+        from .modbus import IoniconModbus as _client
+    else:
+        raise NotImplementedError(str(method))
 
-    if method.lower() == 'modbus':
-        from .modbus import IoniconModbus
-        return IoniconModbus(host)
+    backend = _client(host, port) if port is not None else _client(host)
 
-    raise NotImplementedError(str(method))
+    return Instrument(backend)
 

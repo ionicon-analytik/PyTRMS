@@ -2,7 +2,10 @@ import os.path
 import time
 from abc import abstractmethod, ABC
 
-from .measurement import *
+from .measurement import (
+        RunningMeasurement,
+        FinishedMeasurement,
+)
 
 
 class Instrument(ABC):
@@ -53,15 +56,17 @@ class Instrument(ABC):
 
     def get(self, varname):
         """Get the current value of a setting."""
-        # TODO :: this is not an interface implementation
+        # TODO :: this is not an interface implementation...
         raw = self.backend.get(varname)
+
+        from .clients.mqtt import MqttClient
         if not isinstance(self.backend, MqttClient):
             import json
             jobj = json.loads(raw)
 
             return jobj[0]['Act']['Real']
 
-        ## how it should be:
+        ## ...how it should be: just:
         return raw
 
     def set(self, varname, value, unit='-'):
@@ -115,5 +120,5 @@ class RunningInstrument(Instrument):
         self._new_state(IdleInstrument)
 
         # TODO :: this catches only one sourcefile.. it'll do for simple cases:
-        return FinishedMeasurement(_current_sourcefile)
+        return FinishedMeasurement(self._current_sourcefile)
 
