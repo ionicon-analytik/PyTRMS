@@ -361,7 +361,8 @@ def follow_act_set_values(client, self, msg):
         server, kind, parID = msg.topic.split('/')
         if server == "DataCollection":
             # Note: this topic doesn't strictly follow the convention and is handled separately
-            return
+            if kind != "Set":
+                return
 
         if server == "Sequencer":
             # Note: this is a separate program and will be ignored (has its own AUTO_-numbers et.c.)
@@ -801,7 +802,7 @@ class MqttClient(MqttClientBase):
 
         except queue.Empty:
             assert timeout_s is not None, "this should never happen"
-            raise TimeoutError("no measurement running after {timeout_s} seconds")
+            raise TimeoutError(f"no measurement running after {timeout_s} seconds")
 
         finally:
             #  ...also, when using more than one iterator, the first to finish will
