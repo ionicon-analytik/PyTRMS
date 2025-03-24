@@ -7,6 +7,8 @@ from .measurement import (
         FinishedMeasurement,
 )
 
+__all__ = ['Instrument']
+
 
 class Instrument(ABC):
     '''
@@ -27,25 +29,26 @@ class Instrument(ABC):
         self.__class__ = newstate
 
     def __new__(cls, backend):
-        # make this class a singleton..
+        # Note (reminder): If __new__() does not return an instance of cls,
+        #  then the new instance’s __init__() method will *not* be invoked!
+        #
+        # This aside, we override the __new__ method to make this class a
+        #  singleton that reflects the PTR-instrument state and dispatches
+        #  to one of its subclass implementations.
         if cls._Instrument__instance is not None:
-            # quick reminder: If __new__() does not return an instance of cls, then the
-            # new instance’s __init__() method will *not* be invoked:
             return cls._Instrument__instance
 
-        # ..that is synchronized with the PTR-instrument state:
         if backend.is_running:
-            cls = RunningInstrument
+            inst = object.__new__(_RunningInstrument)
         else:
-            cls = IdleInstrument
+            inst = object.__new__(_IdleInstrument)
 
-        inst = object.__new__(cls)
         Instrument._Instrument__instance = inst
 
         return inst
 
     def __init__(self, backend):
-        # dispatch all blocking calls to the client
+        # Note: this will be called *once* per Python process!
         self.backend = backend
 
     @property
@@ -84,7 +87,7 @@ class Instrument(ABC):
         raise RuntimeError("can't stop %s" % self.__class__)
 
 
-class IdleInstrument(Instrument):
+class _IdleInstrument(Instrument):
 
     def start_measurement(self, filename=''):
         dirname = os.path.dirname(filename)
@@ -113,7 +116,7 @@ class IdleInstrument(Instrument):
         return RunningMeasurement(self)
 
 
-class RunningInstrument(Instrument):
+class _RunningInstrument(Instrument):
 
     def stop_measurement(self):
         self.backend.stop_measurement()

@@ -125,7 +125,7 @@ class RunningMeasurement(Measurement):
             raise Exception("no connection to instrument")
 
         timeout_s = 15
-        ssd_s = 1e-3 * self.ptr.get('ACQ_SRV_SpecTime_ms')
+        ssd_s = 1e-3 * float(self.ptr.get('ACQ_SRV_SpecTime_ms'))
         last_rel_cycle = -1
         sourcefile = ''
         for specdata in self.ptr.backend.iter_specdata(timeout_s=timeout_s+ssd_s, buffer_size=300):
