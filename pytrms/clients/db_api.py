@@ -123,6 +123,7 @@ class IoniConnect(IoniClientBase):
             'high':   lambda p: p.borders[1],
             'shift':  attrgetter('shift'),
             'multiplier': attrgetter('multiplier'),
+            'resolution': attrgetter('resolution'),
         }
         # normalize the input argument and create a hashable set:
         updates = dict()
