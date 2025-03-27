@@ -274,7 +274,7 @@ class PeakTable:
     @staticmethod
     def _parse_ionipt(file):
         
-        def _make_peak(ioni_p, borders, shift, parent=None):
+        def _make_peak(ioni_p, borders, shift, parent):
             return Peak(ioni_p["center"],
                 label=ioni_p["name"],
                 formula=ioni_p["ionic_isotope"],
@@ -292,23 +292,29 @@ class PeakTable:
             border_peak = item["border_peak"]
             borders = (item["low"], item["high"])
             shift = item["shift"]
-            parent = None
             MODE = int(item["mode"])
             IGNORE    = 0b00
             INTEGRATE = 0b01
             FIT_PEAKS = 0b10
+            BOTH      = 0b11
+
             if bool(MODE == IGNORE):
                 continue
-            if bool(MODE & INTEGRATE):
-                parent = _make_peak(border_peak, borders, shift)
+
+            if bool(MODE & FIT_PEAKS) or bool(MODE == BOTH):
+                # Note: this cannot be handled separately, because
+                #  every fit-peak needs a parent in our context!
+                parent = _make_peak(border_peak, borders, shift, None)
                 peaks.append(parent)
-            if bool(MODE & FIT_PEAKS):
                 for ioni_peak in item["peak"]:
-                    if parent is None:
-                        # Note: we denote a peak w/ parent as a "fitted" peak..
-                        #  as a workaround, use the first as (its own) parent:
-                        parent = ioni_peak["name"]
                     peaks.append(_make_peak(ioni_peak, borders, shift, parent))
+                continue
+
+            if bool(MODE & INTEGRATE):
+                # Note: MUST go last, since BOTH would apply and I forgot about
+                #  bitwise-operations in Python and don't want to remember..
+                peaks.append(_make_peak(border_peak, borders, shift, None))
+                continue
 
         return PeakTable(peaks)
 

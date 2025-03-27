@@ -106,9 +106,9 @@ class IoniConnect(IoniClientBase):
         from pytrms.peaktable import Peak, PeakTable
         from operator import attrgetter
 
-        # Note: a `Peak` is a hashable object that serves as a key that
-        #  distinguishes between peaks as defined by PyTRMS:
-        make_key = lambda peak: Peak(center=peak['center'], label=peak['name'], shift=peak['shift'])
+        # Note: the DB-API distinguishes between peaks with 
+        #  different center *and* name, so this is our key:
+        make_key = lambda peak: (peak['center'], peak['name'])
 
         if isinstance(peaktable, str):
             log.info(f"loading peaktable '{peaktable}'...")
@@ -165,15 +165,12 @@ class IoniConnect(IoniClientBase):
         if len(peaktable.fitted):
             # Note: until now, we disregarded the peak-parent-relationship, so
             # make another request to the updated peak-table from the server...
-            db_peaks = {make_key(p): {
-                        'payload': {k: p[k] for k in conv.keys()},
-                        'self':   p['_links']['self'],
-                        'parent': p['_links'].get('parent'),
-                        } for p in self.get('/api/peaks')['_embedded']['peaks']}
+            peak2href = {Peak(center=p["center"], label=p["name"]): p["_links"]["self"]["href"]
+                            for p in self.get('/api/peaks')['_embedded']['peaks']}
 
             for fitted in peaktable.fitted:
-                fitted_href = db_peaks[fitted]["self"]["href"]
-                parent_href = db_peaks[fitted.parent]["self"]["href"]
+                fitted_href = peak2href[fitted]
+                parent_href = peak2href[fitted.parent]
                 r = self.session.request('link', self.url + parent_href, headers={"location": fitted_href})
                 if not r.ok:
                     log.error(f"LINK {parent_href} to Location: {fitted_href} failed\n\n[{r.status_code}]: {r.content}")
