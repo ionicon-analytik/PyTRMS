@@ -210,7 +210,7 @@ class IoniconModbus(IoniClientBase):
         try:
             self.connect()
         except TimeoutError as exc:
-            log.warn(f"{exc} (retry connecting when the Instrument is set up)")
+            log.warning(f"{exc} (retry connecting when the Instrument is set up)")
         self._addresses = {}
 
     def connect(self, timeout_s=10):

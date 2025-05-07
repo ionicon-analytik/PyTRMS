@@ -283,7 +283,7 @@ def follow_schedule(client, self, msg):
 
         if msg.topic.endswith("SRV_Schedule"):
             if not msg.payload:
-                log.warn("empty ACQ_SRV_Schedule payload has cleared retained topic")
+                log.warning("empty ACQ_SRV_Schedule payload has cleared retained topic")
                 self._sched_cmds.clear()
                 return
 
@@ -640,7 +640,7 @@ class MqttClient(MqttClientBase):
                 return self.write(parID, new_value)
 
         if not future_cycle > self.current_cycle:
-            log.warn(f"attempting to schedule past cycle, hope you know what you're doing");
+            log.warning(f"attempting to schedule past cycle, hope you know what you're doing");
             pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
 
         topic, qos, retain = "IC_Command/Write/Scheduled", 1, False
@@ -772,7 +772,7 @@ class MqttClient(MqttClientBase):
             #  uninterruptible wait on an underlying lock. This means that no exceptions
             #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
             if timeout_s is None and not self.is_running:
-                log.warn(f"waiting indefinitely for measurement to run...")
+                log.warning(f"waiting indefinitely for measurement to run...")
 
             yield q.get(block=True, timeout=timeout_s)
 

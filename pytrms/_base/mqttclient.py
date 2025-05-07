@@ -90,7 +90,7 @@ class MqttClientBase(IoniClientBase):
         try:
             self.connect(connect_timeout_s)
         except TimeoutError as exc:
-            log.warn(f"{exc} (retry connecting when the Instrument is set up)")
+            log.warning(f"{exc} (retry connecting when the Instrument is set up)")
 
     def connect(self, timeout_s=10):
         log.info(f"[{self}] connecting to MQTT broker...")
