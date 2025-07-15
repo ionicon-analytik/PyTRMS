@@ -35,17 +35,17 @@ class Step:
     >>> Step("H50", {'AUTO_UseMean': 0}, 10, start_delay=2)
     Traceback (most recent call last):
       ...
-    AssertionError: Automation numbers cannot be defined
+    AssertionError: a Step must not define AME-numbers
 
     ..and neither can a 'OP_Mode' alongside anything else:
     >>> Step("Odd2", {'DPS_Udrift': 345, 'OP_Mode': 2}, 10, start_delay=2)
     Traceback (most recent call last):
       ...
-    AssertionError: if 'OP_Mode' is specified, nothing else can be
+    AssertionError: if Step defines 'OP_Mode', nothing else can be!
 
     '''
     protected_keys = ['AME_RunNumber', 'AME_StepNumber', 'AUTO_UseMean'] 
-    
+
     def __init__(self, name, set_values, duration, start_delay):
         self.name = str(name)
         self.set_values = dict(set_values)
@@ -58,9 +58,9 @@ class Step:
         assert self.start_delay < self.duration
 
         for key in self.set_values:
-            assert key not in Step.protected_keys, "Automation numbers cannot be defined"
+            assert key not in Step.protected_keys, "a Step must not define AME-numbers"
         if 'OP_Mode' in self.set_values:
-            assert len(self.set_values) == 1, "if 'OP_Mode' is specified, nothing else can be"
+            assert len(self.set_values) == 1, "if Step defines 'OP_Mode', nothing else can be!"
 
     def __repr__(self):
         return f"{self.name}: ({self.start_delay}/{self.duration}) sec ~> {self.set_values}"
@@ -87,7 +87,7 @@ class Composition(Iterable):
     ...without automation (default)...
     >>> list(co.sequence())
     [(8, {'Eins': 1}), (18, {'Zwei': 2})]
-    
+
     ...with an action-number at the start (note, that AME-numbers are 1 cycle ahead)...
     >>> co.start_action = 7
     >>> list(co.sequence())
@@ -98,7 +98,7 @@ class Composition(Iterable):
     >>> seq = co.sequence()
     >>> next(seq)
     (9, {'AME_ActionNumber': 7})
-    
+
     >>> next(seq)
     (8, {'Eins': 1})
 
@@ -116,14 +116,14 @@ class Composition(Iterable):
 
     >>> next(seq)
     (22, {'AUTO_UseMean': 1})
-    
+
     '''
 
     STEP_MARKER    = 'AME_StepNumber'
     RUN_MARKER     = 'AME_RunNumber'
     USE_MARKER     = 'AUTO_UseMean'
     ACTION_MARKER  = 'AME_ActionNumber'
-    
+
     @staticmethod
     def load(filename, **kwargs):
         with open(filename, 'r') as ifstream:
@@ -137,7 +137,7 @@ class Composition(Iterable):
         self.start_action        = int(start_action) if start_action is not None else None
         self.generate_automation = bool(generate_automation)
         self.foresight_runs      = int(foresight_runs) if self.max_runs < 0 else max(int(foresight_runs), self.max_runs)
-        
+
         assert len(self.steps) > 0, "empty step list"
         assert self.max_runs != 0, "max_runs cannot be zero"
         assert self.foresight_runs > 0, "foresight_runs must be positive"
@@ -150,7 +150,7 @@ class Composition(Iterable):
         return self.max_runs > 0
 
     def dump(self, ofstream):
-        json.dump(self, ofstream, indent=2, default=vars)
+        json.dump(self.steps, ofstream, indent=2, default=vars)
 
     def translate_op_modes(self, preset_items, check=True):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
@@ -210,7 +210,7 @@ class Composition(Iterable):
             entry.update(carry)
             if check:
                 assert all(key in entry for key in preset_keys), "reaction-data missing in presets"
-        
+
         return set_values
 
     def sequence(self):
@@ -222,11 +222,11 @@ class Composition(Iterable):
         This generates AME_Run/Step-Number and AUTO_UseMean unless otherwise specified.
         '''
         _offset_ame = True  # whether ame-numbers should mark the *next* cycle, see [#2897]
-        
+
         future_cycle = self.start_cycle
         if self.start_action is not None:
             yield future_cycle + int(_offset_ame), dict([(self.ACTION_MARKER, int(self.start_action))])
-        
+
         for run, step, step_info in self:
             yield future_cycle, dict(step_info.set_values)
 
@@ -250,9 +250,9 @@ class Composition(Iterable):
     @coroutine
     def schedule_routine(self, schedule_fun):
         '''Create a coroutine that receives the current cycle and yields the last scheduled cycle.
-        
+
         'schedule_fun' should be a callable taking three arguments '(parID, value, schedule_cycle)'
-        
+
         >>> co = Composition([
         ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
         ...         Step("Zwoa", {"Zwei": 2}, 10, start_delay=3)
@@ -265,10 +265,10 @@ class Composition(Iterable):
         Eins 1 20
         Zwei 2 30
         Eins 1 40
-        
+
         >>> wake_cycle  # should wake up in time before the last run has begun..
         30
-        
+
         '''
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
