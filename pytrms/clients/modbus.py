@@ -271,6 +271,26 @@ class IoniconModbus(IoniClientBase):
         if _is_open(self.mc):
             self.mc.close()
 
+    def start_measurement(self, path=None):
+        '''Start a new measurement and block until the change is confirmed.
+
+        'path' is ignored!
+        '''
+        if path is not None:
+            log.warning(f'ignoring .h5-filepath in Modbus command and starting quick measurement')
+
+        self.write_instrument_data('ACQ_SRV_Start_Meas_Quick', 1, oldschool=True, timeout_s=10)
+
+    def stop_measurement(self, future_cycle=None):
+        '''Stop the current measurement and block until the change is confirmed.
+
+        'future_cycle' is ignored!
+        '''
+        if future_cycle is not None:
+            log.warning(f'ignoring {future_cycle = } in Modbus command and stopping immediately')
+
+        self.write_instrument_data('ACQ_SRV_Stop_Meas', 1, oldschool=True, timeout_s=10)
+
     @property
     @lru_cache
     def n_parameters(self):
