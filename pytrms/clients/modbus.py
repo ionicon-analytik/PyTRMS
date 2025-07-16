@@ -32,7 +32,7 @@ def _patch_is_open():
     if int(minor) < 2:
         return lambda mc: mc.is_open()
     else:
-        return lambda mc: mc.is_open
+        return lambda mc: bool(mc.is_open)
 
 _is_open = _patch_is_open()
 
@@ -184,16 +184,21 @@ class IoniconModbus(IoniClientBase):
         if not _is_open(self.mc):
             return False
 
-        # wait for the IoniTOF alive-counter to change (1 second max)...
-        initial_count = self._alive_counter
-        timeout_s = 3  # counter should increase every 500 ms, approximately
-        started_at = time.monotonic()
-        while time.monotonic() < started_at + timeout_s:
-            if initial_count != self._alive_counter:
-                return True
+        try:
+            # wait for the IoniTOF alive-counter to change (1 second max)...
+            initial_count = self._alive_counter
+            timeout_s = 3  # counter should increase every 500 ms, approximately
+            started_at = time.monotonic()
+            while time.monotonic() < started_at + timeout_s:
+                if initial_count != self._alive_counter:
+                    return True
 
-            time.sleep(10e-3)
-        return False
+                time.sleep(10e-3)
+            return False
+        except IOError:
+            # bug-fix: failing to read _alive_counter closed the connection,
+            #  even after checking .is_open! Don't let this property throw:
+            return False
 
     @property
     def is_running(self):
@@ -250,7 +255,7 @@ class IoniconModbus(IoniClientBase):
             self.mc.timeout(timeout_s)
         else:
             self.mc.timeout = timeout_s
-        if not self.mc.open():
+        if not (_is_open(self.mc) or self.mc.open()):
             raise TimeoutError(f"[{self}] no connection to modbus socket")
 
         started_at = time.monotonic()
@@ -537,14 +542,16 @@ class IoniconModbus(IoniClientBase):
         )
 
     def _read_reg(self, addr, c_format, is_holding_register=False):
-        n_bytes, c_format, reg_format = _get_fmt(c_format)
-        _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
-        
-        register = _read(addr, n_bytes)
-        if register is None and _is_open(self.mc):
-            raise IOError(f"unable to read ({n_bytes}) registers at [{addr}] from connection")
-        elif register is None and not _is_open(self.mc):
+        if not _is_open(self.mc):
             raise IOError("trying to read from closed Modbus-connection")
+
+        _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
+
+        n_bytes, c_format, reg_format = _get_fmt(c_format)
+
+        register = _read(addr, n_bytes)
+        if register is None:
+            raise IOError(f"unable to read ({n_bytes}) registers at [{addr}] from connection")
 
         return _unpack(register, c_format)
 
@@ -552,6 +559,9 @@ class IoniconModbus(IoniClientBase):
         rv = []
         if not n_values > 0:
             return rv
+
+        if not _is_open(self.mc):
+            raise IOError("trying to read from closed Modbus-connection")
 
         _read = self.mc.read_holding_registers if is_holding_register else self.mc.read_input_registers
 
@@ -566,10 +576,8 @@ class IoniconModbus(IoniClientBase):
 
         for block in blocks:
             register = _read(*block)
-            if register is None and self.is_connected:
+            if register is None:
                 raise IOError(f"unable to read ({block[1]}) registers at [{block[0]}] from connection")
-            elif register is None and not self.is_connected:
-                raise IOError("trying to read from closed Modbus-connection")
 
             # group the register-values by n_bytes, e.g. [1,2,3,4,..] ~> [(1,2),(3,4),..]
             # this is a trick from the itertools-recipes, see
