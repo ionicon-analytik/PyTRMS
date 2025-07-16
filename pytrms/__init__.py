@@ -32,7 +32,7 @@ def connect(host='localhost', port=None, method='mqtt'):
     elif method.lower() == 'webapi':
         from .clients.ioniclient import IoniClient as _client
     elif method.lower() == 'modbus':
-        from .modbus import IoniconModbus as _client
+        from .clients.modbus import IoniconModbus as _client
     else:
         raise NotImplementedError(str(method))
 

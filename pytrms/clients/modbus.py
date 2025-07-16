@@ -136,6 +136,36 @@ class IoniconModbus(IoniClientBase):
         ('n_ame_mean',       (26002, '>d', True)),
     ])
 
+    _lookup_offset = dict([
+        # parID  offset     name in Modbus manual
+        ( 42,   (3 *  0,    'FC H2O'    )),
+        (  1,   (3 *  1,    'PC'        )),
+        (  2,   (3 *  2,    'FC inlet'  )),
+        (  3,   (3 *  3,    'FC O2'     )),
+        (  4,   (3 *  4,    'FC NO'     )),
+        (  5,   (3 *  5,    'FC Dilution')),
+        (  6,   (3 *  6,    'FC Krypton')),
+        (  7,   (3 *  7,    'FC Xenon'  )),
+        (  8,   (3 *  8,    'FC Purge'  )),
+        (  9,   (3 *  9,    'FC FastGC' )),
+        ( 10,   (3 * 10,    'FC Custom 1')),
+        ( 11,   (3 * 11,    'FC Custom 2')),
+        ( 12,   (3 * 12,    'FC Custom 3')),
+        ( 13,   (3 * 13,    'FC Custom 4')),
+        ( 14,   (3 * 14,    'FC Custom 5')),
+        ( 15,   (3 * 15,    'FC Custom 6')),
+        ( 16,   (3 * 16,    'FC Custom 7')),
+        ( 17,   (3 * 17,    'FC Custom 8')),
+        ( 18,   (3 * 18,    'FC Custom 9')),
+        (556,   (3 * 19,    'Measure Start')),
+        (559,   (3 * 20,    'Measure Stop')),
+        ( 70,   (3 * 21,    'Set MPV1')),
+        ( 71,   (3 * 22,    'Set MPV2')),
+        ( 72,   (3 * 23,    'Set MPV3')),
+        (138,   (3 * 24,    'DO 1')),
+        (139,   (3 * 25,    'DO 2')),
+    ])
+
     @classmethod
     def use_legacy_input_registers(klaas, use_input_reg = True):
         """Read from input- instead of holding-registers (legacy method to be compatible with AME1.0)."""
@@ -301,16 +331,16 @@ class IoniconModbus(IoniClientBase):
 
         return rv
 
-    def write_instrument_data(self, par_id, new_value, timeout_s=10):
+    def write_instrument_data(self, par_id, new_value, oldschool=False, timeout_s=10):
+        '''Send a write command via the Modbus protocol.
 
-        # This command-structure is written as an array:
-        # Register 0: number of command-blocks to write
-        # Each command-block consists of 3 registers:
-        # Register 1: Parameter ID
-        # Register 2-3: Parameter Set Value as float(real)
-        start_register = 41000
-        blocksize = 3
+        See the Modbus manual for implementation details.
 
+        'par_id' - (int or string) the parameter-ID or -descriptor from the parID-list
+        'new_value' - the value to write (will be converted to float32)
+        'oldschool' - use the legacy Modbus write procedure (Register 40000)
+        'timeout_s' - timeout in seconds
+        '''
         if isinstance(par_id, str):
             try:
                 par_id = next(k for k, v in _id_to_descr.items() if v == par_id)
@@ -320,11 +350,33 @@ class IoniconModbus(IoniClientBase):
         if par_id not in _id_to_descr:
             raise IndexError(str(par_id))
 
-        # Note: we use only the first command-block for writing:
+        # Each command-block consists of 3 registers:
+        #  Register 1: Parameter ID (newschool) / execute bit (oldschool)
+        #  Register 2-3: Parameter Set Value as float(real)
+        # Note: The newschool command-structure is written as an array:
+        #   Register 0: number of command-blocks to write
+        #  This coincides with the oldschool protocol, where
+        #   Register 0: ready to write (execute bit) ~> 1
+        #  We use only the first command-block for writing...
         n_blocks = 1
-        reg_values = list(_pack(n_blocks, '>h'))
-        # ...although we could add more command-blocks here:
-        reg_values += list(_pack(par_id, '>h')) + list(_pack(new_value, '>f'))
+        assert (n_blocks == 1 or not oldschool), "oldschool instrument protocol doesn't allow multiple writes"
+        reg_values = []
+        if oldschool:
+            offset, name = IoniconModbus._lookup_offset[par_id]
+            start_register = 40_000 + offset
+            reg_values += list(_pack(1, '>h'))  # execute!
+            reg_values += list(_pack(new_value, '>f'))
+            log.debug(f'WRITE REG {start_register} ({name}) w/ oldschool protocol')
+        else:
+            start_register = 41_000
+            # ...although we could add more command-blocks here (newschool):
+            reg_values += list(_pack(n_blocks, '>h'))
+            # the parameter to write is written to the command block (newschool):
+            reg_values += list(_pack(par_id, '>h'))
+            reg_values += list(_pack(new_value, '>f'))
+            log.debug(f'WRITE REG {start_register} ({par_id = }) w/ newschool protocol')
+
+        assert len(reg_values) == (4 - bool(oldschool)), "invalid program: unexpected number of registers to write"
 
         # wait for instrument to receive...
         retry_time = 0
@@ -332,8 +384,8 @@ class IoniconModbus(IoniClientBase):
             # a value of 0 indicates ready-to-write:
             if self.mc.read_holding_registers(start_register) == [0]:
                 break
-            retry_time += 0.5
-            time.sleep(0.5)
+            retry_time += 0.2
+            time.sleep(0.2)
         else:
             raise TimeoutError(f'instrument not ready for writing after ({timeout_s}) seconds')
 
@@ -453,7 +505,7 @@ class IoniconModbus(IoniClientBase):
     ])
 
     def write_ame_action(self, action_number):
-        self.write_instrument_data(596, action_number, timeout_s=10)
+        self.write_instrument_data(596, action_number, oldschool=False, timeout_s=10)
 
     def read_ame_mean(self, step_number=None):
         start_reg, c_fmt, _is_holding = self.address['ame_mean_data']
