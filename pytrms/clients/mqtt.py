@@ -10,12 +10,12 @@ from threading import Condition, RLock
 
 from . import _logging
 from . import _par_id_file
-from .._base import itype, MqttClientBase
+from .._base import itype, _MqttClientBase
 
 
 log = _logging.getLogger(__name__)
 
-__all__ = ['MqttClient', 'MqttClientBase']
+__all__ = ['MqttClient']
 
 
 with open(_par_id_file) as f:
@@ -413,7 +413,7 @@ _subscriber_functions = [fun for name, fun in list(vars().items())
 _NOT_INIT = object()
 
 
-class MqttClient(MqttClientBase):
+class MqttClient(_MqttClientBase):
     """a simplified client for the Ionicon MQTT API.
 
     > mq = MqttClient()

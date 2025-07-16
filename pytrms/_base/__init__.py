@@ -1,7 +1,7 @@
 from collections import namedtuple
 
-from .mqttclient import MqttClientBase
-from .ioniclient import IoniClientBase
+from .mqttclient import MqttClientBase as _MqttClientBase
+from .ioniclient import IoniClientBase as _IoniClientBase
 
 class itype:
 

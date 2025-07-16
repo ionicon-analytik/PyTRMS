@@ -5,7 +5,7 @@ import requests
 
 from . import _logging
 from .ssevent import SSEventListener
-from .._base import IoniClientBase
+from .._base import _IoniClientBase
 
 log = _logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ log = _logging.getLogger(__name__)
 #   currentVariable = get_component(currentComponentNameAction, ds)
 #   currentVariable.save_value({'value': currentValue})
 
-class IoniConnect(IoniClientBase):
+class IoniConnect(_IoniClientBase):
 
     @property
     def is_connected(self):
@@ -34,6 +34,20 @@ class IoniConnect(IoniClientBase):
         pass
 
     def disconnect(self):
+        pass
+
+    def start_measurement(self, path=None):
+        '''Start a new measurement and block until the change is confirmed.
+
+        If 'path' is not None, write to the given .h5 file.
+        '''
+        pass
+
+    def stop_measurement(self, future_cycle=None):
+        '''Stop the current measurement and block until the change is confirmed.
+
+        If 'future_cycle' is not None and in the future, schedule the stop command.
+        '''
         pass
 
     def __init__(self, host='127.0.0.1', port=5066, session=None):

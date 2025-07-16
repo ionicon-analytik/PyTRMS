@@ -12,7 +12,7 @@ from itertools import tee
 import pyModbusTCP.client
 
 from . import _par_id_file
-from .._base.ioniclient import IoniClientBase
+from .._base import _IoniClientBase
 
 log = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def _pack(value, format='>f'):
     return struct.unpack(reg_format, struct.pack(c_format, value))
 
 
-class IoniconModbus(IoniClientBase):
+class IoniconModbus(_IoniClientBase):
 
     address = dict([
         ('server_state',     (    0, '>f', False)),  # 0: Not ready, 1: Ready, 2: Startup
