@@ -6,7 +6,7 @@ import struct
 import time
 import logging
 from collections import namedtuple
-from functools import lru_cache
+from functools import lru_cache, partial
 from itertools import tee
 
 import pyModbusTCP.client
@@ -48,11 +48,11 @@ with open(_par_id_file) as f:
 #  some exceptions that are 'short' (alive_counter, n_parameters) or explicitly
 #  marked to be 'int' (AME_RunNumber, et.c.):
 _fmts = dict([
-    ('float', '>f'),
-    ('double', '>d'),
-    ('short', '>h'),
-    ('int', '>i'),
-    ('long', '>q'),
+    ('float',   '>f'),
+    ('double',  '>d'),
+    ('short',   '>h'),
+    ('int',     '>i'),
+    ('long',    '>q'),
 ])
 
 _register = namedtuple('register_info', ['n_registers', 'c_format', 'reg_format'])
@@ -106,6 +106,9 @@ def _pack(value, format='>f'):
 
     return struct.unpack(reg_format, struct.pack(c_format, value))
 
+_fast  = 0      # MPV direction enum
+_DO_ON = 0x3F80 # digital output magick number
+
 
 class IoniconModbus(_IoniClientBase):
 
@@ -137,33 +140,33 @@ class IoniconModbus(_IoniClientBase):
     ])
 
     _lookup_offset = dict([
-        # parID  offset     name in Modbus manual
-        ( 42,   (3 *  0,    'FC H2O'    )),
-        (  1,   (3 *  1,    'PC'        )),
-        (  2,   (3 *  2,    'FC inlet'  )),
-        (  3,   (3 *  3,    'FC O2'     )),
-        (  4,   (3 *  4,    'FC NO'     )),
-        (  5,   (3 *  5,    'FC Dilution')),
-        (  6,   (3 *  6,    'FC Krypton')),
-        (  7,   (3 *  7,    'FC Xenon'  )),
-        (  8,   (3 *  8,    'FC Purge'  )),
-        (  9,   (3 *  9,    'FC FastGC' )),
-        ( 10,   (3 * 10,    'FC Custom 1')),
-        ( 11,   (3 * 11,    'FC Custom 2')),
-        ( 12,   (3 * 12,    'FC Custom 3')),
-        ( 13,   (3 * 13,    'FC Custom 4')),
-        ( 14,   (3 * 14,    'FC Custom 5')),
-        ( 15,   (3 * 15,    'FC Custom 6')),
-        ( 16,   (3 * 16,    'FC Custom 7')),
-        ( 17,   (3 * 17,    'FC Custom 8')),
-        ( 18,   (3 * 18,    'FC Custom 9')),
-        (556,   (3 * 19,    'Measure Start')),
-        (559,   (3 * 20,    'Measure Stop')),
-        ( 70,   (3 * 21,    'Set MPV1')),
-        ( 71,   (3 * 22,    'Set MPV2')),
-        ( 72,   (3 * 23,    'Set MPV3')),
-        (138,   (3 * 24,    'DO 1')),
-        (139,   (3 * 25,    'DO 2')),
+        # parID  offset     name in Modbus manual   special procedure
+        ( 42,   (3 *  0,    'FC H2O',           partial(_pack, format='>f')         )),
+        (  1,   (3 *  1,    'PC',               partial(_pack, format='>f')         )),
+        (  2,   (3 *  2,    'FC inlet',         partial(_pack, format='>f')         )),
+        (  3,   (3 *  3,    'FC O2',            partial(_pack, format='>f')         )),
+        (  4,   (3 *  4,    'FC NO',            partial(_pack, format='>f')         )),
+        (  5,   (3 *  5,    'FC Dilution',      partial(_pack, format='>f')         )),
+        (  6,   (3 *  6,    'FC Krypton',       partial(_pack, format='>f')         )),
+        (  7,   (3 *  7,    'FC Xenon',         partial(_pack, format='>f')         )),
+        (  8,   (3 *  8,    'FC Purge',         partial(_pack, format='>f')         )),
+        (  9,   (3 *  9,    'FC FastGC',        partial(_pack, format='>f')         )),
+        ( 10,   (3 * 10,    'FC Custom 1',      partial(_pack, format='>f')         )),
+        ( 11,   (3 * 11,    'FC Custom 2',      partial(_pack, format='>f')         )),
+        ( 12,   (3 * 12,    'FC Custom 3',      partial(_pack, format='>f')         )),
+        ( 13,   (3 * 13,    'FC Custom 4',      partial(_pack, format='>f')         )),
+        ( 14,   (3 * 14,    'FC Custom 5',      partial(_pack, format='>f')         )),
+        ( 15,   (3 * 15,    'FC Custom 6',      partial(_pack, format='>f')         )),
+        ( 16,   (3 * 16,    'FC Custom 7',      partial(_pack, format='>f')         )),
+        ( 17,   (3 * 17,    'FC Custom 8',      partial(_pack, format='>f')         )),
+        ( 18,   (3 * 18,    'FC Custom 9',      partial(_pack, format='>f')         )),
+        (556,   (3 * 19,    'Measure Start',    partial(_pack, format='>f')         )),
+        (559,   (3 * 20,    'Measure Stop',     partial(_pack, format='>f')         )),
+        ( 70,   (3 * 21,    'Set MPV1',         lambda v: [_fast, *_pack(v, '>h')]  )),
+        ( 71,   (3 * 22,    'Set MPV2',         lambda v: [_fast, *_pack(v, '>h')]  )),
+        ( 72,   (3 * 23,    'Set MPV3',         lambda v: [_fast, *_pack(v, '>h')]  )),
+        (138,   (3 * 24,    'DO 1',             lambda v: [_DO_ON if v else 0x0, 0] )),
+        (139,   (3 * 25,    'DO 2',             lambda v: [_DO_ON if v else 0x0, 0] )),
     ])
 
     @classmethod
@@ -386,10 +389,10 @@ class IoniconModbus(_IoniClientBase):
         assert (n_blocks == 1 or not oldschool), "oldschool instrument protocol doesn't allow multiple writes"
         reg_values = []
         if oldschool:
-            offset, name = IoniconModbus._lookup_offset[par_id]
+            offset, name, packer = IoniconModbus._lookup_offset[par_id]
             start_register = 40_000 + offset
             reg_values += list(_pack(1, '>h'))  # execute!
-            reg_values += list(_pack(new_value, '>f'))
+            reg_values += list(packer(new_value))
             log.debug(f'WRITE REG {start_register} ({name}) w/ oldschool protocol')
         else:
             start_register = 41_000
