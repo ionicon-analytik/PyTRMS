@@ -9,10 +9,6 @@ from .._base import _IoniClientBase
 
 log = _logging.getLogger(__name__)
 
-# TODO :: sowas waer auch ganz cool: die DBAPI bietes sich geradezu an,
-#  da mehr object-oriented zu arbeiten:
-#   currentVariable = get_component(currentComponentNameAction, ds)
-#   currentVariable.save_value({'value': currentValue})
 
 class IoniConnect(_IoniClientBase):
 
@@ -28,12 +24,15 @@ class IoniConnect(_IoniClientBase):
     @property
     def is_running(self):
         '''Returns `True` if IoniTOF is currently acquiring data.'''
+        # TODO :: /api/meas/curretn {isRunning ?}
         raise NotImplementedError("is_running")
 
     def connect(self, timeout_s):
+        # TODO :: create session ?! (see __init__ ...)
         pass
 
     def disconnect(self):
+        # TODO :: del session ?!
         pass
 
     def start_measurement(self, path=None):
@@ -41,6 +40,7 @@ class IoniConnect(_IoniClientBase):
 
         If 'path' is not None, write to the given .h5 file.
         '''
+        # TODO :: POST /api/measurement {recipeDirectory}  / path = ?
         pass
 
     def stop_measurement(self, future_cycle=None):
@@ -48,6 +48,7 @@ class IoniConnect(_IoniClientBase):
 
         If 'future_cycle' is not None and in the future, schedule the stop command.
         '''
+        # TODO :: PUT /api/meas/current {isRunning = False}
         pass
 
     def __init__(self, host='127.0.0.1', port=5066, session=None):

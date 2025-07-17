@@ -282,7 +282,19 @@ class IoniconModbus(_IoniClientBase):
         if path is not None:
             log.warning(f'ignoring .h5-filepath in Modbus command and starting quick measurement')
 
-        self.write_instrument_data('ACQ_SRV_Start_Meas_Quick', 1, oldschool=True, timeout_s=10)
+        # Note: let's assume one of them will be right and calling it twice don't hurt:
+        self.write_instrument_data('ACQ_SRV_Start_Meas_Quick', 1, oldschool=False, timeout_s=10)
+        self.write_instrument_data('ACQ_SRV_Start_Meas_Quick', 1, oldschool=True)
+
+        timeout_s = 10
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if self.is_running:
+                break
+
+            time.sleep(10e-3)
+        else:
+            raise TimeoutError(f"[{self}] unable to start measurement after { timeout_s = }");
 
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
@@ -290,9 +302,23 @@ class IoniconModbus(_IoniClientBase):
         'future_cycle' is ignored!
         '''
         if future_cycle is not None:
-            log.warning(f'ignoring {future_cycle = } in Modbus command and stopping immediately')
+            log.info(f'block until {future_cycle = } (current_cycle = {self.read_timecycle().abs_cycle})')
+            while self.read_timecycle().abs_cycle < int(future_cycle):
+                time.sleep(200e-3)
 
-        self.write_instrument_data('ACQ_SRV_Stop_Meas', 1, oldschool=True, timeout_s=10)
+        # Note: let's assume one of them will be right and calling it twice don't hurt:
+        self.write_instrument_data('ACQ_SRV_Stop_Meas', 1, oldschool=False, timeout_s=10)
+        self.write_instrument_data('ACQ_SRV_Stop_Meas', 1, oldschool=True)
+
+        timeout_s = 10
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if not self.is_running:
+                break
+
+            time.sleep(10e-3)
+        else:
+            raise TimeoutError(f"[{self}] unable to stop measurement after { timeout_s = }");
 
     @property
     @lru_cache
