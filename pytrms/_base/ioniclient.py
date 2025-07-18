@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
+
 class IoniClientBase(ABC):
+    '''Abstract base-class that defines the common interface for clients.
+
+    '''
 
     @property
     @abstractmethod

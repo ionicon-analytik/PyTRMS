@@ -9,8 +9,6 @@ from datetime import datetime as dt
 
 import paho.mqtt.client
 
-from .ioniclient import IoniClientBase
-
 log = logging.getLogger(__name__)
 
 __all__ = ['MqttClientBase']
@@ -35,7 +33,11 @@ def _on_publish(client, self, mid):
     log.debug(f"[{self}] published {mid = }")
 
 
-class MqttClientBase(IoniClientBase):
+class MqttClientBase:
+    """Mix-in class that supplies basic MQTT-callback functions.
+
+    Implements part of the `IoniClientBase` interface.
+    """
 
     @property
     def is_connected(self):
