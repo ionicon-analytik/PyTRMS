@@ -34,9 +34,10 @@ with open(_par_id_file) as f:
 
 def _build_header():
     ts = datetime.now()
+    ts_isoformat = ts.astimezone().isoformat(timespec='milliseconds')
     header = {
         "TimeStamp": {
-            "Str": ts.isoformat(),
+            "Str": ts_isoformat[:-3] + ts_isoformat[-2:],  # TZ-info w/o the colon
             "sec": ts.timestamp() + 2082844800,  # convert to LabVIEW time
         },
     }
