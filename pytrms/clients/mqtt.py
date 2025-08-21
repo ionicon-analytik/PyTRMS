@@ -134,7 +134,7 @@ def _parse_fullcycle(byte_string, need_add_data=False):
     performance (on a Intel Core i5, 8th Gen Ubuntu Linux):
       < 2 ms  when `need_add_data=False` (default)
       6-7 ms  when needing to parse the AddData-cluster (else)
-    
+
     @returns a namedtuple ('timecycle', 'intensity', 'mass_cal', 'add_data')
     '''
     import numpy as np
@@ -153,7 +153,7 @@ def _parse_fullcycle(byte_string, need_add_data=False):
         _arr = np.frombuffer(byte_string, dtype=dtype, count=1, offset=offset)
         offset += _arr.nbytes
         return _arr[0]
-    
+
     def rd_arr1d(dtype=_f32, count=None):
         nonlocal offset
         if count is None:
@@ -161,7 +161,7 @@ def _parse_fullcycle(byte_string, need_add_data=False):
         arr = np.frombuffer(byte_string, dtype=dtype, count=count, offset=offset)
         offset += arr.nbytes
         return arr
-    
+
     def rd_arr2d(dtype=_f32):
         nonlocal offset
         n = rd_single()
@@ -173,14 +173,14 @@ def _parse_fullcycle(byte_string, need_add_data=False):
     def rd_string():
         nonlocal offset
         return rd_arr1d(dtype=_chr).tobytes().decode('latin-1').lstrip('\x00')
-    
+
     tc_cluster      = rd_arr1d(dtype=_f64, count=4)
     run__, cpx__    = rd_arr1d(dtype=_f64, count=2)  # (discarded)
     # SpecData #
     intensity       = rd_arr1d(dtype=_f32)
     sum_inty        = rd_arr1d(dtype=_f32)  # (discarded)
     mon_peaks       = rd_arr2d(dtype=_f32)  # (discarded)
-    
+
     if not need_add_data:
         # skip costly parsing of Trace- and Add-Data cluster:
         return itype.fullcycle_t(itype.timecycle_t(*tc_cluster), intensity, None, None)
@@ -434,7 +434,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     set_value_limit = {
         "TCP_MCP_B": 3200.0,
     }
-    
+
     @property
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
@@ -477,7 +477,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     @property
     def current_sourcefile(self):
         '''Returns the path to the hdf5-file that is currently being written.
-        
+
         Returns an empty string if no measurement is running.
         '''
         if not self.is_running:
@@ -493,7 +493,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         while time.monotonic() < started_at + timeout_s:
             if self._sf_filename[0] is not _NOT_INIT:
                 return self._sf_filename[0]
-    
+
             time.sleep(10e-3)
         else:
             raise TimeoutError(f"[{self}] unable to retrieve source-file after ({timeout_s = })");
@@ -532,6 +532,10 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
+        if parID == "FC_inlet":
+            log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
+            parID = "FC_FC inlet"
+
         _lut = self.act_values if kind.lower() == "act" else self.set_values
         is_read_only = ('W' not in _par_id_info.loc[parID].Access)  # may raise KeyError!
         if _lut is self.set_values and is_read_only:
@@ -562,7 +566,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
                 # confirm change of state:
                 if not self._calcconzinfo[0] is _NOT_INIT:
                     return self._calcconzinfo[0].tables[table_name]
-    
+
                 time.sleep(10e-3)
             else:
                 raise TimeoutError(f"[{self}] unable to retrieve calc-conz-info from PTR server");
@@ -593,11 +597,15 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
+        if parID == "FC_inlet":
+            log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
+            parID = "FC_FC inlet"
+
         if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
             raise ValueError(f"'{parID}' is read-only")
 
         if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
-            raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
+            raise ValueError(f"will not exceed set-value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
         topic, qos, retain = "IC_Command/Write/Direct", 1, False
         log.info(f"writing '{parID}' ~> [{new_value}]")
@@ -618,11 +626,15 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
+        if parID == "FC_inlet":
+            log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
+            parID = "FC_FC inlet"
+
         if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
             raise ValueError(f"'{parID}' is read-only")
 
         if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
-            raise ValueError("set value limit of {__class__.set_value_limit[parID]} on '{parID}'")
+            raise ValueError(f"will not exceed set-value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
         if (future_cycle == 0 and not self.is_running):
             # Note: ioniTOF40 doesn't handle scheduling for the 0th cycle!
