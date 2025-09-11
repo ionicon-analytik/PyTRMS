@@ -526,7 +526,7 @@ class IoniconModbus(_IoniClientBase):
         n_alarms = int(self._read_reg(start_reg, c_fmt, _is_holding))
         alarm_levels = self._read_reg_multi(start_reg + 2, c_fmt, n_alarms, _is_holding)
 
-        return dict(zip(self.read_component_names(), alarm_levels)))
+        return dict(zip(self.read_component_names(), alarm_levels))
 
     def read_ame_timecycle(self):
         return self.read_timecycle(kind='components')

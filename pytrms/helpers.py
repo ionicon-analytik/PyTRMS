@@ -6,7 +6,7 @@ common helper functions.
 def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
     '''Create a `pandas.Timestamp` from LabView time.'''
     from pandas import Timestamp
-    
+
     # change epoch from 01.01.1904 to 01.01.1970:
     posix_time = lv_time_utc - 2082844800
     # the tz must be specified in isoformat like '+02:30'..
@@ -19,24 +19,24 @@ def convert_labview_to_posix(lv_time_utc, utc_offset_sec):
 
 def parse_presets_file(presets_file):
     '''Load a `presets_file` as XML-tree and interpret the "OP_Mode" of this `Composition`.
-    
+
     The tricky thing is, that any OP_Mode may or may not override previous settings!
     Therefore, it depends on the order of modes in this Composition to be able to assign
     each OP_Mode its actual dictionary of set_values.
-    
+
     Note, that the preset file uses its own naming convention that cannot neccessarily be
     translated into standard parID-names. You may choose whatever you like to do with it.
     '''
     import xml.etree.ElementTree as ET
     from collections import namedtuple, defaultdict
-    
-    _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])        
+
+    _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])
     _parse_value = {
         "FLOAT": float,
         "BOOL":  bool,
         "BYTE":  int,
         "ENUM":  int,
-    }        
+    }
     tree = ET.parse(presets_file)
     root = tree.getroot()
 
@@ -44,7 +44,7 @@ def parse_presets_file(presets_file):
     preset_items = defaultdict(dict)
     for index, preset in enumerate(root.iterfind('preset')):
         preset_names[index] = preset.find('name').text.strip()
-        
+
         if preset.find('WritePrimIon').text.upper() == "TRUE":
             val = preset.find('IndexPrimIon').text
             preset_items[index][_key('PrimionIdx', '', 'INT')] = int(val)
@@ -52,7 +52,7 @@ def parse_presets_file(presets_file):
         if preset.find('WriteTransmission').text.upper() == "TRUE":
             val = preset.find('IndexTransmission').text
             preset_items[index][_key('TransmissionIdx', '', 'INT')] = int(val)
-            
+
         for item in preset.iterfind('item'):
             if item.find('Write').text.upper() == "TRUE":
             #   device_index = item.find('DeviceIndex').text
@@ -61,9 +61,9 @@ def parse_presets_file(presets_file):
             #   page_name    = item.find('PageName').text
                 name         = item.find('Name').text
                 value_text   = item.find('Value').text
-                
+
                 key = _key(name, ads_path, data_type)
-                val = _parse_value[data_type](value_text)                    
+                val = _parse_value[data_type](value_text)
                 preset_items[index][key] = val
 
     return {index: (preset_names[index], preset_items[index]) for index in preset_names.keys()}
@@ -89,7 +89,7 @@ def setup_measurement_dir(config_dir=None, data_root_dir="D:/Data", suffix="",
     from datetime import datetime
     from itertools import chain
 
-    recipe = namedtuple('recipe', ['dirname', 'h5_file', 'pt_file', 'alarms_file'])
+    recipe = namedtuple('recipe', ['dirname', 'h5_file', 'pt_file', 'alarm_files'])
     _pt_formats = ['*.ionipt']
     _al_formats = ['*.alm']
     # make directory with current timestamp:
@@ -105,9 +105,9 @@ def setup_measurement_dir(config_dir=None, data_root_dir="D:/Data", suffix="",
         # we're done here..
         return recipe(new_recipe_dir, new_h5_file, '', '')
 
-    # find the *first* matching file or an empty string if no match...
+    # peaktable: find the *first* matching file or an empty string if no match:
     new_pt_file = next(chain.from_iterable(glob.iglob(config_dir + "/" + g) for g in _pt_formats), '')
-    new_al_file = next(chain.from_iterable(glob.iglob(config_dir + "/" + g) for g in _al_formats), '')
+    alm_files = sorted(chain.from_iterable(glob.iglob(config_dir + "/" + g) for g in _al_formats))
     # ...and copy all files from the master-recipe-dir:
     files2copy = glob.glob(config_dir + "/*")
     for file in files2copy:
@@ -122,5 +122,5 @@ def setup_measurement_dir(config_dir=None, data_root_dir="D:/Data", suffix="",
             # well, we can't set write permission
             pass
 
-    return recipe(new_recipe_dir, new_h5_file, new_pt_file, new_al_file)
+    return recipe(new_recipe_dir, new_h5_file, new_pt_file, alm_files)
 
