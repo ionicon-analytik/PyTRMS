@@ -52,8 +52,11 @@ class MqttClientBase:
     def __init__(self, host, port, subscriber_functions,
             on_connect, on_subscribe, on_publish, 
             connect_timeout_s=10):
+        # Note: circumvent (potentially sluggish) Windows DNS lookup:
+        self.host = '127.0.0.1' if host == 'localhost' else str(host)
+        self.port = int(port)
+
         assert len(subscriber_functions) > 0, "no subscribers: for some unknown reason this causes disconnects"
-        super().__init__(host, port)
 
         # Note: Version 2.0 of paho-mqtt introduced versioning of the user-callback to fix
         #  some inconsistency in callback arguments and to provide better support for MQTTv5.
@@ -118,4 +121,7 @@ class MqttClientBase:
     def disconnect(self):
         self.client.loop_stop()
         self.client.disconnect()
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} @ {self.host}[:{self.port}]>"
 
