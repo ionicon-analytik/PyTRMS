@@ -22,12 +22,6 @@ with open(_par_id_file) as f:
     from pandas import read_csv, isna
 
     _par_id_info = read_csv(f, sep='\t').drop(0).set_index('Name').fillna('')
-    if isna(_par_id_info.at['MPV_1', 'Access']):
-        log.warning(f'filling in read-properties still missing in {os.path.basename(_par_id_file)}')
-        _par_id_info.at['MPV_1', 'Access'] = 'RW'
-        _par_id_info.at['MPV_2', 'Access'] = 'RW'
-        _par_id_info.at['MPV_3', 'Access'] = 'RW'
-
 
 
 ## >>>>>>>>    adaptor functions    <<<<<<<< ##

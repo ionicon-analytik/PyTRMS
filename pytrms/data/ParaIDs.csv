@@ -69,9 +69,9 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 67	MPV_Dir_1	I32		PTR	PTR_Write		MPV Dir		
 68	MPV_Dir_2	I32		PTR	PTR_Write		MPV Dir2		
 69	MPV_Dir_3	I32		PTR	PTR_Write		MPV Dir3		
-70	MPV_1			PTR	PTR_Write		MPValve1		
-71	MPV_2			PTR	PTR_Write		MPValve2		
-72	MPV_3			PTR	PTR_Write		MPValve3		
+70	MPV_1		RW	PTR	PTR_Write		MPValve1		
+71	MPV_2		RW	PTR	PTR_Write		MPValve2		
+72	MPV_3		RW	PTR	PTR_Write		MPValve3		
 73	DPS_Uf	DBL	RW	PTR	PTR_Write		Uf	V	
 74	DPS_U1	DBL	RW	PTR	PTR_Write		UF1	V	
 75	DPS_U2	DBL	RW	PTR	PTR_Write		UF2	V	
