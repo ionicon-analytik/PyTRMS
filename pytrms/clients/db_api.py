@@ -1,4 +1,5 @@
 import os
+import time
 import json
 
 import requests
@@ -16,6 +17,7 @@ class IoniConnect(_IoniClientBase):
     def is_connected(self):
         '''Returns `True` if connection to IoniTOF could be established.'''
         try:
+            assert self.session is not None, "not connected"
             self.get("/api/status")
             return True
         except:
@@ -24,42 +26,70 @@ class IoniConnect(_IoniClientBase):
     @property
     def is_running(self):
         '''Returns `True` if IoniTOF is currently acquiring data.'''
-        # TODO :: /api/meas/curretn {isRunning ?}
-        raise NotImplementedError("is_running")
+        try:
+            assert self.session is not None, "not connected"
+            self._get_location("/api/measurements/current")
+            return True
+        except (AssertionError, requests.exceptions.HTTPError):
+            return False
 
-    def connect(self, timeout_s):
-        # TODO :: create session ?! (see __init__ ...)
-        pass
+    def connect(self, timeout_s=10):
+        self.session = requests.sessions.Session()
+        started_at = time.monotonic()
+        while timeout_s is None or time.monotonic() < started_at + timeout_s:
+            try:
+                self.current_meas_loc = self._get_location("/api/measurements/current")
+                break
+            except requests.exceptions.HTTPError:
+                # OK, no measurement running..
+                self.current_meas_loc = ''
+                break
+            except Exception:
+                pass
+
+            time.sleep(10e-1)
+        else:
+            self.session = self.current_meas_loc = None
+            raise TimeoutError(f"no connection to '{self.url}'");
 
     def disconnect(self):
-        # TODO :: del session ?!
-        pass
+        if self.session is not None:
+            del self.session
+            self.session = None
+            self.current_meas_loc = None
 
     def start_measurement(self, path=None):
         '''Start a new measurement and block until the change is confirmed.
 
         If 'path' is not None, write to the given .h5 file.
         '''
-        # TODO :: POST /api/measurement {recipeDirectory}  / path = ?
-        pass
+        assert not self.is_running, "measurement already running @ " + str(self.current_meas_loc)
+
+        payload = {}
+        if path is not None:
+            assert os.path.isdir(path), "must point to a (recipe-)directory: " + str(path)
+            payload |= { "recipeDirectory": str(path) }
+
+        self.current_meas_loc = self.post("/api/measurements", payload)
+        self.put(self.current_meas_loc, { "isRunning": True })
+
+        return self.current_meas_loc
 
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None and in the future, schedule the stop command.
         '''
-        # TODO :: PUT /api/meas/current {isRunning = False}
-        pass
+        loc = self.current_meas_loc or self._get_location("/api/measurements/current")
+        self.put(loc, { "isRunning": False })
+        self.current_meas_loc = ''
 
-    def __init__(self, host='127.0.0.1', port=5066, session=None):
+    def __init__(self, host='127.0.0.1', port=5066):
         super().__init__(host, port)
         self.url = f"http://{self.host}:{self.port}"
-        if session is None:
-            session = requests.sessions.Session()
-        self.session = session
-        # ??
-        self.current_avg_endpoint = None
-        self.comp_dict = dict()
+        self.session = None
+        self.current_meas_loc = None
+        self.connect()
 
     def get(self, endpoint, **kwargs):
         return self._get_object(endpoint, **kwargs).json()
@@ -94,8 +124,13 @@ class IoniConnect(_IoniClientBase):
             kwargs['timeout'] = (6.06, 27)
         r = self.session.request('get', self.url + endpoint, **kwargs)
         r.raise_for_status()
-        
+
         return r
+
+    def _get_location(self, endpoint, **kwargs):
+        r = self._get_object(endpoint, **(kwargs | { "allow_redirects": False }))
+
+        return r.headers.get('Location')
 
     def _create_object(self, endpoint, data, method='post', **kwargs):
         if not endpoint.startswith('/'):

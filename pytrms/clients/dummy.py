@@ -21,7 +21,7 @@ class IoniDummy(_IoniClientBase):
 
     __is_running = False
 
-    def connect(self, timeout_s):
+    def connect(self, timeout_s=0):
         log.info(f'pretending to connect to server')
         self.__is_connected = True
 
@@ -37,7 +37,7 @@ class IoniDummy(_IoniClientBase):
         log.info(f'pretending to stop measurement ({future_cycle = })')
         self.__is_running = False
 
-    def __init__(self, host='localhost', port=5687):
+    def __init__(self, host='localhost', port=1234):
         super().__init__(host, port)
         self.connect()
 
