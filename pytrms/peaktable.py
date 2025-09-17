@@ -22,8 +22,7 @@ other custom formats.
 ... [
 ... {"label":"H3O+",
 ...  "center":21.0219,
-...  "formula":"?",
-...  "parent":"?",
+...  "formula":"<unknown>",
 ...  "isotopic_abundance":0.002,
 ...  "k_rate":2.10,
 ...  "multiplier":488
@@ -53,7 +52,7 @@ Peaks may be modified and the PeakTable exported in the same format:
       "center": 21.0219,
       "label": "H3O+",
       "formula": "H3O",
-      "parent": "?",
+      "parent": null,
       "isotopic_abundance": 0.678,
       "k_rate": 2.1,
       "multiplier": 488.0,
