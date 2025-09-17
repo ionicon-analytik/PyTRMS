@@ -1,7 +1,8 @@
-from . import _logging
+import logging
+
 from .._base import _IoniClientBase
 
-log = _logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class IoniDummy(_IoniClientBase):

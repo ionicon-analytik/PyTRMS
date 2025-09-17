@@ -2,18 +2,18 @@ import os
 import time
 import json
 import queue
+import logging
 from collections import deque, namedtuple
 from datetime import datetime
 from functools import wraps
 from itertools import cycle, chain, zip_longest
 from threading import Condition, RLock
 
-from . import _logging
 from . import _par_id_file
 from .._base import itype, _MqttClientBase, _IoniClientBase
 
 
-log = _logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 __all__ = ['MqttClient']
 

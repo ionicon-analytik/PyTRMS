@@ -1,14 +1,14 @@
 import os
 import time
 import json
+import logging
 
 import requests
 
-from . import _logging
 from .ssevent import SSEventListener
 from .._base import _IoniClientBase
 
-log = _logging.getLogger(__name__)
+log = logging.getLogger(__name__)
 
 
 class IoniConnect(_IoniClientBase):

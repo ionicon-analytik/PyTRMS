@@ -1,13 +1,12 @@
 import re
 import time
+import logging
 from collections import namedtuple
 from collections.abc import Iterable
 
-from . import _logging
-
-log = _logging.getLogger(__name__)
-
 import requests
+
+log = logging.getLogger(__name__)
 
 _event_rv = namedtuple('ssevent', ['event', 'data'])
 
@@ -88,7 +87,7 @@ class SSEventListener(Iterable):
                 key, val = line.split(':', maxsplit=1)
                 if not key:
                     # this is a comment, starting with a colon ':' ...
-                    log.log(_logging.TRACE, "sse:" + val)
+                    log.log(logging.TRACE, "sse:" + val)
                 elif key == 'event':
                     event = val.lstrip()
                 elif key == 'data':

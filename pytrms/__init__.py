@@ -1,6 +1,50 @@
 _version = '0.9.7'
 
+import logging
+from functools import wraps
+
+_logging_getLogger = logging.getLogger
+
+@wraps(_logging_getLogger)
+def getLoggerWithAnnouncement(name):
+    # patch the (global) logger to print its own name
+    #  (useful for turning individual loggers on/off)
+    # WARNING: this will patch every instance of the
+    #  logging-module in every import after pytrms is
+    #  imported! don't be overwhelmingly fancy with this!
+    assert name is not None, "allocating root-logger is forbidden for modules"
+    rv = _logging_getLogger(name)
+    rv.debug(f"'acquired logger for '{name}'")
+
+    return rv
+
+logging.getLogger = getLoggerWithAnnouncement
+logging.TRACE = 5  # even more verbose than logging.DEBUG
+
 __all__ = ['load', 'connect']
+
+
+def enable_extended_logging(log_level=logging.DEBUG):
+    '''make output of http-requests more talkative.
+
+    set 'log_level=logging.TRACE' for highest verbosity!
+    '''
+    if log_level <= logging.DEBUG:
+        # enable logging of http request urls on the library, that is
+        #  underlying the 'requests'-package:
+        logging.warning(f"enabling logging-output on 'urllib3' ({log_level = })")
+        requests_log = logging.getLogger("urllib3")
+        requests_log.setLevel(log_level)
+        requests_log.propagate = True
+
+    if log_level <= logging.TRACE:
+        # Enabling debugging at http.client level (requests->urllib3->http.client)
+        # you will see the REQUEST, including HEADERS and DATA, and RESPONSE with
+        # HEADERS but without DATA. the only thing missing will be the response.body,
+        # which is not logged.
+        logging.warning(f"enabling logging-output on 'HTTPConnection' ({log_level = })")
+        from http.client import HTTPConnection
+        HTTPConnection.debuglevel = 1
 
 
 def load(path):
