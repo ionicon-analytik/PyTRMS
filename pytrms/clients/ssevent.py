@@ -42,12 +42,15 @@ class SSEventListener(Iterable):
         """Stop listening for certain events."""
         self.subscriptions.remove(re.compile(event_re))
 
-    def follow_events(self, timeout_s=None):
+    def follow_events(self, timeout_s=None, prime=False):
         """Returns a generator that produces events as soon as they are emitted.
 
         When `timeout_s` is given, a hard timeout is set, after which the stream
         is closed and the generator raises `StopIteration`. This makes it possible
         to e.g. collect events into a list or test for an event to occur.
+
+        With `prime=True` the first (pseudo-)event will be generated immediately
+        after the connection has been made. The event type is 'new connection'.
 
         _Note_: The timeout cannot be accurate, because the `requests` library only
          allows to check the timeout when either an event or a keep-alive is received!
@@ -64,6 +67,9 @@ class SSEventListener(Iterable):
         if not _response.ok:
             log.error(f"no connection to {self.uri} (got [{_response.status_code}])")
             _response.raise_for_status()
+
+        if prime:
+            yield _event_rv('new connection', '/api/status')
 
         started_at = time.monotonic()
         event = msg = ''
@@ -99,5 +105,7 @@ class SSEventListener(Iterable):
             log.debug(f"closed connection to {self.uri}")
 
     def __iter__(self):
-        yield from self.follow_events(timeout_s=None)
+        g = self.follow_events(timeout_s=None, prime=True)
+        assert next(g).event == 'new connection', "invalid program: pseude-event expected"
+        yield from g
 
