@@ -1,56 +1,84 @@
+"""
+@file measurement.py
+
+"""
 import time
+import logging
 from operator import attrgetter
 from itertools import chain
 from abc import abstractmethod, ABC
 
-import pandas as pd
-
 from .readers import IoniTOFReader
+from .clients import ssevent
 
-__all__ = ['Measurement', 'PreparingMeasurement', 'RunningMeasurement', 'FinishedMeasurement']
+log = logging.getLogger(__name__)
+
+__all__ = ['Measurement',
+           #'PreparingMeasurement', 'RunningMeasurement', 'FinishedMeasurement']
+]
 
 
 class Measurement(ABC):
     """Class for PTRMS-measurements and batch processing.
 
-    The start time of the measurement is given by `.time_of_meas`.
+    Synchronizes with the database API.
 
-    A measurement is iterable over the 'rows' of its data. 
     In the online case, this would slowly produce the current trace, one
     after another.
     In the offline case, this would quickly iterate over the traces in the given
     measurement file.
+
+
     """
+
+    # TODO :: ich will hier die API ins Zentrum stellen!
+    #  meas hat eine .url, die es identifiziert (s.u.)
+    #  die sourcefiles werden dann von der API geladen
+    ##  ... bzw. man kann eine neue batch zusammenstellen und hochladen
+    #  
+    #  wir haben diese __iter__ dinger jetzt im peakdame.helpers !
+    #  ..aber unten verweist das eh nur auf reader.iter_specdata() UND 
+    #    ausserdem ist das nicht aktuell, weil der kein (file, specdata)
+    #    iteriert!! 
+    #### ~~> besser in eine separate Funktion oder so (um das "austauschbar" zu haben)
+    #  
+    #  "backend" (ptr) kommt weg! Dafuer kann man ein Instrument hernehmen.
+    #  zum "starten" wird hier NUR auf die API geposted und dann auf AME
+    #  GEWARTET dass es aktiv wird: { "isRunning": True }
+
+    #  Der state haengt also ganz klar an der API: 
+    #  - es gibt genau 0 oder 1 'current' / RunningMeasurement
+    #  - ein PreparingMeasurement kann gestartet werden, genau dann
+    #    wenn die API es zulaesst (kein anderes running) ~> POST
+    #  - ein FinishedMeasurement laedt seine sourcefiles von der API
+    #  - [evtl. auch Funktion, um neue batch zu erstellen, die aber nicht
+    #     gestartet wird 
+    #         TODOO :: kann die API fordern, dass nur Measurement ohne
+    #     #             /sourcefiles gestartet werden koennen)
+
+    # WAS WOLLEN WIR HIER EIGENTLICH??
+    # a) diesen praktischen iterator (sourcefile, specdata) erhalten
+    # b) start/stop "Protokoll" implementieren (geht schon, s.u.) KANN AUS DB_API.py wieder raus !!
+    # c) [future] einen schoenen Zugang zum batch-processing schaffen
 
     def _new_state(self, newstate):
         # Note: we get ourselves a nifty little state-machine :)
         self.__class__ = newstate
 
-    @property
-    def is_running(self):
-        return self.__class__ == RunningMeasurement
+    def __init__(self, instrument, api):
+        self.ptr = instrument
+        self.api = api
 
-    def start(self, filename=''):
-        """Start a measurement on the PTR server.
+        assert self.ptr.backend.is_connected, "no connection to instrument"
+        assert self.api.is_connected, "no connection to database api"
 
-        'filename' is the filename of the datafile to write to. 
-        If left blank, start a "quick measurement".
+        self.url = ''
 
-        If pointing to a file and the file exist on the (local) server, this raises an exception.
-        To create unique filenames, use placeholders for year (%Y), month (%m), and so on,
-        for example `filename=C:/Ionicon/Data/Sauerteig_%Y-%m-%d_%H-%M-%S.h5`.
+    def __eq__(self, other):
+        return isinstance(other, Measurement) and other.url == self.url
 
-        see also:
-        """
-        # this method must be implemented by each state
-        raise RuntimeError("can't start %s" % self.__class__)
-
-    # (see also: this docstring)
-    start.__doc__ += time.strftime.__doc__
-
-    def stop(self):
-        """Stop the current measurement on the PTR server."""
-        raise RuntimeError("can't stop %s" % self.__class__)
+    def __hash__(self):
+        return hash(self.url)
 
 
 class PreparingMeasurement(Measurement):
@@ -87,12 +115,58 @@ class PreparingMeasurement(Measurement):
     def expected_mass_range_amu(self, value):
         self.ptr.set('ACQ_SRV_ExpectMRange', int(value), unit='amu')
 
-    def __init__(self, instrument):
-        self.ptr = instrument
+    def start(self,
+              # timezoneOffset_sec=0,
+              # startDateTime=None,
+              # stopDateTime=None,
+                recipeDirectory='',
+                pulsingPeriod_ns=0.0,
+                startDelay_ns=0.0,
+                singleSpecDuration_ms=1000.0,
+                timebinWidth_ps=0.0,
+              # poissonDeadtime_ns=0.0,
+              # numberOfTimebins=0.0}
+          ):
+        """Start a measurement on the PTR server.
 
-    def start(self, filename=''):
-        self.ptr.start_measurement(filename)
+        """
+        #self.ptr.start_measurement(filename)
+        #if self.api is not None:
+        import requests
+        try:
+            loc = self.api._get_location('/api/measurements/current')
+            assert not len(loc), "measurement running at " + str(loc)
+        except requests.exceptions.HTTPError as exc:
+            if exc.response and exc.response.status_code == 410:
+                pass  # Gone!
+
+
+
+        payload = {
+            "recipeDirectory": str(recipeDirectory),
+            "singleSpecDuration_ms": float(singleSpecDuration_ms),
+        }
+        sse = ssevent.SSEventListener(session=self.api.session)
+        sse.subscribe(r'(new|start) measurement')
+        event_g = sse.follow_events(timeout_s=10, prime=True)
+        e = next(event_g)
+        assert e.event == "new connection", "invalid program: generator not primed"
+        # Note: this will trigger the event: 'new measurement'...
+        self.url = self.api.post('/api/measurements', payload)
+        try:
+            e = next(event_g)
+            assert e.event == "new measurement", str(e)
+            loc = e.data
+            print('----', loc)
+            log.info(f"waiting for measurement @ {self.url} to be started...")
+            # ...and the AME system *should* respond with 'start measurement':
+            next(event_g)
+        except StopIteration:
+            raise TimeoutError("the system didn't respond. make sure AME is running!")
+
         self._new_state(RunningMeasurement)
+
+        return self
 
     def __iter__(self):
         from .clients.mqtt import MqttClient
@@ -109,12 +183,17 @@ class PreparingMeasurement(Measurement):
 
 class RunningMeasurement(Measurement):
 
-    def __init__(self, instrument):
-        self.ptr = instrument
-
     def stop(self):
+        """Stop the current measurement on the PTR server."""
         self.ptr.stop_measurement()
+        if self.api is not None:
+            if self.url is None:
+                self.url = self.api.get('/api/measurements/current')
+            self.api.put(self.url, { "isRunning": False })
+
         self._new_state(FinishedMeasurement)
+
+        return self
 
     def __iter__(self):
         from .clients.mqtt import MqttClient
@@ -216,6 +295,8 @@ class FinishedMeasurement(Measurement):
         'abs_time' or 'rel_time'.
 
         """
+        import pandas as pd
+
         return pd.concat(sf.read_all(kind, index, force_original) for sf in self._readers)
 
     get_traces = read_traces

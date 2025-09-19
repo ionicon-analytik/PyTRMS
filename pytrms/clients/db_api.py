@@ -63,6 +63,14 @@ class IoniConnect(_IoniClientBase):
         except (AssertionError, requests.exceptions.HTTPError):
             return False
 
+    @property
+    def status(self):
+        '''Show the status of the API.'''
+        try:
+            return self.get("/api/status")
+        except:
+            return "not connected"
+
     def connect(self, timeout_s=10):
         self.session = requests.sessions.Session()
         self.session.mount('http://',  self._http_adapter)
