@@ -3,19 +3,19 @@
 
 """
 import time
+import json
 import logging
-from operator import attrgetter
+from operator import attrgetter, itemgetter
 from itertools import chain
 from abc import abstractmethod, ABC
 
 from .readers import IoniTOFReader
 from .clients import ssevent
+from ._base import _IoniClientBase
 
 log = logging.getLogger(__name__)
 
-__all__ = ['Measurement',
-           #'PreparingMeasurement', 'RunningMeasurement', 'FinishedMeasurement']
-]
+__all__ = ['Measurement']
 
 
 class Measurement(ABC):
@@ -28,7 +28,41 @@ class Measurement(ABC):
     In the offline case, this would quickly iterate over the traces in the given
     measurement file.
 
+    ???
 
+    # WAS WOLLEN WIR HIER EIGENTLICH??
+    # a) diesen praktischen iterator (sourcefile, specdata) erhalten
+    # b) start/stop "Protokoll" implementieren (geht schon, s.u.)
+    #KANN AUS DB_API.py wieder raus !!
+    # c) [future] einen schoenen Zugang zum batch-processing schaffen
+
+
+
+        # 4 faelle:
+        #  entweder es wird eine URL konkret angegeben:
+        #  => dann kennt der user bereits die Messung, sie kann laufen oder nicht
+        # oder es wird KEINE Url angegeben,
+        # => dann will der user entweder Preparen (noch keine URL) und dann ~> POST
+        #    oder er kennt sie noch nicht und will die laufende Messung haben
+
+
+#       # ~> Was mir *daran* nicht gefaellt ist eben der Error !
+#       #  ich will einfach NUR attach'en und dann seh ich ja, was der zustand ist
+
+#       # was WILL man denn? Es gibt doch nur 2 use-cases (weniger als moegliche cases)
+#       # a) online: Dann evtl. starten ~~> also NIHCT last, sonder NEU
+#       # b) offline/batch processing ~> dann auch NICHT das running/current..
+#       # c) neue batch anlegen aus .h5 files
+#       # [d) neu starten, aber dann muss man a) auch sehen, was sache ist!]
+
+#       # aber stop ~> wird zum last..
+#       # Ja, schon klar, nur will ich ja den JETZT zustand abbilden
+#       def attach(api):
+#           if api.is_running:
+#               loc = api._get_location("/api/measurements/current")
+#               return RunningMeasurement(api, loc)
+#           else:
+#               return PreparingMeasurement(api, '')
     """
 
     # TODO :: ich will hier die API ins Zentrum stellen!
@@ -56,23 +90,85 @@ class Measurement(ABC):
     #         TODOO :: kann die API fordern, dass nur Measurement ohne
     #     #             /sourcefiles gestartet werden koennen)
 
-    # WAS WOLLEN WIR HIER EIGENTLICH??
-    # a) diesen praktischen iterator (sourcefile, specdata) erhalten
-    # b) start/stop "Protokoll" implementieren (geht schon, s.u.) KANN AUS DB_API.py wieder raus !!
-    # c) [future] einen schoenen Zugang zum batch-processing schaffen
-
     def _new_state(self, newstate):
-        # Note: we get ourselves a nifty little state-machine :)
+        assert issubclass(newstate, Measurement), "invalid call to _new_state"
+        # we get ourselves a nifty little state-machine :)
         self.__class__ = newstate
 
-    def __init__(self, instrument, api):
-        self.ptr = instrument
+    def __new__(cls, *args, **kwargs):
+        # Note (reminder): If __new__() does not return an instance of cls,
+        #  then the new instance’s __init__() method will *not* be invoked!
+        #  => OK, but we *always* return an `isinstance(.., Measurement)`
+        #     so __init__() will be invoked.
+        api = args[0]  # fetch it from first argument passed to __init__
+        assert isinstance(api, (_IoniClientBase)), f"api must implement {type(_IoniClientBase)}"
+        assert api.is_connected, "no connection to database api"
+        assert len({'id', 'url'} & kwargs.keys()) < 2, "kwargs 'id' and 'url' are mutually exclusive"
+
+        fallback = f"/api/measurements/{kwargs['id']}" if 'id' in kwargs else ''
+        url_passed = str(kwargs.get('url', fallback))
+
+        if cls is not Measurement:
+            log.warning(f"direct init of '{cls.__name__}', I hope you know what you're doing!")
+            # allow this for debugging, though:
+            inst = object.__new__(cls)
+            inst._url = url_passed
+            return inst
+
+        if url_passed:
+            # id is known ~> do post-processing:
+            inst = object.__new__(FinishedMeasurement)
+            inst._url = url_passed
+            return inst
+
+        if api.is_running:
+            # attach!
+            inst = object.__new__(RunningMeasurement)
+            inst._url = api._get_location("/api/measurements/current")
+            return inst
+
+        else:
+            # prepare new!
+            inst = object.__new__(PreparingMeasurement)
+            inst._url = ''
+            return inst
+
+        raise RuntimeError("invalid program: we should not have come here")
+
+    @property
+    def url(self):
+        """The resource locator for this 'Measurement' on the database."""
+        return self._url
+
+    @property
+    def is_running(self):
+        """Returns `True` if this is an instance of a running measurement.
+
+        Note, that it may not reflect the state on the server! See class
+        `pytrms.instrument.Instrument` for more direct control.
+        """
+        return type(self) is RunningMeasurement
+
+    @property
+    def info(self):
+        j = self.api.get(self.url)
+        del j["_links"]
+        del j["_embedded"]
+        return j
+
+    @property
+    def filenames(self):
+        j = self.api.get(self.url + "/sourcefiles")
+        collection = sorted(j["_embedded"]["sourcefiles"], key=itemgetter("measFilePosition"))
+        return [sf["path"] for sf in collection]
+
+    def add_sf(self, filename):
+        loc = self.api.post(self.url + "/sourcefiles", payload)
+        return loc
+
+    def __init__(self, api, *, url=None, id=None):
+        assert self.url is not None, "invalid program: url should have been set in __new__"
         self.api = api
-
-        assert self.ptr.backend.is_connected, "no connection to instrument"
-        assert self.api.is_connected, "no connection to database api"
-
-        self.url = ''
 
     def __eq__(self, other):
         return isinstance(other, Measurement) and other.url == self.url
@@ -80,8 +176,16 @@ class Measurement(ABC):
     def __hash__(self):
         return hash(self.url)
 
+    def __repr__(self):
+        return f"<{type(self)} @ {id(self)}>"
+
 
 class PreparingMeasurement(Measurement):
+
+    ## TODO :: wer setzt jetzt diese ganzen properties, wenn
+    ### wir nur noch die payload POST'en ???
+    #
+    # da muss "jemand" auf ein 'new measurement' event hoeren..
 
     @property
     def single_spec_duration_ms(self):
@@ -115,54 +219,51 @@ class PreparingMeasurement(Measurement):
     def expected_mass_range_amu(self, value):
         self.ptr.set('ACQ_SRV_ExpectMRange', int(value), unit='amu')
 
-    def start(self,
-              # timezoneOffset_sec=0,
-              # startDateTime=None,
-              # stopDateTime=None,
-                recipeDirectory='',
-                pulsingPeriod_ns=0.0,
-                startDelay_ns=0.0,
-                singleSpecDuration_ms=1000.0,
-                timebinWidth_ps=0.0,
-              # poissonDeadtime_ns=0.0,
-              # numberOfTimebins=0.0}
+    def start(self, *, recipeDirectory='', singleSpecDuration_ms=1000.0
+            # , pulsingPeriod_ns=0.0
+            # , startDelay_ns=0.0
+            # , timebinWidth_ps=0.0
+            # , poissonDeadtime_ns=0.0
+            # , numberOfTimebins=0.0
           ):
-        """Start a measurement on the PTR server.
+        """Start a measurement via the AME system.
 
+        This does not start the PTR instrument, but signals AME to start
+        a new measurement out of the given `recipeDirectory`.
+
+        Keyword arguments are passed with the payload of the POST request.
         """
-        #self.ptr.start_measurement(filename)
-        #if self.api is not None:
-        import requests
-        try:
-            loc = self.api._get_location('/api/measurements/current')
-            assert not len(loc), "measurement running at " + str(loc)
-        except requests.exceptions.HTTPError as exc:
-            if exc.response and exc.response.status_code == 410:
-                pass  # Gone!
-
-
+        if self.api.is_running:
+            # Note: this should only ever happen if a PreparingMeasurement
+            #  has been initialized directly (and not via Measurement)!
+            current = self.api._get_location('/api/measurements/current')
+            raise RuntimeError(f"measurement running at '{current}'")
 
         payload = {
             "recipeDirectory": str(recipeDirectory),
             "singleSpecDuration_ms": float(singleSpecDuration_ms),
         }
+        # first, set us up to check the correct ordering of events:
         sse = ssevent.SSEventListener(session=self.api.session)
-        sse.subscribe(r'(new|start) measurement')
+        sse.subscribe(r'(new|start|stop) measurement')
         event_g = sse.follow_events(timeout_s=10, prime=True)
-        e = next(event_g)
+        e = next(event_g)  # prime the generator..
         assert e.event == "new connection", "invalid program: generator not primed"
-        # Note: this will trigger the event: 'new measurement'...
+        # now, follow the protocol: this will trigger the event: 'new measurement'...
         self.url = self.api.post('/api/measurements', payload)
+        # ...we back-check it...
+        e = next(event_g)
+        assert e.event == "new measurement", "wrong event, got: " + str(e)
+        assert e.data == self.url, "wrong event-href, got: " + str(e)
+        log.info(f"starting new measurement '{self.url}'...")
         try:
-            e = next(event_g)
-            assert e.event == "new measurement", str(e)
-            loc = e.data
-            print('----', loc)
-            log.info(f"waiting for measurement @ {self.url} to be started...")
             # ...and the AME system *should* respond with 'start measurement':
-            next(event_g)
+            e = next(event_g)
         except StopIteration:
             raise TimeoutError("the system didn't respond. make sure AME is running!")
+
+        assert e.event == "new measurement", "wrong event, got: " + str(e)
+        assert e.data == self.url, "wrong event-href, got: " + str(e)
 
         self._new_state(RunningMeasurement)
 
@@ -184,12 +285,22 @@ class PreparingMeasurement(Measurement):
 class RunningMeasurement(Measurement):
 
     def stop(self):
-        """Stop the current measurement on the PTR server."""
-        self.ptr.stop_measurement()
-        if self.api is not None:
-            if self.url is None:
-                self.url = self.api.get('/api/measurements/current')
-            self.api.put(self.url, { "isRunning": False })
+        """Stop the current measurement via the AME system.
+
+        """
+        # first, set us up to check the correct ordering of events:
+        sse = ssevent.SSEventListener(session=self.api.session)
+        sse.subscribe(r'(new|start|stop) measurement')
+        event_g = sse.follow_events(timeout_s=10, prime=True)
+        e = next(event_g)  # prime the generator..
+        assert e.event == "new connection", "invalid program: generator not primed"
+        log.info(f"stopping measurement '{self.url}'...")
+        # now, follow the protocol: this will trigger the event: 'stop measurement'...
+        self.api.put(self.url, { "isRunning": False })
+        # ...we back-check it...
+        e = next(event_g)
+        assert e.event == "stop measurement", "wrong event, got: " + str(e)
+        assert e.data == self.url, "wrong event-href, got: " + str(e)
 
         self._new_state(FinishedMeasurement)
 
@@ -224,11 +335,6 @@ class RunningMeasurement(Measurement):
 
             yield sourcefile, specdata
 
-        if not self.ptr.backend.is_running:
-            self._new_state(FinishedMeasurement)
-            ## TODO :: das hier braucht noch seine .sourcefiles !!
-            self.sourcefiles = []
-
 
 class FinishedMeasurement(Measurement):
 
@@ -240,6 +346,10 @@ class FinishedMeasurement(Measurement):
 
         assert 1 == len(set(sf.inst_type          for sf in _readers)), _assumptions
         assert 1 == len(set(sf.number_of_timebins for sf in _readers)), _assumptions
+
+    def attach_readers(self, filenames):
+        self._readers = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
+        self._check(self._readers)
 
     @property
     def number_of_timebins(self):
@@ -264,26 +374,6 @@ class FinishedMeasurement(Measurement):
     @property
     def timebin_width_ps(self):
         return next(iter(self._readers)).timebin_width_ps
-
-    def __new__(cls, *args, **kwargs):
-        # TODO :: das hier passt mal **ueberhaupt gar nicht** in das "state-machine"-
-        ##  schema hinein!! Wie soll man das init-ialisieren, wenn bloss _new_state
-        ##  ge-called wird ???!?!?!?!?
-
-        # quick reminder: If __new__() does not return an instance of cls, then the
-        # new instance’s __init__() method will *not* be invoked:
-        print(*args, **kwargs)
-
-        inst = object.__new__(cls)
-
-        return inst
-
-    def __init__(self, *filenames, _reader=IoniTOFReader):
-        if not len(filenames):
-            raise ValueError("no filename given")
-
-        self._readers = sorted((_reader(f) for f in filenames), key=attrgetter('time_of_file'))
-        self._check(self._readers)
 
     def read_traces(self, kind='conc', index='abs_cycle', force_original=False):
         """Return the timeseries ("traces") of all masses, compounds and settings.
