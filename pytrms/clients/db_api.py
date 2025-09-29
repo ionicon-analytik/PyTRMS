@@ -89,7 +89,10 @@ class IoniConnect(_IoniClientBase):
         self.url = f"http://{self.host}:{self.port}"
         self.session = None
         self.current_meas_loc = None
-        self.connect()
+        try:
+            self.connect(timeout_s=3.3)
+        except TimeoutError:
+            log.warning("no connection! make sure the DB-API is running and try again")
 
     def get(self, endpoint, **kwargs):
         return self._get_object(endpoint, **kwargs).json()
@@ -157,8 +160,9 @@ class IoniConnect(_IoniClientBase):
         from operator import attrgetter
 
         # Note: the DB-API distinguishes between peaks with 
-        #  different center *and* name, so this is our key:
-        make_key = lambda peak: (peak['center'], peak['name'])
+        #  different center *and* name, while the PyTRMS 'Peak'
+        #  only distinguishes by center, so this is our key:
+        make_key = lambda p_info: (p_info['center'], p_info['name'])
 
         if isinstance(peaktable, str):
             log.info(f"loading peaktable '{peaktable}'...")
@@ -192,12 +196,13 @@ class IoniConnect(_IoniClientBase):
 
         to_update = updates.keys() & db_peaks.keys()
         to_upload = updates.keys() - db_peaks.keys()
-        updated = 0
+        updated = up_to_date = 0
         for key in sorted(to_update):
             # check if an existing peak needs an update
             if db_peaks[key]['payload'] == updates[key]['payload']:
                 # nothing to do..
                 log.debug(f"up-to-date: {key}")
+                up_to_date += 1
                 continue
 
             self.put(db_peaks[key]['self']['href'], updates[key]['payload'])
@@ -212,25 +217,46 @@ class IoniConnect(_IoniClientBase):
             for key in sorted(to_upload):
                 log.info(f"added new:  {key}")
 
+        linked = unlinked = 0
+        for child in self.get("/api/peaks?only=children")["_embedded"]["peaks"]:
+            # clear all children (a.k.a. fitpeaks)...
+            child_href = child["_links"]["self"]["href"]
+            parent_href = child["_links"]["parent"]["href"]
+            r = self.session.request('unlink', self.url + parent_href,
+                    headers={"location": child_href})
+            if not r.ok:
+                log.error(f'UNLINK {child_href} from Location: {parent_href}'
+                        + f'\n\nfailed with [{r.status_code}]: {r.content}')
+                r.raise_for_status()
+            log.debug(f'unlinked parent {parent_href} ~x~ {child_href}')
+            unlinked += 1
+
         if len(peaktable.fitted):
             # Note: until now, we disregarded the peak-parent-relationship, so
-            # make another request to the updated peak-table from the server...
-            peak2href = {Peak(center=p["center"], label=p["name"]): p["_links"]["self"]["href"]
-                            for p in self.get('/api/peaks')['_embedded']['peaks']}
-
+            #  make another request to the updated peak-table from the server...
+            pt_updated = self.get('/api/peaks')['_embedded']['peaks']
+            peak2href = {
+                Peak(p["center"], label=p["name"]): p["_links"]["self"]["href"]
+                for p in pt_updated
+            }
             for fitted in peaktable.fitted:
                 fitted_href = peak2href[fitted]
                 parent_href = peak2href[fitted.parent]
-                r = self.session.request('link', self.url + parent_href, headers={"location": fitted_href})
+                r = self.session.request('link', self.url + parent_href,
+                        headers={"location": fitted_href})
                 if not r.ok:
-                    log.error(f"LINK {parent_href} to Location: {fitted_href} failed\n\n[{r.status_code}]: {r.content}")
+                    log.error(f"LINK {parent_href} to Location: {fitted_href}"
+                            + f"\n\nfailed with [{r.status_code}]: {r.content}")
                     r.raise_for_status()
-                log.debug(f"linked parent {parent_href} ~> {fitted_href}")
+                log.debug(f"linked parent {parent_href} ~~> {fitted_href}")
+                linked += 1
 
         return {
                 'added': len(to_upload),
                 'updated': updated,
-                'up-to-date': len(to_update) - updated,
+                'up-to-date': up_to_date,
+                'linked': linked,
+                'unlinked': unlinked,
         }
 
     def iter_events(self, event_re=r".*"):

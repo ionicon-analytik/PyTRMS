@@ -106,7 +106,7 @@ class Peak:
     """
     _exact_decimals = 4
 
-    def __init__(self, center, label='', formula='', parent=None, borders=(),
+    def __init__(self, center, label='', *, formula='', parent=None, borders=(),
                  isotopic_abundance=1.0, k_rate=2.0, multiplier=1.0,
                  resolution=1000, shift=0):
         self.center = round(float(center), ndigits=Peak._exact_decimals)

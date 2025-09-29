@@ -75,7 +75,7 @@ class Instrument(ABC):
 
     @property
     def is_running(self):
-        return type(self) == _RunningInstrument
+        return type(self) is _RunningInstrument
 
     @property
     def is_local(self):
@@ -84,7 +84,7 @@ class Instrument(ABC):
         return 'localhost' in host or '127.0.0.1' in host
 
     def __init__(self, backend):
-        # Note: this will be called *once* per Python process!
+        # Note: this will be called *once* per Python process! see __new__() method.
         self.backend = backend
 
     def __repr__(self):
