@@ -6,15 +6,15 @@ from functools import wraps
 _logging_getLogger = logging.getLogger
 
 @wraps(_logging_getLogger)
-def getLoggerWithAnnouncement(name):
+def getLoggerWithAnnouncement(name=None):
     # patch the (global) logger to print its own name
     #  (useful for turning individual loggers on/off)
     # WARNING: this will patch every instance of the
     #  logging-module in every import after pytrms is
     #  imported! don't be overwhelmingly fancy with this!
-    assert name is not None, "allocating root-logger is forbidden for modules"
     rv = _logging_getLogger(name)
-    rv.debug(f"'acquired logger for '{name}'")
+    if name is not None:
+        rv.debug(f"'acquired logger for '{name}'")
 
     return rv
 
