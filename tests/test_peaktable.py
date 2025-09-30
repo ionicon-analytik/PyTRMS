@@ -142,8 +142,8 @@ def test_sync_unlinks_children(API, PT):
     assert 0 == r["added"]
     assert 0 == r["updated"]
     assert 3 == r["up-to-date"]
-    assert 1 == r["linked"]
-    assert 3 == r["unlinked"]
+    assert 0 == r["linked"]
+    assert 2 == r["unlinked"]
 
     j = API.get("/api/peaks?only=parents")
     assert j["count"] == 1

@@ -135,6 +135,15 @@ class IoniConnect(_IoniClientBase):
 
         return r.headers.get('Location')
 
+    def _link(self, parent_href, child_href, *, sever=False, **kwargs):
+        verb = "LINK" if not sever else "UNLINK"
+        if 'timeout' not in kwargs:
+            # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+            kwargs['timeout'] = (6.06, 27)
+        r = self.session.request(verb, self.url + parent_href,
+                headers={"location": child_href}, **kwargs)
+        r.raise_for_status()
+
     def _create_object(self, endpoint, data, method='post', **kwargs):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
@@ -186,12 +195,13 @@ class IoniConnect(_IoniClientBase):
             updates[make_key(payload)] = {'payload': payload}
 
         log.info(f"fetching current peaktable from the server...")
+        pt_server = self.get('/api/peaks')['_embedded']['peaks']
         # create a comparable collection of peaks already on the database by
         # reducing the keys in the response to what we actually want to update:
         db_peaks = {make_key(p): {
-                    'payload': {k: p[k] for k in conv.keys()},
-                    'self':   p['_links']['self'],
-                    'parent': p['_links'].get('parent'),
+                        'payload': {k: p[k] for k in conv.keys()},
+                        'self':   p['_links']['self'],
+                        'parent': p['_links'].get('parent'),
                     } for p in self.get('/api/peaks')['_embedded']['peaks']}
 
         to_update = updates.keys() & db_peaks.keys()
@@ -203,60 +213,56 @@ class IoniConnect(_IoniClientBase):
                 # nothing to do..
                 log.debug(f"up-to-date: {key}")
                 up_to_date += 1
-                continue
-
-            self.put(db_peaks[key]['self']['href'], updates[key]['payload'])
-            log.info(f"updated:    {key}")
-            updated += 1
+            else:
+                self.put(db_peaks[key]['self']['href'], updates[key]['payload'])
+                log.info(f"updated:    {key}")
+                updated += 1
 
         if len(to_upload):
             # Note: POSTing the embedded-collection is *miles faster*
             #  than doing separate requests for each peak!
-            payload = {'_embedded': {'peaks': [updates[key]['payload'] for key in sorted(to_upload)]}}
+            payload = {
+                '_embedded': {
+                    'peaks': [updates[key]['payload']
+                              for key in sorted(to_upload)]
+                }
+            }
             self.post('/api/peaks', payload)
             for key in sorted(to_upload):
                 log.info(f"added new:  {key}")
+            # Note: we need the updated peaktable to learn about 
+            #  the href (id) assigned to newly added peaks:
+            pt_server = self.get('/api/peaks')['_embedded']['peaks']
 
-        linked = unlinked = 0
-        for child in self.get("/api/peaks?only=children")["_embedded"]["peaks"]:
-            # clear all children (a.k.a. fitpeaks)...
-            child_href = child["_links"]["self"]["href"]
-            parent_href = child["_links"]["parent"]["href"]
-            r = self.session.request('unlink', self.url + parent_href,
-                    headers={"location": child_href})
-            if not r.ok:
-                log.error(f'UNLINK {child_href} from Location: {parent_href}'
-                        + f'\n\nfailed with [{r.status_code}]: {r.content}')
-                r.raise_for_status()
-            log.debug(f'unlinked parent {parent_href} ~x~ {child_href}')
-            unlinked += 1
+        log.info("repairing fitpeak~>nominal links...")
+        peak2href = {
+            Peak(p["center"], label=p["name"]): p["_links"]["self"]["href"]
+            for p in pt_server
+        }
+        to_link = set((peak2href[fitted], peak2href[fitted.parent])
+            for fitted in peaktable.fitted)
 
-        if len(peaktable.fitted):
-            # Note: until now, we disregarded the peak-parent-relationship, so
-            #  make another request to the updated peak-table from the server...
-            pt_updated = self.get('/api/peaks')['_embedded']['peaks']
-            peak2href = {
-                Peak(p["center"], label=p["name"]): p["_links"]["self"]["href"]
-                for p in pt_updated
-            }
-            for fitted in peaktable.fitted:
-                fitted_href = peak2href[fitted]
-                parent_href = peak2href[fitted.parent]
-                r = self.session.request('link', self.url + parent_href,
-                        headers={"location": fitted_href})
-                if not r.ok:
-                    log.error(f"LINK {parent_href} to Location: {fitted_href}"
-                            + f"\n\nfailed with [{r.status_code}]: {r.content}")
-                    r.raise_for_status()
-                log.debug(f"linked parent {parent_href} ~~> {fitted_href}")
-                linked += 1
+        is_link = set((child["_links"]["self"]["href"], child["_links"]["parent"]["href"])
+            for child in pt_server if "parent" in child["_links"])
+
+        for child_href, parent_href in is_link & to_link:
+            log.debug(f"keep link  {parent_href} <~> {child_href}")
+            pass
+
+        for child_href, parent_href in to_link - is_link:
+            log.debug(f"make link  {parent_href} ~>> {child_href}")
+            self._link(parent_href, child_href)
+
+        for child_href, parent_href in is_link - to_link:
+            log.debug(f'break link {parent_href} ~x~ {child_href}')
+            self._link(parent_href, child_href, sever=True)
 
         return {
                 'added': len(to_upload),
                 'updated': updated,
                 'up-to-date': up_to_date,
-                'linked': linked,
-                'unlinked': unlinked,
+                'linked': len(to_link - is_link),
+                'unlinked': len(is_link - to_link),
         }
 
     def iter_events(self, event_re=r".*"):
