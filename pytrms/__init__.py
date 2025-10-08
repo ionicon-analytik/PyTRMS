@@ -1,4 +1,4 @@
-_version = '0.9.7'
+_version = '0.9.8'
 
 import logging
 from functools import wraps
