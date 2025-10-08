@@ -3,20 +3,45 @@ import time
 import json
 import logging
 from collections import namedtuple
+import urllib3.util
 
 import requests
+import requests.adapters
+import requests.exceptions
 
 from .ssevent import SSEventListener
 from .._base import _IoniClientBase
 
 log = logging.getLogger(__name__)
 
-_unsafe = namedtuple('unsafe_response', ['status_code', 'location'])
+_unsafe = namedtuple('http_response', ['status_code', 'href'])
 
 __all__ = ['IoniConnect']
 
 
 class IoniConnect(_IoniClientBase):
+
+    # Note: this retry-policy is specifically designed for the
+    #  SQLite Error 5: 'database locked', which may take potentially
+    #  minutes to resolve itself! Therefore, it is extra generous
+    #  and backs off up to `3.0 * 2^4 = 48 sec` between retries for
+    #  a total of ~1 1/2 minutes (plus database timeout). But, giving
+    #  up on retrying here, would mean *losing all data* in the queue!
+    #    ==>> We would rather crash on a `queue.full` exception! <<==
+    _retry_policy = urllib3.util.Retry(
+        # this configures policies on each cause for errors individually...
+        total=None,             # max. retries (takes precedence). `None`: turned off
+        connect=0, read=0, redirect=0,  # (all turned off, see docs for details)
+        other=0,                # "other" errors include timeout (set to 27 seconds)
+        # configure the retries on specific status-codes...
+        status=5,               # how many times to retry on bad status codes
+        raise_on_status=True,   # `True`: do not return a 429 status code
+        status_forcelist=[429], # integer status-codes to retry on
+        allowed_methods=None,   # `None`: retry on all (possibly not idempotent) verbs
+        # this configures backoff between retries...
+        backoff_factor=3.0,     # back off *after* first try in seconds (x 2^n_retries)
+        respect_retry_after_header=False,  # would override `backoff_factor`, turn off!
+    )
 
     @property
     def is_connected(self):
@@ -40,6 +65,8 @@ class IoniConnect(_IoniClientBase):
 
     def connect(self, timeout_s=10):
         self.session = requests.sessions.Session()
+        self.session.mount('http://',  self._http_adapter)
+        self.session.mount('https://', self._http_adapter)
         started_at = time.monotonic()
         while timeout_s is None or time.monotonic() < started_at + timeout_s:
             try:
@@ -92,6 +119,7 @@ class IoniConnect(_IoniClientBase):
     def __init__(self, host='127.0.0.1', port=5066):
         super().__init__(host, port)
         self.url = f"http://{self.host}:{self.port}"
+        self._http_adapter = requests.adapters.HTTPAdapter(max_retries=self._retry_policy)
         self.session = None
         self.current_meas_loc = None
         try:
