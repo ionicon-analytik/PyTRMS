@@ -10,6 +10,8 @@ from .._base import _IoniClientBase
 
 log = logging.getLogger(__name__)
 
+__all__ = ['IoniConnect']
+
 
 class IoniConnect(_IoniClientBase):
 
@@ -28,7 +30,7 @@ class IoniConnect(_IoniClientBase):
         '''Returns `True` if IoniTOF is currently acquiring data.'''
         try:
             assert self.session is not None, "not connected"
-            self._get_location("/api/measurements/current")
+            self.get_location("/api/measurements/current")
             return True
         except (AssertionError, requests.exceptions.HTTPError):
             return False
@@ -38,7 +40,7 @@ class IoniConnect(_IoniClientBase):
         started_at = time.monotonic()
         while timeout_s is None or time.monotonic() < started_at + timeout_s:
             try:
-                self.current_meas_loc = self._get_location("/api/measurements/current")
+                self.current_meas_loc = self.get_location("/api/measurements/current")
                 break
             except requests.exceptions.HTTPError:
                 # OK, no measurement running..
@@ -80,7 +82,7 @@ class IoniConnect(_IoniClientBase):
 
         If 'future_cycle' is not None and in the future, schedule the stop command.
         '''
-        loc = self.current_meas_loc or self._get_location("/api/measurements/current")
+        loc = self.current_meas_loc or self.get_location("/api/measurements/current")
         self.put(loc, { "isRunning": False })
         self.current_meas_loc = ''
 
@@ -95,47 +97,130 @@ class IoniConnect(_IoniClientBase):
             log.warning("no connection! make sure the DB-API is running and try again")
 
     def get(self, endpoint, **kwargs):
-        return self._get_object(endpoint, **kwargs).json()
+        """Make a GET request to `endpoint` and parse JSON if applicable."""
+        try:
+            r = self._fetch_object(endpoint, 'get', **kwargs)
+            if 'json' in r.headers.get('content-type', ''):
+                return r.json()
+            if 'text' in r.headers.get('content-type', ''):
+                return r.text
+            else:
+                log.warning(f"unexpected 'content-type: {r.headers['content-type']}'")
+                log.info(f"did you mean to use `{type(self).__name__}.download(..)` instead?")
+                return r.content
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 410:  # Gone
+                log.debug(f"nothing there at '{endpoint}' 0_o ?!")
+                return None
+            raise
+
+    def get_location(self, endpoint, **kwargs):
+        """Returns the actual location that `endpoint` points to (may be a redirect)."""
+        r = self._fetch_object(endpoint, 'get', **(kwargs | { "allow_redirects": False }))
+        return r.headers.get('Location', r.request.path_url)
 
     def post(self, endpoint, data, **kwargs):
-        return self._create_object(endpoint, data, 'post', **kwargs).headers.get('Location')
+        """Append to the collection at `endpoint` the object defined by `data`."""
+        r = self._create_object(endpoint, data, 'post', **kwargs)
+        return r.status_code, r.headers.get('Location', '')  # no default location known!
 
     def put(self, endpoint, data, **kwargs):
-        return self._create_object(endpoint, data, 'put', **kwargs).headers.get('Location')
+        """Replace the entire object at `endpoint` with `data`."""
+        r = self._create_object(endpoint, data, 'put', **kwargs)
+        return r.status_code, r.headers.get('Location', r.request.path_url)
+
+    def patch(self, endpoint, data, **kwargs):
+        """Change parts of the object at `endpoint` with fields in `data`."""
+        r = self._create_object(endpoint, data, 'patch', **kwargs)
+        return r.status_code, r.headers.get('Location', r.request.path_url)
+
+    def delete(self, endpoint, **kwargs):
+        """Attempt to delete the object at `endpoint`."""
+        r = self._fetch_object(endpoint, data, 'delete', **kwargs)
+        return r.status_code, r.headers.get('Location', r.request.path_url)
+
+    def link(self, parent_ep, child_ep, **kwargs):
+        """Make the object at `parent_e[nd]p[oint]` refer to `child_e[nd]p[oint]`"""
+        r = self._make_link(parent_ep, child_ep, sever=False, **kwargs)
+        return r.status_code, r.headers.get('Location', r.request.path_url)
+
+    def unlink(self, parent_ep, child_ep, **kwargs):
+        """Destroy the reference from `parent_e[nd]p[oint]` to `child_e[nd]p[oint]`"""
+        r = self._make_link(parent_ep, child_ep, sever=True, **kwargs)
+        return r.status_code, r.headers.get('Location', r.request.path_url)
 
     def upload(self, endpoint, filename):
+        """Upload the file at `filename` to `endpoint`."""
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
-        with open(filename) as f:
+        with open(filename, 'rb') as f:
             # Note (important!): this is a "form-data" entry, where the server
             #  expects the "name" to be 'file' and rejects it otherwise:
             name = 'file'
-            r = self.session.post(self.url + endpoint, files=[(name, (filename, f, ''))])
+            r = self._create_object(endpoint, None, 'post',
+                    # Note: the requests library will set the content-type automatically
+                    #  and also add a randomly generated "boundary" to separate files:
+                    #headers={'content-type': 'multipart/form-data'}, No!
+                    files=[(name, (filename, f, ''))])
             r.raise_for_status()
 
-        return r
+        return r.status_code, r.headers.get('Location', r.request.path_url)
 
-    def _get_object(self, endpoint, **kwargs):
+    def download(self, endpoint, out_file='.'):
+        """Download from `endpoint` into `out_file` (may be a directory).
+
+        Returns:
+            status_code, actual_filename
+        """
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+
+        out_file = os.path.abspath(out_file)
+
+        content_type = 'application/octet-stream'
+        r = self._fetch_object(endpoint, 'get', stream=True, headers={'accept': content_type})
+        assert r.headers['content-type'] == content_type, "unexcepted content-type"
+
+        content_dispo = r.headers['content-disposition'].split('; ')
+        #['attachment',
+        # 'filename=2025_10_06__13_23_32.h5',
+        # "filename*=UTF-8''2025_10_06__13_23_32.h5"]
+        filename = next(
+            (dispo.split('=')[1] for dispo in content_dispo if dispo.startswith("filename="))
+            , None)
+        if os.path.isdir(out_file):
+            assert filename, "no out_file given and server didn't supply filename"
+            out_file = os.path.join(out_file, filename)
+
+        with open(out_file, mode='xb') as f:
+            # chunk_size must be of type int or None. A value of None will
+            # function differently depending on the value of `stream`.
+            # stream=True will read data as it arrives in whatever size the
+            # chunks are received. If stream=False, data is returned as
+            # a single chunk.
+            for chunk in r.iter_content(chunk_size=None):
+                f.write(chunk)
+            r.close()
+
+        return r.status_code, out_file
+
+    def _fetch_object(self, endpoint, method='get', **kwargs):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
         if 'headers' not in kwargs:
-            kwargs['headers'] = {'content-type': 'application/hal+json'}
-        elif 'content-type' not in (k.lower() for k in kwargs['headers']):
-            kwargs['headers'].update({'content-type': 'application/hal+json'})
+            kwargs['headers'] = {'accept': 'application/json'}
+        elif 'accept' not in (k.lower() for k in kwargs['headers']):
+            kwargs['headers'].update({'accept': 'application/json'})
         if 'timeout' not in kwargs:
             # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
             kwargs['timeout'] = (6.06, 27)
-        r = self.session.request('get', self.url + endpoint, **kwargs)
+        r = self.session.request(method, self.url + endpoint, **kwargs)
         r.raise_for_status()
 
         return r
 
-    def _get_location(self, endpoint, **kwargs):
-        r = self._get_object(endpoint, **(kwargs | { "allow_redirects": False }))
-
-        return r.headers.get('Location')
-
-    def _link(self, parent_href, child_href, *, sever=False, **kwargs):
+    def _make_link(self, parent_href, child_href, *, sever=False, **kwargs):
         verb = "LINK" if not sever else "UNLINK"
         if 'timeout' not in kwargs:
             # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
@@ -144,15 +229,19 @@ class IoniConnect(_IoniClientBase):
                 headers={"location": child_href}, **kwargs)
         r.raise_for_status()
 
+        return r
+
     def _create_object(self, endpoint, data, method='post', **kwargs):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
-        if not isinstance(data, str):
-            data = json.dumps(data, ensure_ascii=False)  # default is `True`, escapes Umlaute!
-        if 'headers' not in kwargs:
-            kwargs['headers'] = {'content-type': 'application/hal+json'}
-        elif 'content-type' not in (k.lower() for k in kwargs['headers']):
-            kwargs['headers'].update({'content-type': 'application/hal+json'})
+        if data is not None:
+            if not isinstance(data, str):
+                # Note: default is `ensure_ascii=True`, but this escapes Umlaute!
+                data = json.dumps(data, ensure_ascii=False)
+            if 'headers' not in kwargs:
+                kwargs['headers'] = {'content-type': 'application/json'}
+            elif 'content-type' not in (k.lower() for k in kwargs['headers']):
+                kwargs['headers'].update({'content-type': 'application/json'})
         if 'timeout' not in kwargs:
             # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
             kwargs['timeout'] = (6.06, 27)
@@ -251,11 +340,11 @@ class IoniConnect(_IoniClientBase):
 
         for child_href, parent_href in to_link - is_link:
             log.debug(f"make link  {parent_href} ~>> {child_href}")
-            self._link(parent_href, child_href)
+            self.link(parent_href, child_href)
 
         for child_href, parent_href in is_link - to_link:
             log.debug(f'break link {parent_href} ~x~ {child_href}')
-            self._link(parent_href, child_href, sever=True)
+            self.unlink(parent_href, child_href)
 
         return {
                 'added': len(to_upload),
