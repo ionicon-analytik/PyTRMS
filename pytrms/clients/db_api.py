@@ -2,6 +2,7 @@ import os
 import time
 import json
 import logging
+from collections import namedtuple
 
 import requests
 
@@ -9,6 +10,8 @@ from .ssevent import SSEventListener
 from .._base import _IoniClientBase
 
 log = logging.getLogger(__name__)
+
+_unsafe = namedtuple('unsafe_response', ['status_code', 'location'])
 
 __all__ = ['IoniConnect']
 
@@ -123,32 +126,32 @@ class IoniConnect(_IoniClientBase):
     def post(self, endpoint, data, **kwargs):
         """Append to the collection at `endpoint` the object defined by `data`."""
         r = self._create_object(endpoint, data, 'post', **kwargs)
-        return r.status_code, r.headers.get('Location', '')  # no default location known!
+        return _unsafe(r.status_code, r.headers.get('Location', ''))  # no default location known!
 
     def put(self, endpoint, data, **kwargs):
         """Replace the entire object at `endpoint` with `data`."""
         r = self._create_object(endpoint, data, 'put', **kwargs)
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def patch(self, endpoint, data, **kwargs):
         """Change parts of the object at `endpoint` with fields in `data`."""
         r = self._create_object(endpoint, data, 'patch', **kwargs)
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def delete(self, endpoint, **kwargs):
         """Attempt to delete the object at `endpoint`."""
         r = self._fetch_object(endpoint, data, 'delete', **kwargs)
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def link(self, parent_ep, child_ep, **kwargs):
         """Make the object at `parent_e[nd]p[oint]` refer to `child_e[nd]p[oint]`"""
         r = self._make_link(parent_ep, child_ep, sever=False, **kwargs)
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def unlink(self, parent_ep, child_ep, **kwargs):
         """Destroy the reference from `parent_e[nd]p[oint]` to `child_e[nd]p[oint]`"""
         r = self._make_link(parent_ep, child_ep, sever=True, **kwargs)
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def upload(self, endpoint, filename):
         """Upload the file at `filename` to `endpoint`."""
@@ -165,7 +168,7 @@ class IoniConnect(_IoniClientBase):
                     files=[(name, (filename, f, ''))])
             r.raise_for_status()
 
-        return r.status_code, r.headers.get('Location', r.request.path_url)
+        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def download(self, endpoint, out_file='.'):
         """Download from `endpoint` into `out_file` (may be a directory).
@@ -203,7 +206,7 @@ class IoniConnect(_IoniClientBase):
                 f.write(chunk)
             r.close()
 
-        return r.status_code, out_file
+        return _unsafe(r.status_code, out_file)
 
     def _fetch_object(self, endpoint, method='get', **kwargs):
         if not endpoint.startswith('/'):
