@@ -83,7 +83,7 @@ class IoniConnect(_IoniClientBase):
         If 'future_cycle' is not None and in the future, schedule the stop command.
         '''
         loc = self.current_meas_loc or self.get_location("/api/measurements/current")
-        self.put(loc, { "isRunning": False })
+        self.patch(loc, { "isRunning": False })
         self.current_meas_loc = ''
 
     def __init__(self, host='127.0.0.1', port=5066):
