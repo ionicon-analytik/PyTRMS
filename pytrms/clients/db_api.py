@@ -168,7 +168,7 @@ class IoniConnect(_IoniClientBase):
 
     def delete(self, endpoint, **kwargs):
         """Attempt to delete the object at `endpoint`."""
-        r = self._fetch_object(endpoint, data, 'delete', **kwargs)
+        r = self._fetch_object(endpoint, 'delete', **kwargs)
         return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
     def link(self, parent_ep, child_ep, **kwargs):
@@ -252,12 +252,19 @@ class IoniConnect(_IoniClientBase):
         return r
 
     def _make_link(self, parent_href, child_href, *, sever=False, **kwargs):
-        verb = "LINK" if not sever else "UNLINK"
+        if not parent_href.startswith('/'):
+            parent_href = '/' + parent_href
+        if not child_href.startswith('/'):
+            child_href = '/' + child_href
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {'location': child_href}
+        else:
+            kwargs['headers'].update({'location': child_href})
         if 'timeout' not in kwargs:
             # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
             kwargs['timeout'] = (6.06, 27)
-        r = self.session.request(verb, self.url + parent_href,
-                headers={"location": child_href}, **kwargs)
+        r = self.session.request("LINK" if not sever else "UNLINK",
+                self.url + parent_href, **kwargs)
         r.raise_for_status()
 
         return r
