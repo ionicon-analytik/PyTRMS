@@ -376,14 +376,14 @@ def follow_act_set_values(client, self, msg):
             self.act_values[parID] = _parse_data_element(payload["DataElement"])
         if kind == "Set":
             self.set_values[parID] = _parse_data_element(payload["DataElement"])
-    except json.decoder.JSONDecodeError as exc:
-        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
-        raise
-    except KeyError as exc:
-        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
-        pass
     except ParsingError as exc:
         log.error(f"while parsing [{parID}] :: {str(exc)}")
+        pass
+    except json.decoder.JSONDecodeError as exc:
+        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
+        pass
+    except Exception as exc:
+        log.error(f"{exc.__class__.__name__}: {exc} :: while processing [{msg.topic}] ({msg.payload})")
         pass
 
 follow_act_set_values.topics = ["+/Act/+", "+/Set/+"]
