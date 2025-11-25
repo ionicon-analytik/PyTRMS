@@ -33,6 +33,30 @@ def _on_publish(client, self, mid):
     log.debug(f"[{self}] published {mid = }")
 
 
+def _exception_safe(callback_fun):
+    # rest assured, that we never throw inside callbacks!
+
+    cb_name = callback_fun.__code__.co_name
+    cb_argc = callback_fun.__code__.co_argcount
+    short_payload = lambda s: s[:50] + ('...' if len(s) > 50 else '')
+
+    assert cb_argc == 3, "subscriber callback must have arguments (client, obj, msg)"
+
+    def exception_safe_callback_wrapper(client, data, msg):
+        try:
+            callback_fun(client, data, msg)
+        except Exception as exc:
+            log.warning(f"unhandled {exc.__class__.__name__}: {exc} "
+                      + f"in callback {cb_name}({msg.topic}, <obj>, {short_payload(msg.payload)})")
+            pass
+        except:
+            log.warning(f"exception unhandled "
+                      + f"in callback {cb_name}({msg.topic}, <obj>, {short_payload(msg.payload)})")
+            pass
+
+    return exception_safe_callback_wrapper
+
+
 class MqttClientBase:
     """Mix-in class that supplies basic MQTT-callback functions.
 
@@ -88,7 +112,7 @@ class MqttClientBase:
         self._subscriber_functions = list(subscriber_functions)
         for subscriber in self._subscriber_functions:
             for topic in getattr(subscriber, "topics", []):
-                self.client.message_callback_add(topic, subscriber)
+                self.client.message_callback_add(topic, _exception_safe(subscriber))
         # ...pass this instance to each callback...
         self.client.user_data_set(self)
         # ...and connect to the server:
