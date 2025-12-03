@@ -402,6 +402,8 @@ class IoniConnect(_IoniClientBase):
          stream-implementation), unless the server sends a keep-alive at regular
          intervals (as every well-behaved server should be doing)!
         """
-        yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events",
-                session=self.session)
+        # Note: DO NOT inject our `requests.session` with the 'session' kw-arg!!
+        #  For some unknown reason this didn't work. Maybe in combination with
+        #  the new _http_adapter? Who knows.. let the listener use its own session:
+        yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events")
 

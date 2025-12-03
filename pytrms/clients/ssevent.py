@@ -106,6 +106,6 @@ class SSEventListener(Iterable):
 
     def __iter__(self):
         g = self.follow_events(timeout_s=None, prime=True)
-        assert next(g).event == 'new connection', "invalid program: pseude-event expected"
+        assert next(g).event == 'new connection', "invalid program: pseudo-event expected"
         yield from g
 
