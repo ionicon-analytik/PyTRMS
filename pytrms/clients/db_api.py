@@ -67,22 +67,17 @@ class IoniConnect(_IoniClientBase):
         self.session = requests.sessions.Session()
         self.session.mount('http://',  self._http_adapter)
         self.session.mount('https://', self._http_adapter)
-        started_at = time.monotonic()
-        while timeout_s is None or time.monotonic() < started_at + timeout_s:
-            try:
-                self.current_meas_loc = self.get_location("/api/measurements/current")
-                break
-            except requests.exceptions.HTTPError:
+        try:
+            self.current_meas_loc = self.get_location("/api/measurements/current")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 410:  # Gone
                 # OK, no measurement running..
                 self.current_meas_loc = ''
-                break
-            except Exception:
-                pass
-
-            time.sleep(10e-1)
-        else:
+                return
+        except requests.exceptions.ConnectionError as e:
             self.session = self.current_meas_loc = None
-            raise TimeoutError(f"no connection to '{self.url}'");
+            log.error(type(e).__name__, str(e))
+            raise
 
     def disconnect(self):
         if self.session is not None:
@@ -124,7 +119,7 @@ class IoniConnect(_IoniClientBase):
         self.current_meas_loc = None
         try:
             self.connect(timeout_s=3.3)
-        except TimeoutError:
+        except requests.exceptions.ConnectionError:
             log.warning("no connection! make sure the DB-API is running and try again")
 
     def get(self, endpoint, **kwargs):
