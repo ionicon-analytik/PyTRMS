@@ -327,6 +327,46 @@ class PeakTable:
                        indent=2)
         fp.write(s)
 
+    def _write_ionipt(self, fp, fileversion='1.0'):
+        # modes:
+        IGNORE    = 0b00
+        INTEGRATE = 0b01
+        FIT_PEAKS = 0b10
+        BOTH      = 0b11
+
+        # Note (Warning): We can only deduce BOTH and INTEGRATE, because all parents
+        #  with children are always fitted in our context. The IGNORE and FIT_PEAKS
+        #  modes will be lost when saving in .ionipt format!
+
+        render_borderpeak = lambda bp: {
+                "name": bp.label,
+                "center": bp.center,
+                "ion": bp.formula,
+                "ionic_isotope": "", # ??
+                "parent": "",  # not used!
+                "isotopic_abundance": bp.isotopic_abundance,
+                "k_rate": bp.k_rate,
+                "multiplier": bp.multiplier,
+                "resolution": bp.resolution
+            }
+        parent2children = self.group()
+        s = json.dumps([
+                {
+                    "border_peak": render_borderpeak(parent),
+                    "low": parent.borders()[0],
+                    "high": parent.borders()[1],
+                    "peak": [
+                        render_borderpeak(child)
+                        for child in parent2children[parent]
+                    ],
+                    "mode": int(BOTH if len(parent2children[parent]) else INTEGRATE),
+                    "shift": parent.shift,
+                }
+                for parent in self.nominal
+            ],
+            indent=4)
+        fp.write(s)
+
     def _write_ipt(self, fp, fileversion='1.0'):
         if fileversion not in ['1.0', '1.1']:
             raise NotImplementedError("Can't write .ipt version %s!" % fileversion)
@@ -443,6 +483,8 @@ class PeakTable:
             writer = partial(self._write_ipt, fileversion='1.0')
         elif ext == '.ipta':
             writer = partial(self._write_ipta, fileversion='1.0')
+        elif ext == '.ionipt':
+            writer = partial(self._write_ionipt, fileversion='1.0')
         else:
             raise NotImplementedError("can't export with file extension <%s>!" % ext)
 
