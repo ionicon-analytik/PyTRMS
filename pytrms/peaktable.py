@@ -114,10 +114,16 @@ class Peak:
             label = 'm{:.4f}'.format(self.center)
         self.label = str(label)
         self.formula = formula
-        if parent is not None and not isinstance(parent, Peak):
-            raise ValueError(parent)
+        # check parent and use its borders:
+        if parent is not None:
+            if not isinstance(parent, Peak):
+                raise ValueError(parent)
 
-        self.parent = parent
+            borders = parent.borders
+            self.parent = parent
+        else:
+            self.parent = None
+
         self._borders = tuple(map(lambda x: round(float(x), ndigits=4), borders))
         self.isotopic_abundance = float(isotopic_abundance)
         self.k_rate = float(k_rate)
@@ -194,7 +200,7 @@ class PeakTable:
         peaks = []
         for row in table.itertuples(index=False):
             borders = row.BorderLow, row.BorderHigh
-            peaks.append(Peak(center=row.MassCenters, label=row.Descriptions,
+            peaks.append(Peak(center=row.MassCenters, label=row.Descriptions.strip(),
                               borders=borders, k_rate=row.kRates,
                               multiplier=row.Multipliers))
 
@@ -341,8 +347,8 @@ class PeakTable:
         render_borderpeak = lambda bp: {
                 "name": bp.label,
                 "center": bp.center,
-                "ion": bp.formula,
-                "ionic_isotope": "", # ??
+                "ion": "",
+                "ionic_isotope": bp.formula,
                 "parent": "",  # not used!
                 "isotopic_abundance": bp.isotopic_abundance,
                 "k_rate": bp.k_rate,
@@ -353,8 +359,8 @@ class PeakTable:
         s = json.dumps([
                 {
                     "border_peak": render_borderpeak(parent),
-                    "low": parent.borders()[0],
-                    "high": parent.borders()[1],
+                    "low": parent.borders[0],
+                    "high": parent.borders[1],
                     "peak": [
                         render_borderpeak(child)
                         for child in parent2children[parent]
@@ -429,7 +435,7 @@ class PeakTable:
         return PeakTable([Peak(mass) for mass in exact_masses])
 
     def __init__(self, peaks: list = ()):
-        self.peaks = sorted(peaks)
+        self.peaks = peaks
 
     @property
     def nominal(self):

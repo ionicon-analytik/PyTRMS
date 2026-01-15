@@ -10,121 +10,55 @@ from pytrms import peaktable
 
 
 @pytest.fixture
-def comprehensive_pt():
+def pt_with_nominal():
     """Create a comprehensive PeakTable with various peak types and properties."""
-    peaks = [
+    return peaktable.PeakTable([
         # Basic nominal peaks
-        peaktable.Peak(42.0, label="H3O+", formula="H3O"),
-        peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"),
-        
+        peaktable.Peak(42.0,    label="H3O+", formula="H3O"),
+        peaktable.Peak(57.0,    label="C2H5O+", formula="C2H5O"),
         # Peaks with custom properties
-        peaktable.Peak(21.0219, label="H3O+_ref", formula="H3O", 
-                      isotopic_abundance=0.678, k_rate=2.1, multiplier=488.0),
-        peaktable.Peak(59.0121, label="C3H5O+", formula="C3H5O",
-                      isotopic_abundance=0.123, k_rate=1.5, multiplier=250.0),
-        
-        # Peaks with custom borders
-        peaktable.Peak(75.0, label="CustomBorder", borders=(74.5, 75.5)),
-        
-        # Peaks with resolution and shift
-        peaktable.Peak(83.0, label="HighRes", resolution=2000.0, shift=0.1),
-        
-        # Unit mass peaks
-        peaktable.Peak(100.0, label="UnitMass"),
-    ]
-    
-    return peaktable.PeakTable(peaks)
+        peaktable.Peak(21.0219, label="H3O+_ref", formula="H3O", isotopic_abundance=0.678, k_rate=2.1, multiplier=488.0),
+        peaktable.Peak(59.0121, label="C3H5O+", formula="C3H5O", isotopic_abundance=0.123, k_rate=1.5, multiplier=250.0),
+        peaktable.Peak(75.0,    label="CustomBorder", borders=(74.5, 75.5)),
+        peaktable.Peak(83.0,    label="HighRes", resolution=2000.0, shift=0.1),
+        peaktable.Peak(100.0,   label="UnitMass"),
+    ])
 
 
 @pytest.fixture
 def pt_with_fitted():
     """Create a PeakTable with parent-child relationships for formats that support it."""
-    peaks = [
+    pt = peaktable.PeakTable([
         peaktable.Peak(42.0, label="H3O+", formula="H3O"),
-        peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"),
-    ]
-    
-    pt = peaktable.PeakTable(peaks)
-    
+    ])
     # Add fitted peaks (children) with parent relationships
-    pt.peaks.append(peaktable.Peak(42.1234, label="H3O+_fit1", 
-                                   parent=pt.peaks[0], formula="H3O"))
-    pt.peaks.append(peaktable.Peak(42.2345, label="H3O+_fit2", 
-                                   parent=pt.peaks[0], formula="H3O"))
-    
+    pt.peaks.append(peaktable.Peak(42.1234, label="H3O+_fit1", parent=pt.peaks[0], formula="H3O"))
+    pt.peaks.append(peaktable.Peak(42.2345, label="H3O+_fit2", parent=pt.peaks[0], formula="H3O"))
+    pt.peaks.append(peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"))
+
     return pt
 
 
+def test_peaktable_props(pt_with_fitted):
+    assert len(pt_with_fitted) == 4
+
+    assert pt_with_fitted.nominal
+    assert pt_with_fitted.fitted
+    assert pt_with_fitted.mass_labels
 
 
-def validate_format_specific_properties(original, reloaded, format_ext):
-    """Validate PeakTable round-trip with format-specific considerations."""
-    if format_ext in ['.ipta', '.ipt']:
-        # .ipta and .ipt formats don't preserve parent-child relationships
-        # All peaks become nominal after reload
-        assert len(reloaded.fitted) == 0
+def test_peaktable_find_by_mass(pt_with_fitted):
+    assert len(pt_with_fitted) == 4
 
-    # Focus on core properties that should be preserved
-    for orig_peak, reloaded_peak in zip(original.peaks, reloaded.peaks):
-        # Center mass should always be preserved
-        assert orig_peak.center     == reloaded_peak.center
-        assert orig_peak.label      == reloaded_peak.label
-        assert orig_peak.borders    == reloaded_peak.borders
-        assert orig_peak.k_rate     == reloaded_peak.k_rate
-        assert orig_peak.multiplier == reloaded_peak.multiplier
+    assert pt_with_fitted.exact_masses == [42.0, 42.1234, 42.2345, 57.0]
 
+    assert pt_with_fitted.find_by_mass(42.    ) == peaktable.Peak(42.    )
+    assert pt_with_fitted.find_by_mass(57.    ) == peaktable.Peak(57.    )
+    assert pt_with_fitted.find_by_mass(42.1234) == peaktable.Peak(42.1234)
+    assert pt_with_fitted.find_by_mass(42.2345) == peaktable.Peak(42.2345)
 
-@pytest.mark.parametrize("format_ext", [
-    ".ipta",    # LabView INI-style
-    ".ipt",     # LabView tab-separated  
-    ".json",    # JSON format
-    ".ipt3",    # JSON format (same as .json)
-    ".ionipt",  # modern JSON format (best compatibility)
-])
-def test_round_trip_nominal_only(tmp_path, comprehensive_pt, format_ext):
-    """Test round-trip functionality for formats that work with nominal peaks only."""
-    # Save the PeakTable
-    filename = tmp_path / f"test{format_ext}"
-    comprehensive_pt.save(filename)
-    
-    # Load it back
-    reloaded = peaktable.PeakTable.from_file(filename)
-    
-    # Validate PeakTable-level properties
-    assert len(reloaded) == len(comprehensive_pt)
-    
-    # For .ipta and .ipt formats, parent-child relationships are lost
-    if format_ext in ['.ipta', '.ipt']:
-        assert len(reloaded.fitted) == 0
-    else:
-        assert len(reloaded.fitted) == len(comprehensive_pt.fitted)
-    
-    # Validate exact masses
-    assert reloaded.exact_masses == comprehensive_pt.exact_masses
-    
-    # Format-specific validation
-    validate_format_specific_properties(comprehensive_pt, reloaded, format_ext)
-
-
-@pytest.mark.parametrize("format_ext", [
-#   ".ipta",    # LabView INI-style
-#   ".ipt",     # LabView tab-separated  
-#   ".json",    # JSON format
-#   ".ipt3",    # JSON format (same as .json)
-    ".ionipt",  # modern JSON format (best compatibility)
-])
-def test_round_trip_with_fitted_json(tmp_path, pt_with_fitted, format_ext):
-    """Test round-trip with fitted peaks using JSON formats."""
-    filename = tmp_path / f"test_fitted{format_ext}"
-    pt_with_fitted.save(filename)
-    
-    reloaded = peaktable.PeakTable.from_file(filename)
-    
-    # Basic validation - at least the peak count should be preserved
-    assert len(reloaded) == len(pt_with_fitted)
-    
-    # Comprehensive validation for JSON formats
-    validate_format_specific_properties(pt_with_fitted, reloaded, format_ext)
+    with pytest.raises(KeyError):
+        pt_with_fitted.find_by_mass(3.14159)
 
 
 @pytest.mark.parametrize("format_ext", [
@@ -134,7 +68,7 @@ def test_round_trip_with_fitted_json(tmp_path, pt_with_fitted, format_ext):
     ".ipt3",    # JSON format (same as .json)
     ".ionipt",  # modern JSON format (best compatibility)
 ])
-def test_empty_peaktable_round_trip(tmp_path, format_ext):
+def test_round_trip_empty_peaktable(tmp_path, format_ext):
     """Test round-trip with empty PeakTable."""
     empty_pt = peaktable.PeakTable([])
     
@@ -155,21 +89,129 @@ def test_empty_peaktable_round_trip(tmp_path, format_ext):
     ".ipt3",    # JSON format (same as .json)
     ".ionipt",  # modern JSON format (best compatibility)
 ])
-def test_nominal_only_peaktable(tmp_path, format_ext):
-    """Test round-trip with only nominal peaks."""
-    nominal_only = peaktable.PeakTable([
-        peaktable.Peak(42.0, label="H3O+", formula="H3O"),
-        peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"),
-    ])
-    
-    filename = tmp_path / f"nominal{format_ext}"
-    nominal_only.save(filename)
-    
+def test_round_trip_nominal_only(tmp_path, pt_with_nominal, format_ext):
+    """Test round-trip functionality for formats that work with nominal peaks only."""
+    # Save the PeakTable
+    filename = tmp_path / f"test{format_ext}"
+    pt_with_nominal.save(filename)
+
+    # Load it back
     reloaded = peaktable.PeakTable.from_file(filename)
-    
-    assert len(reloaded) == 2
-    assert len(reloaded.nominal) == 2
+
+    # Validate PeakTable-level properties
+    assert len(reloaded) == len(pt_with_nominal)
+
+    assert len(pt_with_nominal.fitted) == 0
     assert len(reloaded.fitted) == 0
-    
-    validate_format_specific_properties(nominal_only, reloaded, format_ext)
+
+    assert pt_with_nominal.exact_masses == reloaded.exact_masses
+
+    for orig, reloaded in zip(pt_with_nominal, reloaded):
+        assert orig.center     == reloaded.center
+        assert orig.label      == reloaded.label
+        assert orig.borders    == reloaded.borders
+        assert orig.k_rate     == reloaded.k_rate
+        assert orig.multiplier == reloaded.multiplier
+
+
+@pytest.mark.parametrize("format_ext", [
+#   ".json",    # JSON format
+#   ".ipt3",    # JSON format (same as .json)
+    ".ionipt",  # modern JSON format (best compatibility)
+])
+def test_round_trip_with_fitted(tmp_path, pt_with_fitted, format_ext):
+    """Test round-trip with fitted peaks using JSON formats."""
+    filename = tmp_path / f"test{format_ext}"
+    pt_with_fitted.save(filename)
+
+    # Load it back
+    reloaded = peaktable.PeakTable.from_file(filename)
+
+    # Validate PeakTable-level properties
+    assert len(reloaded) == len(pt_with_fitted)
+
+    assert len(pt_with_fitted.fitted) > 0
+    assert len(reloaded.fitted) == len(pt_with_fitted.fitted)
+
+    assert pt_with_fitted.exact_masses == reloaded.exact_masses
+
+    for orig, reloaded in zip(pt_with_fitted, reloaded):
+        assert orig.center     == reloaded.center
+        assert orig.label      == reloaded.label
+        assert orig.borders    == reloaded.borders
+        assert orig.k_rate     == reloaded.k_rate
+        assert orig.multiplier == reloaded.multiplier
+
+
+def test_peaktable_write_ionipt(pt_with_fitted):
+    EXPECT = r"""[
+    {
+        "border_peak": {
+            "name": "H3O+",
+            "center": 42.0,
+            "ion": "",
+            "ionic_isotope": "H3O",
+            "parent": "",
+            "isotopic_abundance": 1.0,
+            "k_rate": 2.0,
+            "multiplier": 1.0,
+            "resolution": 1000.0
+        },
+        "low": 41.5,
+        "high": 42.5,
+        "peak": [
+            {
+                "name": "H3O+_fit1",
+                "center": 42.1234,
+                "ion": "",
+                "ionic_isotope": "H3O",
+                "parent": "",
+                "isotopic_abundance": 1.0,
+                "k_rate": 2.0,
+                "multiplier": 1.0,
+                "resolution": 1000.0
+            },
+            {
+                "name": "H3O+_fit2",
+                "center": 42.2345,
+                "ion": "",
+                "ionic_isotope": "H3O",
+                "parent": "",
+                "isotopic_abundance": 1.0,
+                "k_rate": 2.0,
+                "multiplier": 1.0,
+                "resolution": 1000.0
+            }
+        ],
+        "mode": 3,
+        "shift": 0.0
+    },
+    {
+        "border_peak": {
+            "name": "C2H5O+",
+            "center": 57.0,
+            "ion": "",
+            "ionic_isotope": "C2H5O",
+            "parent": "",
+            "isotopic_abundance": 1.0,
+            "k_rate": 2.0,
+            "multiplier": 1.0,
+            "resolution": 1000.0
+        },
+        "low": 56.5,
+        "high": 57.5,
+        "peak": [],
+        "mode": 1,
+        "shift": 0.0
+    }
+]"""
+    from io import StringIO
+
+    with StringIO(newline='\n') as fp:
+        pt_with_fitted._write_ionipt(fp)
+        READBACK = fp.getvalue()
+
+    assert len(READBACK) == len(EXPECT)
+    assert READBACK == EXPECT
+
 
