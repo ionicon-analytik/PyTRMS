@@ -28,15 +28,18 @@ def pt_with_nominal():
 @pytest.fixture
 def pt_with_fitted():
     """Create a PeakTable with parent-child relationships for formats that support it."""
-    pt = peaktable.PeakTable([
+    p_list = [
         peaktable.Peak(42.0, label="H3O+", formula="H3O"),
-    ])
+        peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"),
+    ]
     # Add fitted peaks (children) with parent relationships
-    pt.peaks.append(peaktable.Peak(42.1234, label="H3O+_fit1", parent=pt.peaks[0], formula="H3O"))
-    pt.peaks.append(peaktable.Peak(42.2345, label="H3O+_fit2", parent=pt.peaks[0], formula="H3O"))
-    pt.peaks.append(peaktable.Peak(57.0, label="C2H5O+", formula="C2H5O"))
+    p_list.append(peaktable.Peak(42.1234, label="H3O+_fit1", parent=p_list[0], formula="H3O"))
+    p_list.append(peaktable.Peak(42.2345, label="H3O+_fit2", parent=p_list[0], formula="H3O"))
 
-    return pt
+    return peaktable.PeakTable(p_list)
+
+
+## -------- ===== ++++ ===== --------- ##
 
 
 def test_peaktable_props(pt_with_fitted):
@@ -47,10 +50,14 @@ def test_peaktable_props(pt_with_fitted):
     assert pt_with_fitted.mass_labels
 
 
-def test_peaktable_find_by_mass(pt_with_fitted):
+def test_peaktable_sorted(pt_with_fitted):
     assert len(pt_with_fitted) == 4
 
     assert pt_with_fitted.exact_masses == [42.0, 42.1234, 42.2345, 57.0]
+
+
+def test_peaktable_find_by_mass(pt_with_fitted):
+    assert len(pt_with_fitted) == 4
 
     assert pt_with_fitted.find_by_mass(42.    ) == peaktable.Peak(42.    )
     assert pt_with_fitted.find_by_mass(57.    ) == peaktable.Peak(57.    )

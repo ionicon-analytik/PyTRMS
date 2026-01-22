@@ -435,7 +435,7 @@ class PeakTable:
         return PeakTable([Peak(mass) for mass in exact_masses])
 
     def __init__(self, peaks: list = ()):
-        self.peaks = peaks
+        self.peaks = sorted(peaks)
 
     @property
     def nominal(self):
