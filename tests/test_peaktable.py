@@ -229,35 +229,49 @@ def test_read_ionipt_meets_requirements():
 
     assert len(SUT) == 8
 
-    # check some peaks (PerMasCal)...
-
     assert SUT[1] == 329.8400
     assert SUT[1].label == "*(C6H4I2)+"
+    assert SUT[1].parent is None
 
     assert SUT[2] == 330.0
     assert SUT[2].label == "m330"
+    assert SUT[2].parent is None
 
     assert SUT[3] == 330.8480
     assert SUT[3].label == "*(C6H4I2)H+"
+    assert SUT[3].parent is None
 
     assert SUT[4] == 330.8480
     assert SUT[4].label == "m331_fit_C6H4I2H+"
+    assert SUT[4].parent is not None
 
     assert SUT[5] == 331.0
     assert SUT[5].label == "m331"
+    assert SUT[5].parent is None
 
     assert SUT[6] == 331.850891
     assert SUT[6].label == "*(C6H4I2)H+ i"
+    assert SUT[6].parent is None
 
     assert SUT[7] == 332.0
     assert SUT[7].label == "m332"
+    assert SUT[7].parent is None
 
-    # check the Reference-peak can be found...
+
+def test_reference_peak_can_be_found():
+    SUT = peaktable.PeakTable.from_file("./tests/Sony_peak-table_260126_fits.ionipt")
+
+    REF = SUT.find_by_mass(331)
+    assert REF == 331.0
+    assert REF.label == "m331"
 
     REF = SUT.find_by_mass(330.847992)
     assert REF == 330.8480
-    assert REF.parent is None
-#   assert REF.label == "m331_fit_C6H4I2H+"
+    assert REF.label == "*(C6H4I2)H+"
+
+    REF = SUT.find_by_label("m331_fit_C6H4I2H+")
+    assert REF == 330.8480
+    assert REF.label == "m331_fit_C6H4I2H+"
 
 
 def test_read_ionipt_solves_issue_3433():

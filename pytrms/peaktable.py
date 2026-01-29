@@ -472,6 +472,16 @@ class PeakTable:
 
         raise KeyError("No such peak at %s!" % str(exact_mass))
 
+    def find_by_label(self, label):
+        """Return the peak with the given `label`.
+
+        Raises KeyError if not found.
+        """
+        try:
+            return next((peak for peak in self.peaks if peak.label == label))
+        except StopIteration:
+            raise KeyError("No such peak at %s!" % str(label))
+
     def group(self):
         groups = defaultdict(list)
         for peak in self:
