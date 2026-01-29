@@ -1,0 +1,72 @@
+[
+	{
+		"border_peak": {
+			"name": "m100_o",
+			"center": 100,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 99.848785,
+		"high": 100.205261,
+		"peak": [
+			{
+				"name": "C4H5NS_H+",
+				"center": 100.02195739746094,
+				"ion": "",
+				"ionic_isotope": "",
+				"parent": "",
+				"isotopic_abundance": 0,
+				"k_rate": 2,
+				"multiplier": 1,
+				"resolution": 6707
+			},
+			{
+				"name": "m100_o_Peak1",
+				"center": 100.04291153814258,
+				"ion": "1.0",
+				"ionic_isotope": "?",
+				"parent": "1.0",
+				"isotopic_abundance": 0,
+				"k_rate": 2,
+				"multiplier": 1,
+				"resolution": 6707
+			},
+			{
+				"name": "m100_o_Peak2",
+				"center": 100.07924982189202,
+				"ion": "1.0",
+				"ionic_isotope": "?",
+				"parent": "1.0",
+				"isotopic_abundance": 0,
+				"k_rate": 2,
+				"multiplier": 1,
+				"resolution": 6707
+			}
+		],
+		"mode": 3,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "C4H5NS",
+			"center": 100.021545,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 100.00782,
+		"high": 100.035271,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	}
+]

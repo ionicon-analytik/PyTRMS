@@ -1,0 +1,140 @@
+[
+	{
+		"border_peak": {
+			"name": "m329",
+			"center": 329,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 328.5,
+		"high": 329.5,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "*(C6H4I2)+",
+			"center": 329.839996,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 329.491913,
+		"high": 330.18811,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "m330",
+			"center": 330,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 329.5,
+		"high": 330.5,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "*(C6H4I2)H+",
+			"center": 330.848,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 330.49881,
+		"high": 331.197205,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "m331",
+			"center": 331,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 330.5,
+		"high": 331.5,
+		"peak": [
+			{
+				"name": "m331_fit_C6H4I2H+",
+				"center": 330.848,
+				"ion": "",
+				"ionic_isotope": "",
+				"parent": "",
+				"isotopic_abundance": 0,
+				"k_rate": 2,
+				"multiplier": 1,
+				"resolution": 4376
+			}
+		],
+		"mode": 3,
+		"shift": -0.0013193205274596144
+	},
+	{
+		"border_peak": {
+			"name": "*(C6H4I2)H+ i",
+			"center": 331.850891,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 331.500702,
+		"high": 332.201111,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	},
+	{
+		"border_peak": {
+			"name": "m332",
+			"center": 332,
+			"ion": "",
+			"ionic_isotope": "",
+			"parent": "",
+			"isotopic_abundance": 0,
+			"k_rate": 2,
+			"multiplier": 1,
+			"resolution": 0
+		},
+		"low": 331.5,
+		"high": 332.5,
+		"peak": [],
+		"mode": 1,
+		"shift": 0
+	}
+]

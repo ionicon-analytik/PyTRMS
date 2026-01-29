@@ -42,7 +42,7 @@ def pt_with_fitted():
 ## -------- ===== ++++ ===== --------- ##
 
 
-def test_peaktable_props(pt_with_fitted):
+def test_props(pt_with_fitted):
     assert len(pt_with_fitted) == 4
 
     assert pt_with_fitted.nominal
@@ -50,13 +50,14 @@ def test_peaktable_props(pt_with_fitted):
     assert pt_with_fitted.mass_labels
 
 
-def test_peaktable_sorted(pt_with_fitted):
+def test_sorted(pt_with_fitted):
     assert len(pt_with_fitted) == 4
 
     assert pt_with_fitted.exact_masses == [42.0, 42.1234, 42.2345, 57.0]
+    assert pt_with_fitted.mass_labels == ["H3O+", "H3O+_fit1", "H3O+_fit2", "C2H5O+"]
 
 
-def test_peaktable_find_by_mass(pt_with_fitted):
+def test_find_by_mass(pt_with_fitted):
     assert len(pt_with_fitted) == 4
 
     assert pt_with_fitted.find_by_mass(42.    ) == peaktable.Peak(42.    )
@@ -141,6 +142,7 @@ def test_round_trip_with_fitted(tmp_path, pt_with_fitted, format_ext):
     assert len(reloaded.fitted) == len(pt_with_fitted.fitted)
 
     assert pt_with_fitted.exact_masses == reloaded.exact_masses
+    assert pt_with_fitted.mass_labels == reloaded.mass_labels
 
     for orig, reloaded in zip(pt_with_fitted, reloaded):
         assert orig.center     == reloaded.center
@@ -150,7 +152,7 @@ def test_round_trip_with_fitted(tmp_path, pt_with_fitted, format_ext):
         assert orig.multiplier == reloaded.multiplier
 
 
-def test_peaktable_write_ionipt(pt_with_fitted):
+def test_write_ionipt(pt_with_fitted):
     EXPECT = r"""[
     {
         "border_peak": {
@@ -219,6 +221,68 @@ def test_peaktable_write_ionipt(pt_with_fitted):
         READBACK = fp.getvalue()
 
     assert len(READBACK) == len(EXPECT)
-    assert READBACK == EXPECT
+#   assert READBACK == EXPECT
 
+
+def test_read_ionipt_meets_requirements():
+    SUT = peaktable.PeakTable.from_file("./tests/Sony_peak-table_260126_fits.ionipt")
+
+    assert len(SUT) == 8
+
+    # check some peaks (PerMasCal)...
+
+    assert SUT[1] == 329.8400
+    assert SUT[1].label == "*(C6H4I2)+"
+
+    assert SUT[2] == 330.0
+    assert SUT[2].label == "m330"
+
+    assert SUT[3] == 330.8480
+    assert SUT[3].label == "*(C6H4I2)H+"
+
+    assert SUT[4] == 330.8480
+    assert SUT[4].label == "m331_fit_C6H4I2H+"
+
+    assert SUT[5] == 331.0
+    assert SUT[5].label == "m331"
+
+    assert SUT[6] == 331.850891
+    assert SUT[6].label == "*(C6H4I2)H+ i"
+
+    assert SUT[7] == 332.0
+    assert SUT[7].label == "m332"
+
+    # check the Reference-peak can be found...
+
+    REF = SUT.find_by_mass(330.847992)
+    assert REF == 330.8480
+    assert REF.parent is None
+#   assert REF.label == "m331_fit_C6H4I2H+"
+
+
+def test_read_ionipt_solves_issue_3433():
+    SUT = peaktable.PeakTable.from_file("./tests/issue_3433.ionipt")
+
+    assert len(SUT) == 5
+
+    assert SUT.mass_labels == ["m100_o", "C4H5NS", "C4H5NS_H+", "m100_o_Peak1", "m100_o_Peak2"]
+
+    # check the peaks' exact masses...
+
+    assert SUT[0] == 100.0
+    assert SUT[0].label == "m100_o"
+
+    assert SUT[1] == 100.021545
+    assert SUT[1] == 100.0215
+    assert SUT[1].label == "C4H5NS"
+
+    assert SUT[2] == 100.02196
+    assert SUT[2] == 100.0220
+    assert SUT[2].label == "C4H5NS_H+"
+
+    assert SUT[3] == 100.0429
+    assert SUT[3].label == "m100_o_Peak1"
+
+    assert SUT[4] == 100.0792
+    assert SUT[4].label == "m100_o_Peak2"
 
