@@ -206,13 +206,13 @@ class IoniTOFReader:
         except KeyError as exc:
             msg = "Unknown index-type! `kind` must be one of {0}.".format(', '.join(lut.keys()))
             raise KeyError(msg) from exc
-    
+
         return convert2iterator(self.hf['SPECdata/Times'][:, _N])
 
     @lru_cache
     def make_index(self, kind='abs_cycle'):
         return pd.Index(self.iter_index(kind))
-    
+
     def __len__(self):
         return self.hf['SPECdata/Intensities'].shape[0]
 
@@ -249,11 +249,11 @@ class IoniTOFReader:
         self.hf.visit(lambda obj_name: obj_names.add(obj_name))
 
         return sorted(obj_names)
-    
+
     def list_addtrace_groups(self):
         """Lists the recorded additional trace-groups."""
         return sorted(self._locate_datainfo())
-    
+
     def __repr__(self):
         return "<%s (%s) [no. %s] %s>" % (self.__class__.__name__,
                 self.inst_type, self.serial_nr, self.hf.filename)
@@ -263,7 +263,7 @@ class IoniTOFReader:
         """Lookup groups with data-info traces."""
         dataloc = set()
         infoloc = set()
-    
+
         def func(object_name):
             nonlocal dataloc
             nonlocal infoloc
@@ -272,13 +272,13 @@ class IoniTOFReader:
             if object_name.endswith('/Info'):
                 infoloc |= {object_name[:-5], }
             return None
-    
+
         # use the above 'visit'-function that appends matched sections...
         self.hf.visit(func)
-    
+
         # ...and return only groups with both /Data and /Info datasets:
         return dataloc.intersection(infoloc)
-    
+
     def traces(self):
         """Returns a  'pandas.DataFrame' with all traces concatenated."""
         return self.read_all(kind='conc', index='abs_cycle', force_original=False)
@@ -292,7 +292,7 @@ class IoniTOFReader:
     #   |__ wird dann bei bedarf ge-populated
     # 
     # das sourcefile / measurement soll sich wie ein pd.DataFrame "anfuehlen":
-        
+
     # das loest das Problem, aus einer "Matrix2 gezielt eine Zeile oder eine "Spalte" 
     #  oder alles (d.h. iterieren ueber Zeilen) zu selektieren und zwar intuitiv!!
 
@@ -304,7 +304,7 @@ class IoniTOFReader:
     # 3. _column_getter
     # 4. _row_getter
     # 5. parID_resolver ~> keys() aus ParID.txt zu addtrace-group + column!
-    
+
     ###################################################################################
     #                                                                                 #
     # ENDZIEL: times u. Automation fuer die "letzte" Zeile an die Datenbank schicken! #
@@ -341,7 +341,7 @@ class IoniTOFReader:
         dset_name, column = lut[key]  # may raise KeyError
 
         return self.hf[dset_name][:,column]
-    
+
     def loc(self, label):
         if isinstance(label, int):
             return self.iloc[self.make_index('abs_cycle')[label]]
@@ -374,7 +374,7 @@ class IoniTOFReader:
 
         if hasattr(labels[0], 'decode'):
             labels = [b.decode('latin1') for b in labels]
-    
+
         # TODO :: wir haben hier diese doesigen Set/Act werte drin, was wollen wir??
         # if keys[0].endswith('[Set]'):
         #     rv = {key[:-5]: (value, unit)
@@ -414,10 +414,10 @@ class IoniTOFReader:
         #    act_values.columns = [col.replace('_Act', '') for col in act_values.columns]
         #
         #    return _trace(set_values, act_values)
-    
-    
+
+
         return pd.DataFrame(data, columns=labels)
-    
+
     def _read_processed_traces(self, kind, index):
         # error conditions:
         # 1) 'kind' is not recognized -> ValueError
@@ -444,11 +444,12 @@ class IoniTOFReader:
         except KeyError as exc:
             raise KeyError(f'unknown group {exc}. filetype is not supported yet.') from exc
 
-        labels = [b.decode('latin1') for b in pt['label']]
-        mapper = dict(zip(data.columns, labels))
-        data.rename(columns=mapper, inplace=True)
+        # Note [#3433]: the .h5 'ConcentrationsInfo' is what *should* label the
+        #  columns, but it is ambiguous, because it rounds to 3 decimal places
+        #  (for whatever reason...)! Just overwrite it with the 'PeakTableInfo':
+        data.columns = [b.decode('latin1') for b in pt['label']]
         data.index = list(self.iter_index(index))
-        
+
         return data
 
     def _read_original_traces(self, kind, index):
@@ -464,9 +465,9 @@ class IoniTOFReader:
         except KeyError as exc:
             msg = ("Unknown trace-type! `kind` must be one of 'raw', 'corrected' or 'concentration'.")
             raise ValueError(msg) from exc
-    
+
         info = self.hf['TRACEdata/TraceInfo']
         labels = [b.decode('latin1') for b in info[1,:]]
-    
+
         return pd.DataFrame(data, columns=labels, index=list(self.iter_index(index)))
 

@@ -218,6 +218,9 @@ class FinishedMeasurement(Measurement):
         """
         return pd.concat(sf.read_all(kind, index, force_original) for sf in self._readers)
 
+    get_traces = read_traces
+    get_traces.__doc__ = read_traces.__doc__ + "\nAlias: 'get_traces'."
+
     def __iter__(self):
         for reader in self._readers:
             for specdata in reader.iter_specdata():
