@@ -42,12 +42,11 @@ def pt_with_fitted():
 ## -------- ===== ++++ ===== --------- ##
 
 
-def test_props(pt_with_fitted):
+def test_separates_fitted_and_nominal(pt_with_fitted):
     assert len(pt_with_fitted) == 4
 
-    assert pt_with_fitted.nominal
-    assert pt_with_fitted.fitted
-    assert pt_with_fitted.mass_labels
+    assert pt_with_fitted.nominal.mass_labels == ["H3O+", "C2H5O+"]
+    assert pt_with_fitted.fitted.mass_labels == ["H3O+_fit1","H3O+_fit2"]
 
 
 def test_sorted(pt_with_fitted):
