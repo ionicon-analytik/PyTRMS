@@ -76,7 +76,7 @@ class IoniConnect(_IoniClientBase):
                 return
         except requests.exceptions.ConnectionError as e:
             self.session = self.current_meas_loc = None
-            log.error(type(e).__name__, str(e))
+            log.error(f"{type(e).__name__}: {str(e)}")
             raise
 
     def disconnect(self):
