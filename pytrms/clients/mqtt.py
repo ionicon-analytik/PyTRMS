@@ -585,6 +585,9 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
+        if parID.startswith("AME_"):
+            raise ValueError("AME-numbers are meant to be scheduled! use schedule() instead.")
+
         if parID == "FC_inlet":
             log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
             parID = "FC_FC inlet"
@@ -605,53 +608,83 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
 
     def schedule(self, parID, new_value, future_cycle):
+        '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
+        log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
+
+        return self.schedule_many([(parID, new_value, future_cycle)], on_missed_cycle_raise=True)
+
+    def schedule_blocking(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
 
-        If 'future_cycle' is in fact in the past, the behaviour is defined by IoniTOF
-        (most likely the command is ignored). To be sure, the '.current_cycle' should
-        be checked before and after running the '.schedule' command programmatically!
+        Blocks the execution until change of value has been confirmed!
+        This is immune to timing issues when the 'future_cycle' is imminent,
+        but will not work for AME-numbers, which cannot be written.
+        '''
+        if parID.startswith("AME_") or parID.startswith("ACQ_"):
+            raise ValueError("method 'schedule_blocking()' can't be used with AME-numbers or ACQ-values")
+
+        log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
+        try:
+            assert self.is_running, "write immediately, because we are stopped"
+            m = self.schedule_many([(parID, new_value, future_cycle)], on_missed_cycle_raise=True)
+            self.block_until(future_cycle)
+            assert self.get(parID, kind='set') == float(new_value), "not seen, double down"
+        except (AssertionError, TimeoutError):
+            m = self.write(parID, new_value)
+
+        return m
+
+    def schedule_many(self, parID_value_cycle, on_missed_cycle_raise=False):
+        '''Schedule the list of tuples ('parID', 'new_value', 'future_cycle').
+
+        If 'on_missed_cycle_raise=True', an attempt to schedule for the current
+        or a past cycle will raise a `TimeoutError`. 
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
 
-        if parID == "FC_inlet":
-            log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
-            parID = "FC_FC inlet"
-
-        if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
-            raise ValueError(f"'{parID}' is read-only")
-
-        if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
-            raise ValueError(f"will not exceed set-value limit of {__class__.set_value_limit[parID]} on '{parID}'")
-
-        if (future_cycle == 0 and not self.is_running):
-            # Note: ioniTOF40 doesn't handle scheduling for the 0th cycle!
-            if parID == "AME_ActionNumber":
-                # a) the action-number will trigger a script for the 0th cycle, so
-                #    we *must* be scheduling it!
-                self.write("AME_ActionNumber", new_value)
-            elif parID.startswith("AME_"):
-                # b) the AME-numbers cannot (currently) be set (i.e. written), but since
-                #    they are inserted just *before* the cycle, this will work just fine:
-                future_cycle = 1
-            else:
-                # c) in all other cases, let's assume the measurement will start soon
-                #    and dare to write immediately, skipping the schedule altogether:
-                log.debug(f"immediately writing {parID = } @ cycle '0' (measurement stopped)")
-                return self.write(parID, new_value)
-
-        if not future_cycle > self.current_cycle:
-            log.warning(f"attempting to schedule past cycle, hope you know what you're doing");
-            pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
-
         topic, qos, retain = "IC_Command/Write/Scheduled", 1, False
-        log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
-        cmd = _build_write_command(parID, new_value, future_cycle)
+
+        cmds = list()
+        for parID, new_value, future_cycle in parID_value_cycle:
+            if parID == "FC_inlet":
+                log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
+                parID = "FC_FC inlet"
+
+            if not 'W' in _par_id_info.loc[parID].Access:  # may raise KeyError!
+                raise ValueError(f"'{parID}' is read-only")
+
+            if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
+                raise ValueError(f"will not exceed set-value limit of {__class__.set_value_limit[parID]} on '{parID}'")
+
+            if (self.is_running and future_cycle == 0) or future_cycle <= self.current_cycle:
+                if on_missed_cycle_raise:
+                    raise TimeoutError(f"attempting to schedule cycle ({future_cycle}) which is in the past")
+
+                log.warning(f"missed cycle for scheduling! did you mean to use schedule_blocking() instead?");
+                pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
+
+            cmds.append(_build_write_command(parID, new_value, future_cycle))
+
+        log.info(f"scheduling ({len(cmds)}) new values for cycle ({future_cycle})")
+
         payload = {
             "Header": _build_header(),
-            "CMDs": [ cmd, ]
+            "CMDs": cmds,
         }
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
+
+    _INFO = '''\n
+        Note: If 'future_cycle' is in the past (i.e. lower than the current cycle), the
+        behaviour is defined by IoniTOF (either the schedule command is silently ignored
+        or written immediately). This may lead to inconsistent writes even with
+        'on_missed_cycle_raise=True'! The 'future_cycle' should be *long enough* in the
+        future for the system to react.
+
+        See 'schedule_blocking()' to force writes for a 'future_cycle' that is imminent.
+        '''
+    schedule.__doc__            += _INFO
+    schedule_many.__doc__       += _INFO
 
     def schedule_filename(self, path, future_cycle):
         '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''

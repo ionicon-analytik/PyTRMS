@@ -2,7 +2,7 @@ import os
 import time
 import logging
 import json
-from collections import deque
+from collections import deque, namedtuple
 from itertools import cycle
 from threading import Condition, RLock
 from datetime import datetime as dt
@@ -140,7 +140,10 @@ class MqttClientBase:
         #  to ensure that all messages get through (timeout_s is set on `.__init__()`)
         msg = self.client.publish(*args, **kwargs)
         msg.wait_for_publish(timeout=timeout_s)
-        return msg
+
+        return self._ack(msg.mid, msg.is_published())
+
+    _ack = namedtuple('mqtt_msg', ['id', 'ack'])
 
     def disconnect(self):
         self.client.loop_stop()
