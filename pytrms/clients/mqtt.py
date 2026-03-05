@@ -686,30 +686,58 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     schedule.__doc__            += _INFO
     schedule_many.__doc__       += _INFO
 
-    def schedule_filename(self, path, future_cycle):
-        '''Start writing to a new .h5 file with the beginning of 'future_cycle'.'''
-        assert str(path), "filename cannot be empty!"
-        # try to make sure that IoniTOF accepts the path:
-        if self.host == '127.0.0.1':
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            try:
-                with open(path, 'x'):
-                    log.info("touched new file:", path)
-            except FileExistsError as exc:
-                log.error(f"new filename '{path}' already exists and will not be scheduled!")
-                return
+    def schedule_filename(self, path, future_cycle, blocking=False):
+        '''Start writing to a new .h5 file with the beginning of 'future_cycle'.
 
-        return self.schedule('ACQ_SRV_SetFullStorageFile', path.replace('/', '\\'), future_cycle)
+        If 'future_cycle' has been missed, start writing immediately. This should
+        prevent most timing errors. To be extra sure, use 'blocking=True' to wait
+        for acknowledgement.
+
+        Raises:
+            - `ValueError` if 'path' is empty or already in use by IoniTOF
+            - `FileExistsError` if filename exists
+
+        '''
+        if not str(path):
+            raise ValueError("filename cannot be empty")
+
+        path = path.replace('/', '\\')  # IoniTOF accepts only windows style!
+        path = os.path.splitext(path)[0] + ".h5"
+
+        if self.current_sourcefile == path:
+            raise ValueError("filename already in use for current measurement")
+
+        if self.host in ("localhost", "127.0.0.1"):
+            # increase our chances that IoniTOF will accept the path:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'x'):  # may raise FileExistsError!
+                log.info(f"touched new file @ {path}")
+
+        try:
+            m = self.schedule('ACQ_SRV_SetFullStorageFile', path, future_cycle)
+        except TimeoutError:
+            m = self.write('ACQ_SRV_SetFullStorageFile', path)
+
+        while blocking and self.current_sourcefile != path:
+            time.sleep(0.1)
+
+        return m
 
     def start_measurement(self, path=None):
         '''Start a new measurement and block until the change is confirmed.
 
-        If 'path' is not None, write to the given .h5 file.
+        If 'path' is not None, write to the given .h5 file. On 'localhost'
+        this will be checked and may raise `FileExistsError`.
         '''
-        if not path:
-            self.write('ACQ_SRV_Start_Meas_Quick', True)
-        else:
+        if path is not None:
+            path = path.replace('/', '\\')  # IoniTOF accepts only windows style!
+            path = os.path.splitext(path)[0] + ".h5"
+            if self.host in ("localhost", "127.0.0.1") and os.path.exists(path):
+                raise FileExistsError(path)
+
             self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+        else:
+            self.write('ACQ_SRV_Start_Meas_Quick', True)
         timeout_s = 30
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
