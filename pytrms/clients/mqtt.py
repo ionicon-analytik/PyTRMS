@@ -607,11 +607,11 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         }
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
 
-    def schedule(self, parID, new_value, future_cycle):
+    def schedule(self, parID, new_value, future_cycle, on_missed_cycle_raise=False):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.'''
         log.info(f"scheduling '{parID}' ~> [{new_value}] for cycle ({future_cycle})")
 
-        return self.schedule_many([(parID, new_value, future_cycle)], on_missed_cycle_raise=True)
+        return self.schedule_many([(parID, new_value, future_cycle)], on_missed_cycle_raise)
 
     def schedule_blocking(self, parID, new_value, future_cycle):
         '''Schedule a 'new_value' to 'parID' for the given 'future_cycle'.
@@ -628,8 +628,9 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             assert self.is_running, "write immediately, because we are stopped"
             m = self.schedule_many([(parID, new_value, future_cycle)], on_missed_cycle_raise=True)
             self.block_until(future_cycle)
-            assert self.get(parID, kind='set') == float(new_value), "not seen, double down"
-        except (AssertionError, TimeoutError):
+            assert self.get(parID, kind='set') == float(new_value), "value not confirmed, write for reassurance"
+        except (AssertionError, TimeoutError) as exc:
+            log.warning(exc)
             m = self.write(parID, new_value)
 
         return m
@@ -638,7 +639,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         '''Schedule the list of tuples ('parID', 'new_value', 'future_cycle').
 
         If 'on_missed_cycle_raise=True', an attempt to schedule for the current
-        or a past cycle will raise a `TimeoutError`. 
+        or a past cycle will raise a `TimeoutError`.
         '''
         if not self.is_connected:
             raise Exception(f"[{self}] no connection to instrument");
