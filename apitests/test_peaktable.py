@@ -7,6 +7,8 @@ import pytest
 from pytrms import peaktable
 
 
+# ========= pytest.fixtures ================================================== #
+
 @pytest.fixture
 def PT():
     """
@@ -31,19 +33,35 @@ def PT():
     return pt
 
 
-def test_sync_updates_sparingly(API, PT):
+# ========= pytest.tests ==================================================== #
+
+@pytest.mark.dependency()
+def test_db_empty(API):
+    assert API.get("/api/peaks")["count"] == 0, "database not empty"
+
+
+@pytest.mark.dependency(depends="test_db_empty")
+def test_db_populated(API, PT):
+
     r = API.sync(PT)
     assert 3 == r["added"]
     assert 0 == r["updated"]
     assert 0 == r["up-to-date"]
+    assert 1 == r["linked"]
+    assert 0 == r["unlinked"]
 
     r = API.sync(PT)
     assert 0 == r["added"]
     assert 0 == r["updated"]
     assert 3 == r["up-to-date"]
 
+
+@pytest.mark.dependency(depends="test_db_populated")
+def test_sync_updates_sparingly(API, PT):
+
     PT.peaks[0].shift = -0.234
     PT.peaks[1].resolution = 3456
+
     r = API.sync(PT)
     assert 0 == r["added"]
     assert 2 == r["updated"]
@@ -68,13 +86,8 @@ def test_sync_updates_sparingly(API, PT):
     assert PEAKS[3]["center"] == 23.0
 
 
+@pytest.mark.dependency(depends="test_db_populated")
 def test_sync_links_children_to_parent(API, PT):
-    r = API.sync(PT)
-    assert 3 == r["added"]
-    assert 0 == r["updated"]
-    assert 0 == r["up-to-date"]
-    assert 1 == r["linked"]
-    assert 0 == r["unlinked"]
 
     j = API.get("/api/peaks?only=parents")
     assert j["count"] == 1
@@ -103,6 +116,7 @@ def test_sync_links_children_to_parent(API, PT):
     assert PEAKS[1]["_links"]["parent"] == { "href": "/api/peaks/1" }
 
 
+@pytest.mark.dependency(depends="test_db_populated")
 def test_sync_unlinks_children(API, PT):
 
     PT.peaks.append(peaktable.Peak(42.3456, parent=PT.peaks[0]))
@@ -167,8 +181,10 @@ def test_sync_unlinks_children(API, PT):
 
 
 def test_save_and_reload(tmp_path, PT):
+    import os
 
     PT.save(tmp_path / "test1.ipta")
 
+    assert os.path.exists(tmp_path / "test1.ipta")
 
 
