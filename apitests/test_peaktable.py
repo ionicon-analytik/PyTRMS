@@ -35,12 +35,21 @@ def PT():
 
 # ========= pytest.tests ==================================================== #
 
+def test_save_and_reload(tmp_path, PT):
+    import os
+
+    # TODO :: is eigentlich kein API test, oder??
+    PT.save(tmp_path / "test1.ipta")
+
+    assert os.path.exists(tmp_path / "test1.ipta")
+
+
 @pytest.mark.dependency()
 def test_db_empty(API):
     assert API.get("/api/peaks")["count"] == 0, "database not empty"
 
 
-@pytest.mark.dependency(depends="test_db_empty")
+@pytest.mark.dependency(depends=["test_db_empty"])
 def test_db_populated(API, PT):
 
     r = API.sync(PT)
@@ -56,37 +65,7 @@ def test_db_populated(API, PT):
     assert 3 == r["up-to-date"]
 
 
-@pytest.mark.dependency(depends="test_db_populated")
-def test_sync_updates_sparingly(API, PT):
-
-    PT.peaks[0].shift = -0.234
-    PT.peaks[1].resolution = 3456
-
-    r = API.sync(PT)
-    assert 0 == r["added"]
-    assert 2 == r["updated"]
-    assert 1 == r["up-to-date"]
-
-    PT.peaks.append(peaktable.Peak(23.0))
-    r = API.sync(PT)
-    assert 1 == r["added"]
-    assert 0 == r["updated"]
-    assert 3 == r["up-to-date"]
-
-    j = API.get("/api/peaks")
-    PEAKS = j["_embedded"]["peaks"]
-
-    assert j["count"] == 4
-    assert len(PEAKS) == 4
-
-    ## sorted by id (insertion order) ??
-    assert PEAKS[0]["center"] == 42.0
-    assert PEAKS[1]["center"] == 42.1234
-    assert PEAKS[2]["center"] == 57.0
-    assert PEAKS[3]["center"] == 23.0
-
-
-@pytest.mark.dependency(depends="test_db_populated")
+@pytest.mark.dependency(depends=["test_db_populated"])
 def test_sync_links_children_to_parent(API, PT):
 
     j = API.get("/api/peaks?only=parents")
@@ -115,18 +94,15 @@ def test_sync_links_children_to_parent(API, PT):
     assert PEAKS[0]["_links"]["self"] == { "href": "/api/peaks/1" }
     assert PEAKS[1]["_links"]["parent"] == { "href": "/api/peaks/1" }
 
-
-@pytest.mark.dependency(depends="test_db_populated")
-def test_sync_unlinks_children(API, PT):
-
+    # add two more fit-peaks to their parents...
     PT.peaks.append(peaktable.Peak(42.3456, parent=PT.peaks[0]))
     PT.peaks.append(peaktable.Peak(57.0815, parent=PT.peaks[1]))
 
     r = API.sync(PT)
-    assert 5 == r["added"]
+    assert 2 == r["added"]
     assert 0 == r["updated"]
-    assert 0 == r["up-to-date"]
-    assert 3 == r["linked"]
+    assert 3 == r["up-to-date"]
+    assert 2 == r["linked"]  ## ...linked here!
     assert 0 == r["unlinked"]
 
     j = API.get("/api/peaks?only=parents")
@@ -135,24 +111,33 @@ def test_sync_unlinks_children(API, PT):
     j = API.get("/api/peaks?only=children")
     assert j["count"] == 3
 
+
+@pytest.mark.dependency(depends=["test_sync_links_children_to_parent"])
+def test_sync_unlinks_children(API, PT):
+
     j = API.get("/api/peaks")
+    assert j["count"] == 5
+
     PEAKS = j["_embedded"]["peaks"]
 
     assert PEAKS[0]["center"] == 42.0
     assert PEAKS[1]["center"] == 42.1234
-    assert PEAKS[2]["center"] == 42.3456
-    assert PEAKS[3]["center"] == 57.0
+    assert PEAKS[2]["center"] == 57.0
+    assert PEAKS[3]["center"] == 42.3456
     assert PEAKS[4]["center"] == 57.0815
 
     assert "parent" not in PEAKS[0]["_links"].keys()
     assert "parent"     in PEAKS[1]["_links"].keys()
-    assert "parent"     in PEAKS[2]["_links"].keys()
-    assert "parent" not in PEAKS[3]["_links"].keys()
+    assert "parent" not in PEAKS[2]["_links"].keys()
+    assert "parent"     in PEAKS[3]["_links"].keys()
     assert "parent"     in PEAKS[4]["_links"].keys()
 
-    PT.peaks.remove(peaktable.Peak(42.1234))
-    PT.peaks.remove(peaktable.Peak(57.0815))
+    assert peaktable.Peak(42.1234)     in PT
+    assert peaktable.Peak(42.3456) not in PT
+    assert peaktable.Peak(57.0815) not in PT
+
     r = API.sync(PT)
+
     assert 0 == r["added"]
     assert 0 == r["updated"]
     assert 3 == r["up-to-date"]
@@ -168,23 +153,51 @@ def test_sync_unlinks_children(API, PT):
     j = API.get("/api/peaks")
     PEAKS = j["_embedded"]["peaks"]
 
-    ## no peaks are actually removed ?
+    ## TEST: no peaks are actually removed ?
     assert j["count"] == 5
     assert len(PEAKS) == 5
 
-    ## the former fit-peaks have no longer a parent ?
+    ## TEST: ..but the former fit-peaks have no longer a parent ?
     assert "parent" not in PEAKS[0]["_links"].keys()
-    assert "parent" not in PEAKS[1]["_links"].keys()
-    assert "parent"     in PEAKS[2]["_links"].keys()
+    assert "parent"     in PEAKS[1]["_links"].keys()
+    assert "parent" not in PEAKS[2]["_links"].keys()
     assert "parent" not in PEAKS[3]["_links"].keys()
     assert "parent" not in PEAKS[4]["_links"].keys()
 
 
-def test_save_and_reload(tmp_path, PT):
-    import os
+@pytest.mark.dependency(depends=["test_sync_unlinks_children"])
+def test_sync_updates_sparingly(API, PT):
 
-    PT.save(tmp_path / "test1.ipta")
+    j = API.get("/api/peaks")
+    assert j["count"] == 5
 
-    assert os.path.exists(tmp_path / "test1.ipta")
+    PT.peaks[0].shift = -0.234
+    PT.peaks[1].resolution = 3456
 
+    r = API.sync(PT)
+
+    assert 0 == r["added"]
+    assert 2 == r["updated"]
+    assert 1 == r["up-to-date"]
+
+    PT.peaks.append(peaktable.Peak(23.0))
+    r = API.sync(PT)
+
+    assert 1 == r["added"]
+    assert 0 == r["updated"]
+    assert 3 == r["up-to-date"]
+
+    j = API.get("/api/peaks")
+    PEAKS = j["_embedded"]["peaks"]
+
+    assert j["count"] == 6
+    assert len(PEAKS) == 6
+
+    ## sorted by id (insertion order) ??
+    assert PEAKS[0]["center"] == 42.0
+    assert PEAKS[1]["center"] == 42.1234
+    assert PEAKS[2]["center"] == 57.0
+    assert PEAKS[3]["center"] == 42.3456
+    assert PEAKS[4]["center"] == 57.0815
+    assert PEAKS[5]["center"] == 23.0
 

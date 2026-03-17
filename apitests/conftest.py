@@ -33,7 +33,7 @@ def make_container(image = "git.ionicon.local/ionisoft/db-api", tag = "latest"):
 
 # =========== pytest.fixtures ===================================================== #
 
-@pytest.fixture(scope="function")
+@pytest.fixture(scope="module")
 def api_container(request):
     if request.config.getoption("--attach-running"):
         yield 5066
