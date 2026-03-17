@@ -31,21 +31,42 @@ def make_container(image = "git.ionicon.local/ionisoft/db-api", tag = "latest"):
     )
 
 
+# =========== pytest.fixtures ===================================================== #
+
 @pytest.fixture(scope="function")
-def api_container():
-    with make_container() as conti:
-        yield conti.get_exposed_port(5066)
+def api_container(request):
+    if request.config.getoption("--attach-running"):
+        yield 5066
+
+    else:
+        with make_container() as conti:
+            yield conti.get_exposed_port(5066)
 
 
 @pytest.fixture
 def API(api_container):
     from pytrms.clients import db_api
 
-    DB_API =  db_api.IoniConnect(port=api_container)
-    assert DB_API.is_connected, "no connection! try 'poetry run python apitests/conftests.py'"
+    api_port = api_container  # fixture resolves to exposed port
+    attach_running = api_port == 5066
+
+    DB_API = db_api.IoniConnect(port=api_container)
+
+    help_msg = (
+        "no connection to container! try 'poetry run python apitests/conftests.py' to fire up the container and diagnose the issue."
+        if attach_running else
+        "no connection to api! attempt to connect to localhost:5066 failed. make sure an instance is running locally and try again."
+    )
+    assert DB_API.is_connected, help_msg
 
     return DB_API
 
+
+# =========== pytest.configure ==================================================== #
+
+def pytest_addoption(parser):
+    parser.addoption("--attach-running", action="store_true",
+        help="assume the API is running on port 5066 and attach, instead of using a container")
 
 def pytest_collection_modifyitems(config, items):
     """
