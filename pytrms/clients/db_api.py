@@ -130,10 +130,13 @@ class IoniConnect(_IoniClientBase):
                 return r.json()
             if 'text' in r.headers.get('content-type', ''):
                 return r.text
-            else:
-                log.warning(f"unexpected 'content-type: {r.headers['content-type']}'")
+            if 'octet-stream' in r.headers.get('content-type', ''):
+                log.warning(f"not decoding 'content-type: {r.headers['content-type']}'")
                 log.info(f"did you mean to use `{type(self).__name__}.download(..)` instead?")
                 return r.content
+
+            log.warning(f"unexpected 'content-type: {r.headers['content-type']}'")
+            return r.content
 
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 410:  # Gone
