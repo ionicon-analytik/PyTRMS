@@ -258,7 +258,7 @@ class CalcConzInfo:
 def follow_calc_conz_info(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
-        self._calcconzinfo = MqttClient._calcconzinfo
+        self._calcconzinfo = deque([_NOT_INIT], maxlen=1)
         return
 
     if not self._calcconzinfo[0] is _NOT_INIT:
@@ -312,7 +312,7 @@ follow_schedule._lock = RLock()
 def follow_state(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
-        self._server_state = MqttClient._server_state
+        self._server_state = deque([_NOT_INIT], maxlen=1)
         return
 
     payload = json.loads(msg.payload.decode())
@@ -336,7 +336,7 @@ follow_state.topics = ["DataCollection/Act/ACQ_SRV_CurrentState"]
 def follow_sourcefile(client, self, msg):
     if not msg.payload:
         # empty payload will clear a retained topic
-        self._sf_filename = MqttClient._sf_filename
+        self._sf_filename = deque([""], maxlen=1)
         return
 
     payload = json.loads(msg.payload.decode())
@@ -484,7 +484,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
             time.sleep(10e-3)
         else:
-            raise TimeoutError(f"[{self}] unable to retrieve source-file after ({timeout_s = })");
+            raise TimeoutError(f"[{self}] unable to retrieve source-file after ({timeout_s = })")
 
     @property
     def current_cycle(self):
@@ -495,20 +495,24 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
     def __init__(self, host='127.0.0.1', port=1883):
         # this sets up the mqtt connection with default callbacks:
-        super().__init__(host, port, _subscriber_functions, None, None, None)
-        log.debug(f"connection check ({self.is_connected}) :: {self._server_state = } / {self._sched_cmds = }");
+        self._reset()
+        super().__init__(host, port, _subscriber_functions)
+        log.debug(f"connection check ({self.is_connected}) :: {self._server_state = } / {self._sched_cmds = }")
+
+    def _reset(self):
+        self._sched_cmds.clear()
+        self._sched_cmds.append(_NOT_INIT)
+        self._server_state.append(_NOT_INIT)
+        self._calcconzinfo.append(_NOT_INIT)
+        self._sf_filename.append("")
+        self._overallcycle.append(0)
+        self.act_values.clear()
+        self.set_values.clear()
 
     def disconnect(self):
         super().disconnect()
-        log.debug(f"[{self}] has disconnected")
         # reset internal queues to their defaults:
-        self._sched_cmds   = MqttClient._sched_cmds
-        self._server_state = MqttClient._server_state
-        self._calcconzinfo = MqttClient._calcconzinfo
-        self._sf_filename  = MqttClient._sf_filename
-        self._overallcycle = MqttClient._overallcycle
-        self.act_values    = MqttClient.act_values
-        self.set_values    = MqttClient.set_values
+        self._reset()
 
     def get(self, parID, kind="set"):
         '''Return the last known value for the given `parID`.
@@ -518,7 +522,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         A `KeyError` will be raised if the given `parID` is unknown!
         '''
         if not self.is_connected:
-            raise Exception(f"[{self}] no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument")
 
         if parID == "FC_inlet":
             log.warning(f"mapping 'FC_inlet' ~> 'FC_FC inlet' (with whitespace)")
@@ -557,14 +561,14 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
                 time.sleep(10e-3)
             else:
-                raise TimeoutError(f"[{self}] unable to retrieve calc-conz-info from PTR server");
+                raise TimeoutError(f"[{self}] unable to retrieve calc-conz-info from PTR server")
         except KeyError as exc:
             raise KeyError(str(exc) + f", possible values: {list(CalcConzInfo.tables.keys())}")
 
     def set(self, parID, new_value, unit='-'):
         '''Set a 'new_value' to 'parID' in the DataCollection.'''
         if not self.is_connected:
-            raise Exception(f"[{self}] no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument")
 
         raise NotImplementedError("DataCollection/Set, did you mean .write(parID)?")
 
@@ -583,7 +587,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     def write(self, parID, new_value):
         '''Write a 'new_value' to 'parID' directly.'''
         if not self.is_connected:
-            raise Exception(f"[{self}] no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument")
 
         if parID.startswith("AME_"):
             raise ValueError("AME-numbers are meant to be scheduled! use schedule() instead.")
@@ -642,7 +646,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         or a past cycle will raise a `TimeoutError`.
         '''
         if not self.is_connected:
-            raise Exception(f"[{self}] no connection to instrument");
+            raise Exception(f"[{self}] no connection to instrument")
 
         topic, qos, retain = "IC_Command/Write/Scheduled", 1, False
 
@@ -662,7 +666,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
                 if on_missed_cycle_raise:
                     raise TimeoutError(f"attempting to schedule cycle ({future_cycle}) which is in the past")
 
-                log.warning(f"missed cycle for scheduling! did you mean to use schedule_blocking() instead?");
+                log.warning(f"missed cycle for scheduling! did you mean to use schedule_blocking() instead?")
                 pass  # and at least let's debug it in MQTT browser (see also doc-string above)!
 
             cmds.append(_build_write_command(parID, new_value, future_cycle))
@@ -748,7 +752,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError(f"[{self}] error starting measurement");
+            raise TimeoutError(f"[{self}] error starting measurement")
 
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
@@ -772,7 +776,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             time.sleep(10e-3)
         else:
             self.disconnect()
-            raise TimeoutError(f"[{self}] error stopping measurement");
+            raise TimeoutError(f"[{self}] error stopping measurement")
 
     def block_until(self, cycle):
         '''Blocks the current thread until at least 'cycle' has passed or acquisition stopped.
@@ -847,7 +851,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
                 time.sleep(10e-3)
             else:
-                raise TimeoutError(f"[{self}] received specdata, but measurement won't start");
+                raise TimeoutError(f"[{self}] received specdata, but measurement won't start")
 
             while self.is_running or not q.empty():
                 if q.full():
