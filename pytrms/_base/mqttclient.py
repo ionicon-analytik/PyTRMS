@@ -15,22 +15,32 @@ __all__ = ['MqttClientBase']
 
 
 def _on_connect(client, self, flags, rc):
-    # Note: ensure subscription after re-connecting,
-    #  wildcards are '+' (one level), '#' (all levels):
-    default_QoS = 2
+    # ensure subscription on each re-connect
+
     topics = set()
     for subscriber in self._subscriber_functions:
         topics.update(set(getattr(subscriber, "topics", [])))
+
+    # Note: quality-of-service level 2 increases overhead!
+    #  However, the actual level depends on what the publishing
+    #  side is willing to do and may be lower:
+    default_QoS = 2
     subs = sorted(zip(topics, cycle([default_QoS])))
     log.debug(f"[{self}] " + "\n   --> ".join(["subscribing to"] + list(map(str, subs))))
-    rv = client.subscribe(subs)
-    log.info(f"[{self}] successfully connected with {rv = }")
+    client.subscribe(subs)
+    log.info(f"[{self}] successfully connected")
+
 
 def _on_subscribe(client, self, mid, granted_qos):
-    log.info(f"[{self}] successfully subscribed with {mid = } | {granted_qos = }")
+    log.info(f"[{self}] subscribed | {granted_qos = }")
+
 
 def _on_publish(client, self, mid):
-    log.debug(f"[{self}] published {mid = }")
+    log.debug(f"[{self}] published {mid = } | #pending messages: ({len(self._mid_ticklist)})")
+    try:
+        self._mid_ticklist.remove(mid)
+    except KeyError:
+        log.warning(f"mid ({mid}) missing in ticklist: did you not use .publish_with_ack?")
 
 
 def _exception_safe(callback_fun):
@@ -67,15 +77,15 @@ class MqttClientBase:
     def is_connected(self):
         '''Returns `True` if connected to the server.
 
-        Note: this property will be polled on initialization and should
-         return `True` if a connection could be established!
+        Note: This property will be polled on initialization.
+         Subclasses should return `True` if a connection could be established!
         '''
-        return (True
-            and self.client.is_connected())
+        return self.client.is_connected()
 
-    def __init__(self, host, port, subscriber_functions,
-            on_connect, on_subscribe, on_publish, 
-            connect_timeout_s=10):
+    def __init__(self, host, port, subscriber_functions, *legacy_Nones):
+        if len(legacy_Nones):
+            log.warning("custom callbacks are deprecated")
+
         # Note: circumvent (potentially sluggish) Windows DNS lookup:
         self.host = '127.0.0.1' if host == 'localhost' else str(host)
         self.port = int(port)
@@ -105,9 +115,9 @@ class MqttClientBase:
         # The clean_session argument only applies to MQTT versions v3.1.1 and v3.1.
         # It is not accepted if the MQTT version is v5.0 - use the clean_start
         # argument on connect() instead.
-        self.client.on_connect   = on_connect    if on_connect   is not None else _on_connect
-        self.client.on_subscribe = on_subscribe  if on_subscribe is not None else _on_subscribe
-        self.client.on_publish   = on_publish    if on_publish   is not None else _on_publish
+        self.client.on_connect   = _on_connect
+        self.client.on_subscribe = _on_subscribe
+        self.client.on_publish   = _on_publish
         # ...subscribe to topics...
         self._subscriber_functions = list(subscriber_functions)
         for subscriber in self._subscriber_functions:
@@ -117,9 +127,9 @@ class MqttClientBase:
         self.client.user_data_set(self)
         # ...and connect to the server:
         try:
-            self.connect(connect_timeout_s)
+            self.connect()
         except TimeoutError as exc:
-            log.warning(f"{exc} (retry connecting when the Instrument is set up)")
+            log.warning(f"{exc} (retry connecting when the instrument is set up)")
 
     def connect(self, timeout_s=10):
         log.info(f"[{self}] connecting to MQTT broker...")
@@ -132,22 +142,65 @@ class MqttClientBase:
 
             time.sleep(10e-3)
         else:
+            self._mid_ticklist.clear()  # no reason to wait in disconnect..
             self.disconnect()
-            raise TimeoutError(f"[{self}] no connection to IoniTOF")
+            raise TimeoutError(f"[{self}] no connection to broker")
 
-    def publish_with_ack(self, *args, timeout_s=10, **kwargs):
-        # Note: this is important when publishing just before exiting the application
-        #  to ensure that all messages get through (timeout_s is set on `.__init__()`)
-        msg = self.client.publish(*args, **kwargs)
-        msg.wait_for_publish(timeout=timeout_s)
+    def publish_with_ack(self, topic, data, **kwargs):
+        """Subclasses should use this method wrapper for publishing through the client.
 
-        return self._ack(msg.mid, msg.is_published())
+        This handles the problem of lost messages on early exit and the
+        clearing of retained topics when used together with the
+        `.disconnect()` method before exiting the application.
+        """
+        # CAVEAT: "[..] waiting for publish is really waiting for
+        #  **transport-level state advancement**, not end-to-end
+        #  success! Why wait at all? Because if no PUBACK arrives,
+        #  Eclipse Paho keeps the packet inflight and retransmits
+        #  after reconnect or retry interval. [..] But even that
+        #  only works if: the client persists session state correctly,
+        #  packet ids survive restart, reconnect happens, and
+        #  retry policy is implemented.
+        #  *A crashed publisher without persistence loses unsent
+        #   guarantees immediately!*" (out of the chatgippitty)
+        msg = self.client.publish(topic, data, **kwargs)
+        #msg.wait_for_publish(timeout=timeout_s)  # No!
+        # if we happen to be in a callback, the mqtt protocol loop
+        # hangs forever, until PUBACK is handled!
+        # the correct place for this is actually in `on_publish`:
+        self._mid_ticklist.add(msg.mid)
 
-    _ack = namedtuple('mqtt_msg', ['id', 'ack'])
+        if len(data) and kwargs.get("retain", False):
+            self._retained_set.add(topic)
 
-    def disconnect(self):
+        return msg  # caller may check msg.is_published() ...
+
+    _mid_ticklist = set()
+    _retained_set = set()
+
+    def disconnect(self, clear_retained=True, timeout_s=10):
+        if clear_retained:
+            log.info(f"clearing ({len(self._retained_set)}) retained topics...")
+            for topic in self._retained_set:
+                self.publish_with_ack(topic, b"", qos=1, retain=True)
+
+        self._retained_set.clear()
+
+        log.info(f"wait for pending messages...")
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if len(self._mid_ticklist) == 0:
+                break
+
+            time.sleep(10e-3)
+        else:
+            log.error(f"timeout: there were ({len(self._mid_ticklist)}) messages left unpublished")
+
+        self._mid_ticklist.clear()
+
         self.client.loop_stop()
         self.client.disconnect()
+        log.info(f"[{self}] successfully disconnected!")
 
     def __repr__(self):
         return f"<{self.__class__.__name__} @ {self.host}[:{self.port}]>"
