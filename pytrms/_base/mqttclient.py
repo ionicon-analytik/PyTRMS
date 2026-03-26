@@ -36,11 +36,15 @@ def _on_subscribe(client, self, mid, granted_qos):
 
 
 def _on_publish(client, self, mid):
-    log.debug(f"[{self}] published {mid = } | #pending messages: ({len(self._mid_ticklist)})")
     try:
         self._mid_ticklist.remove(mid)
     except KeyError:
-        log.warning(f"mid ({mid}) missing in ticklist: did you not use .publish_with_ack?")
+        time.sleep(0.1)
+        if mid not in self._mid_ticklist:
+            log.warning(f"mid ({mid}) missing in ticklist: did you not use .publish_with_ack?")
+        else:
+            self._mid_ticklist.remove(mid)
+    log.debug("[%s] acknowledged mid = %d | #pending messages: %d", self, mid, len(self._mid_ticklist))
 
 
 def _exception_safe(callback_fun):
@@ -146,7 +150,7 @@ class MqttClientBase:
             self.disconnect()
             raise TimeoutError(f"[{self}] no connection to broker")
 
-    def publish_with_ack(self, topic, data, **kwargs):
+    def publish_with_ack(self, *args, **kwargs):
         """Subclasses should use this method wrapper for publishing through the client.
 
         This handles the problem of lost messages on early exit and the
@@ -163,20 +167,37 @@ class MqttClientBase:
         #  retry policy is implemented.
         #  *A crashed publisher without persistence loses unsent
         #   guarantees immediately!*" (out of the chatgippitty)
-        msg = self.client.publish(topic, data, **kwargs)
+        msg = self.client.publish(*args, **kwargs)
         #msg.wait_for_publish(timeout=timeout_s)  # No!
         # if we happen to be in a callback, the mqtt protocol loop
-        # hangs forever, until PUBACK is handled!
-        # the correct place for this is actually in `on_publish`:
+        # hangs forever, until PUBACK is handled! the correct place
+        # for this is actually in `_on_publish`.
         self._mid_ticklist.add(msg.mid)
 
-        if len(data) and kwargs.get("retain", False):
-            self._retained_set.add(topic)
+        TOPIC   = 0
+        PAYLOAD = 1
+        QOS     = 2
+        RETAIN  = 3
+        retained = kwargs.get("retain") or (len(args) >= 4 and args[RETAIN])
+        clearing = retained and not bool(args[PAYLOAD])  # ignore int(0), which *technically* doesn't clear
+        #log.debug(f"{retained = } | {clearing = } | {len(self._retained_set) = }")
+        if not clearing and retained:
+            self._retained_set.add(args[TOPIC])
 
         return msg  # caller may check msg.is_published() ...
 
     _mid_ticklist = set()
     _retained_set = set()
+
+    def wait_for_ack(self, timeout_s=10):
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if len(self._mid_ticklist) == 0:
+                break
+
+            time.sleep(10e-3)
+        else:
+            raise TimeoutError(f"there were ({len(self._mid_ticklist)}) messages left unpublished")
 
     def disconnect(self, clear_retained=True, timeout_s=10):
         if clear_retained:
@@ -187,14 +208,10 @@ class MqttClientBase:
         self._retained_set.clear()
 
         log.info(f"wait for pending messages...")
-        started_at = time.monotonic()
-        while time.monotonic() < started_at + timeout_s:
-            if len(self._mid_ticklist) == 0:
-                break
-
-            time.sleep(10e-3)
-        else:
-            log.error(f"timeout: there were ({len(self._mid_ticklist)}) messages left unpublished")
+        try:
+            self.wait_for_ack(timeout_s)
+        except TimeoutError as exc:
+            log.error(f"{type(exc).__name__}: {exc}")
 
         self._mid_ticklist.clear()
 
