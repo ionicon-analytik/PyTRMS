@@ -86,6 +86,7 @@ def test_measurement_class_implements_protocol(API):
 
     assert not SUT.is_running
     assert not SUT.url
+    assert not len(SUT.filenames)
 
     t = threading.Thread(target=x, args=("/api/measurements/2",))
     t.start()
@@ -96,8 +97,24 @@ def test_measurement_class_implements_protocol(API):
     assert SUT.is_running
     assert SUT.url == "/api/measurements/2"
 
+    SUT.add_sourcefile("/ame/AMEData/foo/zoom.h5")
+    SUT.add_sourcefile("/ame/AMEData/bar/zoom.h5")
+
+    assert len(SUT.filenames)
+
     SUT.stop()
 
     assert not SUT.is_running
     assert SUT.url == "/api/measurements/2"
+
+
+@pytest.mark.dependency(depends=["test_measurement_class_implements_protocol"])
+def test_measurement_post_process(API):
+
+    SUT = MEAS.Measurement(API, id=2)
+
+    assert len(SUT.filenames) == 2
+
+    assert SUT.filenames[0] == "/ame/AMEData/foo/zoom.h5"
+    assert SUT.filenames[1] == "/ame/AMEData/bar/zoom.h5"
 

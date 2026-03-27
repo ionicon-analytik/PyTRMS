@@ -110,11 +110,22 @@ class Measurement(ABC):
         #     so __init__() will be invoked.
         if not len(args):
             raise TypeError(f"{cls.__name__} missing 1 required positional argument: 'api'")
+        if len(args) > 1:
+            raise TypeError(f"{cls.__name__} expected 1 positional argument, got {len(args)}")
+
         api = args[0]  # fetch it from first argument passed to __init__
         assert isinstance(api, (_IoniClientBase)) , f"api must implement {type(_IoniClientBase)}"
         assert api.is_connected, f"no connection to {api}"
 
-        id_passed = kwargs.get('id')
+        id_passed = kwargs.get('id')  # keyword only arg!
+
+        if id_passed is None:
+            cls = PreparingMeasurement
+
+        if cls is PreparingMeasurement:
+            inst = object.__new__(cls)
+            inst._id = None
+            return inst
 
         if cls is not Measurement:
             log.warning(f"direct init of '{cls.__name__}', I hope you know what you're doing!")
@@ -177,9 +188,11 @@ class Measurement(ABC):
             # while preparing, no sourcefiles can yet have been created:
             return []
 
+        # Note: no caching (yet), because it's rather fast enough..
         j = self.api.get(self.url + "/sourcefiles")
-        collection = sorted(j["_embedded"]["sourcefiles"], key=itemgetter("measFilePosition"))
-        return [sf["path"] for sf in collection]
+        sf_by_pos = sorted(j["_embedded"]["sourcefiles"], key=itemgetter("measFilePosition"))
+
+        return [sf["path"] for sf in sf_by_pos]
 
     @property
     def peaktable(self):
@@ -199,7 +212,6 @@ class Measurement(ABC):
 
 
     def __init__(self, api, *, id="last"):
-        assert self._id is not None, "invalid program: id should have been set in __new__"
         self.api = api
 
     def __eq__(self, other):
@@ -254,7 +266,7 @@ class PreparingMeasurement(Measurement):
 
     """
 
-    def __init__(self, api, recdir):
+    def __init__(self, api, *, recdir=None):
         self.api = api
         self.recipeDirectory = recdir
 
@@ -264,6 +276,7 @@ class PreparingMeasurement(Measurement):
             # , timebinWidth_ps=0.0
             # , poissonDeadtime_ns=0.0
             # , numberOfTimebins=0.0
+              # TODO :: ~> inst_info oder @property info oder so (kann auch api noch anpassen..)
           ):
         """Start a measurement via the AME system.
 
@@ -272,6 +285,9 @@ class PreparingMeasurement(Measurement):
 
         Keyword arguments are passed with the payload of the POST request.
         """
+        if not self.recipeDirectory:
+            raise ValueError("recipeDirectory is required")
+
 #       if self.api.is_running:
 #           # Note: this should only ever happen if a PreparingMeasurement
 #           #  has been initialized directly (and not via Measurement)!
@@ -316,7 +332,7 @@ class PreparingMeasurement(Measurement):
 
 class RunningMeasurement(Measurement):
 
-    def add_sourcefile(self, filename):
+    def add_sourcefile(self, filename, abs_time=0, abs_cycle=0):
         """Add a sourcefile (.h5 file) to this Measurement's batch.
 
         The sourcefile will be made persistent in the database.
@@ -327,25 +343,36 @@ class RunningMeasurement(Measurement):
         happens to be in a new folder. This will be reflected in the
         `.peaktable` property of this instance.
 
+        Keyword arguments abs_time/abs_cycle are as read from
+        `specdata.timecycle` (note, that this might be not correct if
+        attaching to running measurement).
+
         """
         # Note: this will usually only be called by our peakd'ame,
         #  who's following along the IoniTOF's current sourcefile.
 
-        loc = self.api.post(self.url + "/sourcefiles", payload)
+        if filename in self.filenames:
+            return
+
+        #log.info(("initializing" if last_sourcefile is None else "switching") + " source-file...")
+        sc, loc = self.api.post(self.url + "/sourcefiles", data={
+            "path": filename,
+            "startAbsTime":  abs_time,
+            "startAbsCycle": abs_cycle,
+        })
+        #log.info(f"created 'new sourcefile' ({sourcefile}): {sf_loc}")
         return loc
 
         # ~~~~~~~~~~~~~~ siehe dieses Monster aus pd~follow_specdata():
         # 1) POST /api/measurements/X/sourcefiles ...
         if sourcefile != last_sourcefile:
             # the source-file has been switched, so wait for the new path:
-            log.info(("initializing" if last_sourcefile is None else "switching") + " source-file...")
-            status, sf_loc = api.post(m_loc + "/sourcefiles", data={
-                        "path": sourcefile,
-                        "startAbsTime":  specdata.timecycle.abs_time,
-                        "startAbsCycle": specdata.timecycle.abs_cycle,
-                        # Note: |__ not true if attaching to running measurement, but well...
-            })
-            log.info(f"created 'new sourcefile' ({sourcefile}): {sf_loc}")
+
+        # [...]
+
+        # TODO :: damit man DAS testen kann, brauch die API ein result-dir
+        #  ~> im test eine mock-pt dort upload'en, dann hier zuruecklsesn:
+
             if use_local_pt_file:
                 log.info(f"loading peaktable from 'recipe-dir'...")
                 import platform
