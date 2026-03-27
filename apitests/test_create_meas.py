@@ -1,10 +1,18 @@
 """
-Test of module pytrms.clients.db_api
+Test of modules
+- pytrms.clients.db_api
+- pytrms.measurement
 
 """
 import json
+import threading
+import logging
 
 import pytest
+
+import pytrms.measurement as MEAS
+
+log = logging.getLogger(__name__)
 
 
 @pytest.mark.dependency()
@@ -60,4 +68,36 @@ def test_create_measurement(API):
 
     ## not yet started
     assert API.get("/api/measurements/current") is None
+
+
+@pytest.mark.dependency(depends=["test_create_measurement"])
+def test_measurement_class_implements_protocol(API):
+
+    def x(url_expected):
+        log.warning("mocking out the AME system protocol!")
+        e = next(API.iter_events())
+        # asserts won't work in a background thread!
+        if e.event != "new measurement": log.error(e.event)
+        if e.data  != url_expected:      log.error(e.data)
+        # now, follow the protocol: this will trigger the event: 'start measurement':
+        rv = API.patch(e.data, { "isRunning": True })
+
+    SUT = MEAS.PreparingMeasurement(API, "/ame/AME/Recipes/uno")
+
+    assert not SUT.is_running
+    assert not SUT.url
+
+    t = threading.Thread(target=x, args=("/api/measurements/2",))
+    t.start()
+
+    SUT.start()  # will wait for 'start measurement'
+    t.join()
+
+    assert SUT.is_running
+    assert SUT.url == "/api/measurements/2"
+
+    SUT.stop()
+
+    assert not SUT.is_running
+    assert SUT.url == "/api/measurements/2"
 

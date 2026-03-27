@@ -47,8 +47,7 @@ def api_container(request):
 def API(api_container):
     from pytrms.clients import db_api
 
-    api_port = api_container  # fixture resolves to exposed port
-    attach_running = api_port == 5066
+    attach_running = (api_container == 5066)  # fixture resolves to exposed port
 
     DB_API = db_api.IoniConnect(port=api_container)
 
