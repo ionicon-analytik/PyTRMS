@@ -36,7 +36,15 @@ class Measurement(ABC):
     #KANN AUS DB_API.py wieder raus !!
     # c) [future] einen schoenen Zugang zum batch-processing schaffen
 
-
+# EDIT -------------------------------------------- EDIT
+#
+# neue IDee: wir haben IMMER eine Url (und ein Ioniconnect)
+#
+# ~> dies IST der db-synchronisator
+# => 
+#
+#
+# EDIT -------------------------------------------- EDIT
 
         # 4 faelle:
         #  entweder es wird eine URL konkret angegeben:
@@ -67,7 +75,7 @@ class Measurement(ABC):
 
     # TODO :: ich will hier die API ins Zentrum stellen!
     #  meas hat eine .url, die es identifiziert (s.u.)
-    #  die sourcefiles werden dann von der API geladen
+    #  die sourcefiles werden dann von der API geladen (lazy)
     ##  ... bzw. man kann eine neue batch zusammenstellen und hochladen
     #  
     #  wir haben diese __iter__ dinger jetzt im peakdame.helpers !
@@ -100,45 +108,52 @@ class Measurement(ABC):
         #  then the new instance’s __init__() method will *not* be invoked!
         #  => OK, but we *always* return an `isinstance(.., Measurement)`
         #     so __init__() will be invoked.
+        if not len(args):
+            raise TypeError(f"{cls.__name__} missing 1 required positional argument: 'api'")
         api = args[0]  # fetch it from first argument passed to __init__
-        assert isinstance(api, (_IoniClientBase)), f"api must implement {type(_IoniClientBase)}"
-        assert api.is_connected, "no connection to database api"
-        assert len({'id', 'url'} & kwargs.keys()) < 2, "kwargs 'id' and 'url' are mutually exclusive"
+        assert isinstance(api, (_IoniClientBase)) , f"api must implement {type(_IoniClientBase)}"
+        assert api.is_connected, f"no connection to {api}"
 
-        fallback = f"/api/measurements/{kwargs['id']}" if 'id' in kwargs else ''
-        url_passed = str(kwargs.get('url', fallback))
+        id_passed = kwargs.get('id')
 
         if cls is not Measurement:
             log.warning(f"direct init of '{cls.__name__}', I hope you know what you're doing!")
             # allow this for debugging, though:
             inst = object.__new__(cls)
-            inst._url = url_passed
+            inst._id = id_passed
             return inst
 
-        if url_passed:
-            # id is known ~> do post-processing:
-            inst = object.__new__(FinishedMeasurement)
-            inst._url = url_passed
-            return inst
+        url_resolved = api.get_location("/api/measurements/" + str(id_passed))  # may throw!
 
-        if api.is_running:
-            # attach!
-            inst = object.__new__(RunningMeasurement)
-            inst._url = api._get_location("/api/measurements/current")
-            return inst
-
-        else:
-            # prepare new!
+        j = api.get(url_resolved)
+        if j["startDateTime"] is None:
             inst = object.__new__(PreparingMeasurement)
-            inst._url = ''
+            inst._id = j["measurementID"]
+            return inst
+
+        if j["stopDateTime"] is None:
+            inst = object.__new__(RunningMeasurement)
+            inst._id = j["measurementID"]
+            return inst
+
+        if True:
+            inst = object.__new__(FinishedMeasurement)
+            inst._id = j["measurementID"]
             return inst
 
         raise RuntimeError("invalid program: we should not have come here")
 
     @property
+    def id(self):
+        """The unique id for this 'Measurement' on the database."""
+        return self._id
+
+    @property
     def url(self):
         """The resource locator for this 'Measurement' on the database."""
-        return self._url
+        if self._id:
+            return "/api/measurements/" + str(self._id)
+        return None
 
     @property
     def is_running(self):
@@ -158,29 +173,47 @@ class Measurement(ABC):
 
     @property
     def filenames(self):
+        if not self.url:
+            # while preparing, no sourcefiles can yet have been created:
+            return []
+
         j = self.api.get(self.url + "/sourcefiles")
         collection = sorted(j["_embedded"]["sourcefiles"], key=itemgetter("measFilePosition"))
         return [sf["path"] for sf in collection]
 
-    def add_sf(self, filename):
-        loc = self.api.post(self.url + "/sourcefiles", payload)
-        return loc
+    @property
+    def peaktable(self):
+        """The peaktable in use by this measurement.
 
-    def __init__(self, api, *, url=None, id=None):
-        assert self.url is not None, "invalid program: url should have been set in __new__"
+        Note, that the peaktable need not be strictly the same throughout
+        a running measurement, because AME allows for the possibility to
+        add peaks on-the-fly.
+
+        """
+
+        #        pt = PeakTable.from_file(pt_file)
+        # (siehe unten...)
+        # Idee ist, dass dies dem .follow_specdata() noch abgenommen wird,
+        # was die sache vereinfacht...
+        return None
+
+
+    def __init__(self, api, *, id="last"):
+        assert self._id is not None, "invalid program: id should have been set in __new__"
         self.api = api
 
     def __eq__(self, other):
-        return isinstance(other, Measurement) and other.url == self.url
+        return isinstance(other, Measurement) and other._id == self._id
 
     def __hash__(self):
-        return hash(self.url)
+        return hash(self.url)  # self._id would work, but it's boring (1-based)
 
     def __repr__(self):
-        return f"<{type(self)} @ {id(self)}>"
+        return f"<{type(self).__name__} @ {self.url}>"
 
 
 class PreparingMeasurement(Measurement):
+    """
 
     ## TODO :: wer setzt jetzt diese ganzen properties, wenn
     ### wir nur noch die payload POST'en ???
@@ -219,7 +252,13 @@ class PreparingMeasurement(Measurement):
     def expected_mass_range_amu(self, value):
         self.ptr.set('ACQ_SRV_ExpectMRange', int(value), unit='amu')
 
-    def start(self, *, recipeDirectory='', singleSpecDuration_ms=1000.0
+    """
+
+    def __init__(self, api, recdir):
+        self.api = api
+        self.recipeDirectory = recdir
+
+    def start(self #, recipeDirectory='', *, singleSpecDuration_ms=1000.0
             # , pulsingPeriod_ns=0.0
             # , startDelay_ns=0.0
             # , timebinWidth_ps=0.0
@@ -233,24 +272,29 @@ class PreparingMeasurement(Measurement):
 
         Keyword arguments are passed with the payload of the POST request.
         """
-        if self.api.is_running:
-            # Note: this should only ever happen if a PreparingMeasurement
-            #  has been initialized directly (and not via Measurement)!
-            current = self.api._get_location('/api/measurements/current')
-            raise RuntimeError(f"measurement running at '{current}'")
+#       if self.api.is_running:
+#           # Note: this should only ever happen if a PreparingMeasurement
+#           #  has been initialized directly (and not via Measurement)!
+#           current = self.api._get_location('/api/measurements/current')
+#           raise RuntimeError(f"measurement running at '{current}'")
+#           # TODO :: ausserdem wird's die API nicht erlauben !?!?!?
+        
+        singleSpecDuration_ms=1000.0
 
         payload = {
-            "recipeDirectory": str(recipeDirectory),
+            "recipeDirectory": str(self.recipeDirectory),
             "singleSpecDuration_ms": float(singleSpecDuration_ms),
         }
         # first, set us up to check the correct ordering of events:
-        sse = ssevent.SSEventListener(session=self.api.session)
+        sse = ssevent.SSEventListener(host_url=self.api.url, session=self.api.session)
         sse.subscribe(r'(new|start|stop) measurement')
         event_g = sse.follow_events(timeout_s=10, prime=True)
         e = next(event_g)  # prime the generator..
         assert e.event == "new connection", "invalid program: generator not primed"
         # now, follow the protocol: this will trigger the event: 'new measurement'...
-        self.url = self.api.post('/api/measurements', payload)
+        sc, loc = self.api.post("/api/measurements", payload)
+        assert sc == 201, f"unexpected http-status: {sc}"
+        self._id = int(loc.split('/')[-1])
         # ...we back-check it...
         e = next(event_g)
         assert e.event == "new measurement", "wrong event, got: " + str(e)
@@ -262,41 +306,136 @@ class PreparingMeasurement(Measurement):
         except StopIteration:
             raise TimeoutError("the system didn't respond. make sure AME is running!")
 
-        assert e.event == "new measurement", "wrong event, got: " + str(e)
+        assert e.event == "start measurement", "wrong event, got: " + str(e)
         assert e.data == self.url, "wrong event-href, got: " + str(e)
 
         self._new_state(RunningMeasurement)
 
         return self
 
-    def __iter__(self):
-        from .clients.mqtt import MqttClient
-        if not isinstance(self.ptr.backend, MqttClient):
-            raise NotImplementedError("iteration only provided w/ backend 'mqtt'")
-
-        print("warning: the measurement needs to be started externally")
-        while not self.ptr.backend.is_running:
-            time.sleep(50e-3)
-
-        self._new_state(RunningMeasurement)
-        yield from iter(self)
-
 
 class RunningMeasurement(Measurement):
+
+    def add_sourcefile(self, filename):
+        """Add a sourcefile (.h5 file) to this Measurement's batch.
+
+        The sourcefile will be made persistent in the database.
+        If the given filename is already in the batch, this is a no-op
+        (in other words, this method is idempotent).
+
+        This may lead to a new peaktable being used if the given filename
+        happens to be in a new folder. This will be reflected in the
+        `.peaktable` property of this instance.
+
+        """
+        # Note: this will usually only be called by our peakd'ame,
+        #  who's following along the IoniTOF's current sourcefile.
+
+        loc = self.api.post(self.url + "/sourcefiles", payload)
+        return loc
+
+        # ~~~~~~~~~~~~~~ siehe dieses Monster aus pd~follow_specdata():
+        # 1) POST /api/measurements/X/sourcefiles ...
+        if sourcefile != last_sourcefile:
+            # the source-file has been switched, so wait for the new path:
+            log.info(("initializing" if last_sourcefile is None else "switching") + " source-file...")
+            status, sf_loc = api.post(m_loc + "/sourcefiles", data={
+                        "path": sourcefile,
+                        "startAbsTime":  specdata.timecycle.abs_time,
+                        "startAbsCycle": specdata.timecycle.abs_cycle,
+                        # Note: |__ not true if attaching to running measurement, but well...
+            })
+            log.info(f"created 'new sourcefile' ({sourcefile}): {sf_loc}")
+            if use_local_pt_file:
+                log.info(f"loading peaktable from 'recipe-dir'...")
+                import platform
+                if platform.system() == 'Linux':
+                    # Note: this allows us to have a 'D:/AMEData/..' directory placed
+                    #  in the current folder (which would otherwise be unaccessible):
+                    #
+# HACK! weg damit! wir haben inzwischen bessere moeglichkeiten
+                    log.warning("looking for relative sourcefile path...")
+                    current_recipe = os.path.dirname(sourcefile.replace('\\', os.path.sep))
+                else:
+                    current_recipe = os.path.dirname(sourcefile)
+                pt_file = next_best_file(current_recipe)
+                if pt_file is None:
+                    raise Exception(f"no peaktable-file found in '{current_recipe}'")
+
+                pt = PeakTable.from_file(pt_file)
+                log.debug(f'  |__ success: {pt}')
+        last_sourcefile = sourcefile
+        # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def new_folder(self):
+        """Prepare a new results-directory for the AME toolchain.
+
+        This creates a new directory and copies all relevant files from
+        the recipe-directory. Also, the peaktable found next to the
+        sourcefile will be uploaded to the database.
+
+        Returns:
+            the filename to be used by IoniTOF
+        """
+        # Note: this will be called either by the Componist before
+        #  starting the measurement or by any action-script with a
+        #  'new-folder-action' type.
+
+        #?? A 'new results' event will be emitted on the API.
+
+    #ef maybe_create_folder(action_number, action_cycle):
+    # (aus dem actionsetup.py)
+    # das gehoert wirklich hierher:
+    # action:
+    #  m = Measurement(current)  ~> MUSS es geben
+    #  m.new_folder()
+
+        if not do_create_folder:
+            log.debug("create-folder-action: not requested! skipping...")
+            return
+    
+        if not action_cycle > 0:
+            log.warning(f"create-folder-action refused ({action_cycle = })! skipping...")
+            return
+    
+        ## BINGO! das sind wir!!
+        j = api.get("/api/measurements/last")
+        ## BINGO!! ham wa auch:
+        source_recipe_dir  = j["recipeDirectory"]
+        ## BINGO!!! das kommt uns auch bekannt vor:
+        from pytrms.helpers import setup_measurement_dir
+        recipe = setup_measurement_dir(source_recipe_dir, data_root_dir='D:/AMEData',
+                suffix=f'_Action{action_number}', date_fmt="%Y_%m_%d__%H_%M_%S")
+        log.info("setup new folder.. " + str(recipe.dirname))
+        if recipe.pt_file:
+            log.info("upload peaks...... " + recipe.pt_file)
+            r = api.sync(recipe.pt_file)
+            log.info("done sync'ing peaks: " + str(r))
+        api.post("/api/alarms/state", { "enabled": False })
+        for alarm_file in recipe.alarm_files:
+            log.info("upload alarms..... " + alarm_file)
+            api.upload("/api/alarms/upload", alarm_file)
+        # Note [#3010]: for some reason, IoniTOF will start a new file *after the next*
+        #  scheduled cycle, but anyway: we now schedule it 1 cycle prior, such that the
+        #  new file is aligned with the AME-numbers:
+        ionitof.schedule_filename(recipe.h5_file, action_cycle - 1)
+        # nicht BINGO?! Genau hier ^^^^ setzt der Componist (a.k.a. "das AME system") ein!!
+        #post(new results) ~> event ~> ? ~> Componist??
+        # BZW.. das action-script hat's ja ge-called, also soll's doch scheduln.
 
     def stop(self):
         """Stop the current measurement via the AME system.
 
         """
         # first, set us up to check the correct ordering of events:
-        sse = ssevent.SSEventListener(session=self.api.session)
+        sse = ssevent.SSEventListener(host_url=self.api.url, session=self.api.session)
         sse.subscribe(r'(new|start|stop) measurement')
         event_g = sse.follow_events(timeout_s=10, prime=True)
         e = next(event_g)  # prime the generator..
         assert e.event == "new connection", "invalid program: generator not primed"
         log.info(f"stopping measurement '{self.url}'...")
         # now, follow the protocol: this will trigger the event: 'stop measurement'...
-        self.api.put(self.url, { "isRunning": False })
+        self.api.patch(self.url, { "isRunning": False })
         # ...we back-check it...
         e = next(event_g)
         assert e.event == "stop measurement", "wrong event, got: " + str(e)
@@ -305,35 +444,6 @@ class RunningMeasurement(Measurement):
         self._new_state(FinishedMeasurement)
 
         return self
-
-    def __iter__(self):
-        from .clients.mqtt import MqttClient
-        if not isinstance(self.ptr.backend, MqttClient):
-            raise NotImplementedError("iteration only provided w/ backend 'mqtt'")
-
-        if not self.ptr.backend.is_connected:
-            raise Exception("no connection to instrument")
-
-        timeout_s = 15
-        ssd_s = 1e-3 * float(self.ptr.get('ACQ_SRV_SpecTime_ms'))
-        last_rel_cycle = -1
-        sourcefile = ''
-        for specdata in self.ptr.backend.iter_specdata(timeout_s=timeout_s+ssd_s, buffer_size=300):
-            if last_rel_cycle == -1 or specdata.timecycle.rel_cycle < last_rel_cycle:
-                # the source-file has been switched, so wait for the new path:
-                started_at = time.monotonic()
-                while time.monotonic() < started_at + timeout_s:
-                    candidate = self.ptr.backend.current_sourcefile
-                    if candidate and candidate != sourcefile:
-                        sourcefile = candidate
-                        break
-
-                    time.sleep(10e-3)
-                else:
-                    raise TimeoutError(f"no new sourcefile after ({timeout_s = })")
-            last_rel_cycle = specdata.timecycle.rel_cycle
-
-            yield sourcefile, specdata
 
 
 class FinishedMeasurement(Measurement):
