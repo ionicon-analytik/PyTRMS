@@ -23,7 +23,7 @@ def coroutine(func):
 
 
 class Step:
-    '''A serializable definition for a Step or an Action.
+    '''A serializable definition for an AME Step.
 
     When defining a Step with start-delay, the 'AUTO_UseMean' flag will
     be automatically appended:
@@ -88,17 +88,8 @@ class Composition(Iterable):
     >>> list(co.sequence())
     [(8, {'Eins': 1}), (18, {'Zwei': 2})]
 
-    ...with an action-number at the start (note, that AME-numbers are 1 cycle ahead)...
-    >>> co.start_action = 7
-    >>> list(co.sequence())
-    [(9, {'AME_ActionNumber': 7}), (8, {'Eins': 1}), (18, {'Zwei': 2})]
-
     ...or with automation numbers, where the 'start_delay' comes into play:
-    >>> co.generate_automation = True
-    >>> seq = co.sequence()
-    >>> next(seq)
-    (9, {'AME_ActionNumber': 7})
-
+    >>> seq = co.sequence(generate_automation=True)
     >>> next(seq)
     (8, {'Eins': 1})
 
@@ -118,29 +109,105 @@ class Composition(Iterable):
     (22, {'AUTO_UseMean': 1})
 
     '''
+    _version = "1.0"
 
     STEP_MARKER    = 'AME_StepNumber'
     RUN_MARKER     = 'AME_RunNumber'
     USE_MARKER     = 'AUTO_UseMean'
-    ACTION_MARKER  = 'AME_ActionNumber'
 
     @staticmethod
-    def load(filename, **kwargs):
+    def load(filename):
         with open(filename, 'r') as ifstream:
-            steps = list(json.load(ifstream))
-            return Composition(steps, **kwargs)
+            return Composition._loads(ifstream)
 
-    def __init__(self, steps, max_runs=-1, start_cycle=0, start_action=None, generate_automation=False, foresight_runs=5):
+    @staticmethod
+    def _loads(ifstream):
+        """helper method for testing and format display.
+
+        >>> from io import StringIO
+
+        VERSION < 1.0 ..................................
+
+        >>> s = StringIO('''
+        ... [
+        ...   {
+        ...     "name": "uno",
+        ...     "set_values": {
+        ...       "OP_Mode": 1
+        ...     },
+        ...     "duration": 10,
+        ...     "start_delay": 2
+        ...   }
+        ... ]
+        ... ''')
+        >>> c = Composition._loads(s)
+        >>> c.steps
+        [uno: (2/10) sec ~> {'OP_Mode': 1}]
+
+        VERSION 1.0 ....................................
+
+        >>> s = StringIO('''
+        ... {
+        ...   "version": "1.0",
+        ...   "steps": [
+        ...     {
+        ...       "name": "uno",
+        ...       "set_values": {
+        ...         "OP_Mode": 1
+        ...       },
+        ...       "duration": 10,
+        ...       "start_delay": 2
+        ...     }
+        ...   ],
+        ...   "start_cycle": 7,
+        ...   "spec_duration_ms": 123.4
+        ... }
+        ... ''')
+        >>> c = Composition._loads(s)
+        >>> c.steps
+        [uno: (2/10) sec ~> {'OP_Mode': 1}]
+
+        >>> c.start_cycle
+        7
+
+        >>> c.spec_duration_ms
+        123.4
+
+        VERSION 1.1 ....................................
+
+        >>> s = StringIO('''
+        ... {
+        ...   "version": "1.1"
+        ... }
+        ... ''')
+        >>> c = Composition._loads(s)
+        Traceback (most recent call last):
+            ...
+        NotImplementedError: version = '1.1'
+
+        """
+        j = json.load(ifstream)
+        # keep backwards compatibility as "0.9":
+        version = j["version"] if isinstance(j, dict) else "0.9"
+
+        if version == "0.9":
+            steps = list(j)
+            return Composition(steps)
+        if version == "1.0":
+            del j["version"]
+            return Composition(**j)
+
+        raise NotImplementedError(f"{version = }")
+
+    def __init__(self, steps, max_runs=-1, start_cycle=0, spec_duration_ms=1000.0):
+        self.version = Composition._version
         self.steps = [Step(**item) if isinstance(item, dict) else item for item in steps]
-        self.max_runs            = int(max_runs)
-        self.start_cycle         = int(start_cycle)
-        self.start_action        = int(start_action) if start_action is not None else None
-        self.generate_automation = bool(generate_automation)
-        self.foresight_runs      = int(foresight_runs) if self.max_runs < 0 else max(int(foresight_runs), self.max_runs)
+        self.max_runs           = int(max_runs)
+        self.start_cycle        = int(start_cycle)
+        self.spec_duration_ms   = float(spec_duration_ms)
 
         assert len(self.steps) > 0, "empty step list"
         assert self.max_runs != 0, "max_runs cannot be zero"
-        assert self.foresight_runs > 0, "foresight_runs must be positive"
         names = set(step.name for step in self.steps)
         assert len(names) == len(self.steps), "duplicate step name"
 
@@ -150,7 +217,39 @@ class Composition(Iterable):
         return self.max_runs > 0
 
     def dump(self, ofstream):
-        json.dump(self.steps, ofstream, indent=2, default=vars)
+        '''Write this configuration into a filestream.
+
+        >>> c = Composition([Step('uno', {'OP_Mode': 1}, 10, 2)])
+        >>> from io import StringIO
+        >>> s = StringIO()
+        >>> c.dump(s)
+        >>> s.seek(0)
+        0
+
+        >>> print(s.read())
+        {
+          "version": "1.0",
+          "steps": [
+            {
+              "name": "uno",
+              "set_values": {
+                "OP_Mode": 1
+              },
+              "duration": 10,
+              "start_delay": 2
+            }
+          ],
+          "max_runs": -1,
+          "start_cycle": 0,
+          "spec_duration_ms": 1000.0
+        }
+
+        '''
+        fmt = {
+            "version": self._version,
+            "steps": self.steps,
+        }
+        json.dump(self, ofstream, indent=2, default=vars)
 
     def translate_op_modes(self, preset_items, check=True):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
@@ -213,7 +312,7 @@ class Composition(Iterable):
 
         return set_values
 
-    def sequence(self):
+    def sequence(self, generate_automation=False):
         '''A (possibly infinite) iterator over this Composition's future_cycles and steps.
 
         Note, that this will insert "fake" steps to account for start-delays!
@@ -224,13 +323,10 @@ class Composition(Iterable):
         _offset_ame = True  # whether ame-numbers should mark the *next* cycle, see [#2897]
 
         future_cycle = self.start_cycle
-        if self.start_action is not None:
-            yield future_cycle + int(_offset_ame), dict([(self.ACTION_MARKER, int(self.start_action))])
-
         for run, step, step_info in self:
             yield future_cycle, dict(step_info.set_values)
 
-            if self.generate_automation:
+            if generate_automation:
                 automation = {self.STEP_MARKER: step}
                 if step == 1:
                     automation[self.RUN_MARKER] = run
@@ -248,7 +344,7 @@ class Composition(Iterable):
             future_cycle = future_cycle + step_info.duration
 
     @coroutine
-    def schedule_routine(self, schedule_fun):
+    def schedule_routine(self, schedule_fun, foresight_runs=5):
         '''Create a coroutine that receives the current cycle and yields the last scheduled cycle.
 
         'schedule_fun' should be a callable taking three arguments '(parID, value, schedule_cycle)'
@@ -256,9 +352,8 @@ class Composition(Iterable):
         >>> co = Composition([
         ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
         ...         Step("Zwoa", {"Zwei": 2}, 10, start_delay=3)
-        ...      ],
-        ...      foresight_runs=2)
-        >>> coro = co.schedule_routine(print)
+        ...      ])
+        >>> coro = co.schedule_routine(print, foresight_runs=2)
         >>> wake_cycle = coro.send(1)  # yields at least 'foresight_runs'
         Eins 1 0
         Zwei 2 10
@@ -270,15 +365,19 @@ class Composition(Iterable):
         30
 
         '''
+        if self.max_runs > 0:
+            foresight_runs = max(int(foresight_runs), self.max_runs)
+        assert foresight_runs > 0, "foresight_runs must be positive"
+
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
         sequence = self.sequence()
         run_duration_cycles = sum(step.duration for step in self.steps)
-        foresight_cycles = self.foresight_runs * run_duration_cycles
+        foresight_cycles = foresight_runs * run_duration_cycles
         next_cycle, set_values = next(sequence)
         while True:
             # receive current cycle, yield proposed wake cycle...
-            current_cycle = yield next_cycle - run_duration_cycles * max(self.foresight_runs - 2, 1)
+            current_cycle = yield next_cycle - run_duration_cycles * max(foresight_runs - 2, 1)
             log.debug(f"schedule_routine: got [{current_cycle}]")
             while next_cycle < current_cycle + foresight_cycles:
                 log.debug(f'scheduling cycle [{next_cycle}] ~> {set_values}')
