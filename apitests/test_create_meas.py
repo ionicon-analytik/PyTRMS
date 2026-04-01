@@ -6,6 +6,7 @@ Test of modules
 """
 import json
 import threading
+import contextlib
 import logging
 
 import pytest
@@ -13,6 +14,26 @@ import pytest
 import pytrms.measurement as MEAS
 
 log = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def mock_componist(api, url_expected):
+
+    def x():
+        log.warning("mocking out the AME system protocol!")
+        e = next(api.iter_events())
+        # asserts won't work in a background thread!
+        if e.event != "new measurement": log.error(e.event)
+        if e.data  != url_expected:      log.error(e.data)
+        # now, follow the protocol: this will trigger the event: 'start measurement':
+        rv = api.patch(e.data, { "isRunning": True })
+
+    t = threading.Thread(target=x) #mock_componist) #, args=(url_expected,))
+    try:
+        t.start()
+        yield
+    finally:
+        t.join()
 
 
 @pytest.mark.dependency()
@@ -73,39 +94,35 @@ def test_create_measurement(API):
 @pytest.mark.dependency(depends=["test_create_measurement"])
 def test_measurement_class_implements_protocol(API):
 
-    def x(url_expected):
-        log.warning("mocking out the AME system protocol!")
-        e = next(API.iter_events())
-        # asserts won't work in a background thread!
-        if e.event != "new measurement": log.error(e.event)
-        if e.data  != url_expected:      log.error(e.data)
-        # now, follow the protocol: this will trigger the event: 'start measurement':
-        rv = API.patch(e.data, { "isRunning": True })
+    SUT = MEAS.PreparingMeasurement(API)
 
-    SUT = MEAS.PreparingMeasurement(API, "/ame/AME/Recipes/uno")
-
+    # ------- start -----------------------------------------------------------
     assert not SUT.is_running
     assert not SUT.url
     assert not len(SUT.filenames)
 
-    t = threading.Thread(target=x, args=("/api/measurements/2",))
-    t.start()
-
-    SUT.start()  # will wait for 'start measurement'
-    t.join()
+    with mock_componist(API, url_expected="/api/measurements/2"):
+        SUT.start("/ame/AME/Recipes/uno")  # will wait for 'start measurement'
 
     assert SUT.is_running
-    assert SUT.url == "/api/measurements/2"
+    assert SUT.url == API.get_location("/api/measurements/current")
+
+    ## ------ sourcefiles ------------------------------------------------------
+
+    assert len(SUT.filenames) == 0
 
     SUT.add_sourcefile("/ame/AMEData/foo/zoom.h5")
     SUT.add_sourcefile("/ame/AMEData/bar/zoom.h5")
 
-    assert len(SUT.filenames)
+    assert len(SUT.filenames) == 2
+
+    ## ------ stop -------------------------------------------------------------
 
     SUT.stop()
 
     assert not SUT.is_running
     assert SUT.url == "/api/measurements/2"
+    assert API.get("/api/measurements/current") is None
 
 
 @pytest.mark.dependency(depends=["test_measurement_class_implements_protocol"])

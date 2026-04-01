@@ -266,39 +266,28 @@ class PreparingMeasurement(Measurement):
 
     """
 
-    def __init__(self, api, *, recdir=None):
+    def __init__(self, api):
         self.api = api
-        self.recipeDirectory = recdir
 
-    def start(self #, recipeDirectory='', *, singleSpecDuration_ms=1000.0
+    def start(self, recipeDirectory, *
+              , singleSpecDuration_ms=1000.0
             # , pulsingPeriod_ns=0.0
             # , startDelay_ns=0.0
             # , timebinWidth_ps=0.0
             # , poissonDeadtime_ns=0.0
             # , numberOfTimebins=0.0
               # TODO :: ~> inst_info oder @property info oder so (kann auch api noch anpassen..)
+              #  was ist hier ueberhaupt relevant? timebinWidth_ps schon, aber nur read-only ?!
           ):
         """Start a measurement via the AME system.
 
-        This does not start the PTR instrument, but signals AME to start
-        a new measurement out of the given `recipeDirectory`.
+        Note: This does *not* start the PTR instrument directly, but instead
+         signals AME to start a new measurement out of the given `recipeDirectory`.
 
         Keyword arguments are passed with the payload of the POST request.
         """
-        if not self.recipeDirectory:
-            raise ValueError("recipeDirectory is required")
-
-#       if self.api.is_running:
-#           # Note: this should only ever happen if a PreparingMeasurement
-#           #  has been initialized directly (and not via Measurement)!
-#           current = self.api._get_location('/api/measurements/current')
-#           raise RuntimeError(f"measurement running at '{current}'")
-#           # TODO :: ausserdem wird's die API nicht erlauben !?!?!?
-        
-        singleSpecDuration_ms=1000.0
-
         payload = {
-            "recipeDirectory": str(self.recipeDirectory),
+            "recipeDirectory": str(recipeDirectory),
             "singleSpecDuration_ms": float(singleSpecDuration_ms),
         }
         # first, set us up to check the correct ordering of events:
