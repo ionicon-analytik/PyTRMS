@@ -52,7 +52,7 @@ def _exception_safe(callback_fun):
 
     cb_name = callback_fun.__code__.co_name
     cb_argc = callback_fun.__code__.co_argcount
-    short_payload = lambda s: s[:50] + ('...' if len(s) > 50 else '')
+    short_payload = lambda s: str(s[:50]) + ('...' if len(s) > 50 else '')
 
     assert cb_argc == 3, "subscriber callback must have arguments (client, obj, msg)"
 
