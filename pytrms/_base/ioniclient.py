@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 
-class IoniClientBase(ABC):
+class IoniConnectBase(ABC):
     '''Abstract base-class that defines the common interface for clients.
 
     '''
@@ -26,6 +26,20 @@ class IoniClientBase(ABC):
     def disconnect(self):
         pass
 
+    def __init__(self, host, port):
+        # Note: circumvent (potentially sluggish) Windows DNS lookup:
+        self.host = '127.0.0.1' if host == 'localhost' else str(host)
+        self.port = int(port)
+
+    def __repr__(self):
+        return f"<{self.__class__.__name__} @ {self.host}[:{self.port}]>"
+
+
+class IoniClientBase(IoniConnectBase):
+    '''Abstract base-class that defines the common interface for instrument-clients.
+
+    '''
+
     @abstractmethod
     def start_measurement(self, path=None):
         '''Start a new measurement and block until the change is confirmed.
@@ -41,12 +55,4 @@ class IoniClientBase(ABC):
         If 'future_cycle' is not None and in the future, schedule the stop command.
         '''
         pass
-
-    def __init__(self, host, port):
-        # Note: circumvent (potentially sluggish) Windows DNS lookup:
-        self.host = '127.0.0.1' if host == 'localhost' else str(host)
-        self.port = int(port)
-
-    def __repr__(self):
-        return f"<{self.__class__.__name__} @ {self.host}[:{self.port}]>"
 

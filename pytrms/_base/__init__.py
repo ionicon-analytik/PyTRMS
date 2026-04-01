@@ -2,6 +2,7 @@ from collections import namedtuple
 
 from .mqttclient import MqttClientBase as _MqttClientBase
 from .ioniclient import IoniClientBase as _IoniClientBase
+from .ioniclient import IoniConnectBase as _IoniConnectBase
 
 class itype:
 

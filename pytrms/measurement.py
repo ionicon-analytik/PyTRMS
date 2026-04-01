@@ -11,7 +11,7 @@ from abc import abstractmethod, ABC
 
 from .readers import IoniTOFReader
 from .clients import ssevent
-from ._base import _IoniClientBase
+from ._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
 
@@ -114,7 +114,7 @@ class Measurement(ABC):
             raise TypeError(f"{cls.__name__} expected 1 positional argument, got {len(args)}")
 
         api = args[0]  # fetch it from first argument passed to __init__
-        assert isinstance(api, (_IoniClientBase)) , f"api must implement {type(_IoniClientBase)}"
+        assert isinstance(api, (_IoniConnectBase)) , f"api must implement {type(_IoniConnectBase)}"
         assert api.is_connected, f"no connection to {api}"
 
         id_passed = kwargs.get('id')  # keyword only arg!
