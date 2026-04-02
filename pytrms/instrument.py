@@ -12,39 +12,16 @@ __all__ = ['Instrument']
 
 
 class Instrument(ABC):
-    '''
+    """
     Class for controlling the PTR instrument remotely.
 
-    This class reflects the states of the actual instrument, which can be currently
-    either idle or running. A idle instrument can start a measurement. A running
-    instrument can be stopped.
+    You should be using the `pytrms.connect()` function, instead of
+    instantiating this class directly!
 
-    The `Instrument` class wraps a `backend`. For testing purposes, we use a mock:
-    >>> from pytrms.clients import dummy
-    >>> backend = dummy.IoniDummy()
+    This is a convenience wrapper around a low-level backend, which
+    can be one of MQTT, Modbus or the legacy HTTP-API for IoniTOF 4.2.
 
-    Note, that for every client PTR instrument there is only one instance of this class
-     (this is to prevent different instances to be in other states than the instrument).
-
-    >>> ptr = Instrument(backend)
-    >>> ptr
-    <_IdleInstrument [<IoniDummy @ 127.0.0.1[:1234]>]>
-
-    >>> id(ptr) == id(Instrument(dummy.IoniDummy()))  # singleton ID is always the same
-    True
-
-    Trying to start an instrument twice will raise a RuntimeError!
-
-    >>> ptr.start_measurement(filename='foo %y %M')
-    >>> ptr.is_running
-    True
-
-    >>> ptr.start_measurement()
-    Traceback (most recent call last):
-        ...
-    RuntimeError: can't start <_RunningInstrument>
-
-    '''
+    """
     __instance = None
 
     def _new_state(self, newstate):
