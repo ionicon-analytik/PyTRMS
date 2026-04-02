@@ -733,21 +733,32 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
         If 'path' is not None, write to the given .h5 file. On 'localhost'
         this will be checked and may raise `FileExistsError`.
-        '''
-        assert not self.is_running, "measurement already running"
-        assert self._overallcycle[0] == 0, "_overallcycle was not reset"
 
+        May raise a `ValueError` if measurement is already running with
+        a *different* path (or it has been altered in the meantime).
+
+        Otherwise, this is a no-op.
+        '''
         if path is not None:
             path = path.replace('/', '\\')  # IoniTOF accepts only windows style!
             path = os.path.splitext(path)[0] + ".h5"
             if self.host in ("localhost", "127.0.0.1") and os.path.exists(path):
                 raise FileExistsError(path)
 
-            self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+        if self.is_running:
+            # "half" no-op: we can ignore this, unless the caller wanted a 'path':
+            if path and path != self.current_sourcefile:
+                raise ValueError(f"measurement already running @ '{path}'")
+            return
+
+        assert self._overallcycle[0] == 0, "_overallcycle was not reset"
+
+        if path is not None:
+            self.write('ACQ_SRV_Start_Meas_Record', path)
         else:
             self.write('ACQ_SRV_Start_Meas_Quick', True)
 
-        # IoniTOF sometimes takes forever to get going:
+        # follow start-sequence: IoniTOF sometimes takes forever to get going..
         timeout_s = 60  # !
         acquiring = False
         sf_inited = False
@@ -785,8 +796,12 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         '''Stop the current measurement and block until the change is confirmed.
 
         If 'future_cycle' is not None and in the future, schedule the stop command.
+
+        This is a no-op if the measurement is already running.
         '''
-        assert self.is_running, "no measurement running"
+        if not self.is_running:
+            # nothing to do..
+            return
 
         if future_cycle is None or not future_cycle > self._overallcycle[0]:
             self.write('ACQ_SRV_Stop_Meas', True)
@@ -796,7 +811,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if future_cycle is not None:
             self.block_until(future_cycle)
         # ..for this timeout to be applicable:
-        timeout_s = 30
+        timeout_s = 20
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
             # confirm change of state:
