@@ -18,13 +18,13 @@ if platform.uname().system == "Linux":
     os.environ["DOCKER_HOST"] = "unix:///run/user/%d/docker.sock" % os.getuid()
 
 
-def make_container(image = "git.ionicon.local/ionisoft/db-api", tag = "latest"):
+def make_container(image_uri=None):
     # this is used to wait for Db-API to respond..
     start_hint = re.compile(r"in Program\.cs_Main@([0-9]+): starting web api...")
     start_verify = "/api/ping"
     api_port = 5066  # inside the container, don't change!
     return (
-        DockerContainer(image + ":" + tag)
+        DockerContainer(image_uri)
         .with_exposed_ports(api_port)
         .waiting_for(LogMessageWaitStrategy(start_hint))
         .waiting_for(HttpWaitStrategy(api_port, start_verify))
@@ -39,7 +39,8 @@ def api_container(request):
         yield 5066
 
     else:
-        with make_container() as conti:
+        image = request.config.getoption("--image")
+        with make_container(image) as conti:
             yield conti.get_exposed_port(5066)
 
 
@@ -66,6 +67,8 @@ def API(api_container):
 def pytest_addoption(parser):
     parser.addoption("--attach-running", action="store_true",
         help="assume the API is running on port 5066 and attach, instead of using a container")
+    parser.addoption("--image", type=str, default="git.ionicon.local/ionisoft/db-api:latest",
+        help="specify a docker image uri for the test container")
 
 def pytest_collection_modifyitems(config, items):
     """
@@ -87,7 +90,7 @@ if __name__ == '__main__':
 
     IMAGE = "git.ionicon.local/ionisoft/db-api"
 
-    with make_container(IMAGE, TAG) as conti:
+    with make_container(IMAGE + ':' + TAG) as conti:
         print(US, "...OK")
         print("docker container running")
         PORT = conti.get_exposed_port(5066)
