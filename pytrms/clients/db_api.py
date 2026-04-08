@@ -7,7 +7,7 @@ import urllib3.util
 
 import requests
 import requests.adapters
-import requests.exceptions
+from requests.exceptions import HTTPError, ConnectionError
 
 from .ssevent import SSEventListener
 from .._base import _IoniConnectBase
@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 _unsafe = namedtuple('http_response', ['status_code', 'href'])
 
-__all__ = ['IoniConnect']
+__all__ = ['IoniConnect', 'ConnectionError']
 
 
 class IoniConnect(_IoniConnectBase):
@@ -50,9 +50,9 @@ class IoniConnect(_IoniConnectBase):
             assert self.session is not None, "not connected"
             self.get("/api/ping")
             return True
-        except (AssertionError, requests.exceptions.ConnectionError):
+        except (AssertionError, ConnectionError):
             return False
-        except requests.exceptions.HTTPError:
+        except HTTPError:
             # wtf?!
             raise
 
@@ -63,7 +63,7 @@ class IoniConnect(_IoniConnectBase):
             assert self.session is not None, "not connected"
             self.get_location("/api/measurements/current")
             return True
-        except (AssertionError, requests.exceptions.HTTPError):
+        except (AssertionError, HTTPError):
             return False
 
     @property
@@ -81,7 +81,7 @@ class IoniConnect(_IoniConnectBase):
         self.session = None
         try:
             self.connect(timeout_s=3.3)
-        except requests.exceptions.ConnectionError:
+        except ConnectionError:
             log.warning("no connection! make sure the DB-API is running and try again")
 
     def connect(self, timeout_s=10):
@@ -121,7 +121,7 @@ class IoniConnect(_IoniConnectBase):
             log.warning(f"unexpected 'content-type: {r.headers['content-type']}'")
             return r.content
 
-        except requests.exceptions.HTTPError as e:
+        except HTTPError as e:
             if e.response.status_code == 410:  # Gone
                 log.debug(f"nothing there at '{endpoint}' 0_o ?!")
                 return None

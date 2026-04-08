@@ -52,10 +52,6 @@ ACQ_Aquire = json.dumps({
     "Header": _build_header(),
     "DataElement": _build_data_element("ACQ_Aquire")
 })
-ACQ_SRV_Schedule = json.dumps({
-    "Header": _build_header(),
-    "CMDs": []
-})
 ACQ_SRV_SpecTime_ms = json.dumps({
     "Header": _build_header(),
     "DataElement": _build_data_element(1000.0)
@@ -95,8 +91,7 @@ class IoniMock(MqttClientBase):
     def __init__(self, host='localhost', port=1883):
         super().__init__(host, port, [follow_cmd_direct])
 
-        self.publish_with_ack("DataCollection/Act/ACQ_SRV_CurrentState", ACQ_Idle,            qos=1, retain=True)
-        self.publish_with_ack("DataCollection/Act/ACQ_SRV_Schedule",     ACQ_SRV_Schedule,    qos=1, retain=True)
+        self.emulate_stop()  # initial reset
         self.publish_with_ack("DataCollection/Set/ACQ_SRV_SpecTime_ms",  ACQ_SRV_SpecTime_ms, qos=1, retain=True)
         log.info(f"[{self}] ready")
 
@@ -219,11 +214,11 @@ class IoniMock(MqttClientBase):
 
     def emulate_stop(self):
         # do what the IoniTOF would do when stopping ~> set state to IDLE and clear schedule:
-        self.publish_with_ack('DataCollection/Act/ACQ_SRV_CurrentState',        ACQ_Idle,  qos=2, retain=True)
-        self.publish_with_ack('DataCollection/Act/ACQ_SRV_Schedule',            no_CMDs,   qos=2, retain=True)
-        self.publish_with_ack('DataCollection/Act/ACQ_SRV_ScheduleClear',       the_truth, qos=2, retain=True)
-        self.publish_with_ack('DataCollection/Act/ACQ_SRV_OverallCycle',        cycle0,    qos=2, retain=True)
-        self.publish_with_ack('DataCollection/Act/ACQ_SRV_SetFullStorageFile',  no_source, qos=2, retain=True)
+        self.publish_with_ack('DataCollection/Act/ACQ_SRV_CurrentState',        ACQ_Idle,  qos=1, retain=True)
+        self.publish_with_ack('DataCollection/Act/ACQ_SRV_Schedule',            no_CMDs,   qos=1, retain=True)
+        self.publish_with_ack('DataCollection/Act/ACQ_SRV_ScheduleClear',       the_truth, qos=1, retain=True)
+        self.publish_with_ack('DataCollection/Act/ACQ_SRV_OverallCycle',        cycle0,    qos=1, retain=True)
+        self.publish_with_ack('DataCollection/Act/ACQ_SRV_SetFullStorageFile',  no_source, qos=1, retain=True)
         self.is_running = False
         if self.t is not None:
             self.t.join()

@@ -16,6 +16,7 @@ __all__ = ['Componist']
 @contextlib.contextmanager
 def double_lock(api, mq):
     ## implement a "double-lock" for capturing either api- or mqtt-stop-mechanism
+    ## by running two inter-dependent threads that each wait on the respective case
     import threading
 
     href = api.get_location("/api/measurements/current")  # may raise!
@@ -24,13 +25,19 @@ def double_lock(api, mq):
         while mq.is_running:   # waits for other thread..
             time.sleep(50e-3)
         log.debug(f"[{threading.current_thread().name}] { mq.is_running = }, stopping api...")
-        sc, loc = api.patch(href, { "isRunning": False })
+        try:
+            api.patch(href, { "isRunning": False })  # (emits 'stop measurement')
+        except db_api.ConnectionError:
+            # API is down, so will be the other thread..
+            pass
 
     def wait_for_api():
-        e = next(api.iter_events())  # waits for other thread..
-        if not e.event.startswith("stop"):
-            log.error(f"[{threading.current_thread().name}] unexpected event: '{e.event}'")
-        log.debug(f"[{threading.current_thread().name}] got:{ e.event = }, stopping mqtt...")
+        stop_event = api.iter_events("stop measurement")
+        try:
+            e = next(stop_event)  # waits for other thread..
+            log.debug(f"[{threading.current_thread().name}] got:{ e.event = }, stopping mqtt...")
+        except StopIteration:
+            log.warning(f"API seems down, clearing double_lock by force-stopping instrument")
         mq.stop_measurement()  # (no-op if already stopped)
 
     # use:
@@ -53,28 +60,64 @@ class Componist:
     and the PTR-Instrument (over MQTT). 
     """
 
-    def __init__(self, host, port, *, mqtt_host=None, mqtt_port=None):
-        mqtt_host = mqtt_host or host
-        mqtt_port = mqtt_port or port
+    def __init__(self, api_client, mqtt_client):
+        self.api = api_client
+        self.mq = mqtt_client
 
-        self.api = db_api.IoniConnect(host, port)
-        log.debug(f"{ self.api = }")
-        assert self.api.is_connected, "no connection to database"
+    def run_forever(self):
+        """Run the Componist as a daemon.
 
-        self.mq = mqtt.MqttClient(mqtt_host, mqtt_port)
-        log.debug(f"{ self.mq = }")
-        assert self.mq.is_connected, "no connection to instrument"
+        This checks for the clients to be connected and re-connects as neccessary.
+
+        A CTRL-C signal (SIGINT) will stop the daemon.
+        """
+        retries = 0
+        while True:
+            try:
+                if not self.mq.is_connected: self.mq.connect()
+                if not self.api.is_connected: self.api.connect()
+
+                log.info(f"connected to both {self.api} and {self.mq}")
+                self.run_once()
+            except (TimeoutError, AssertionError) as exc:
+                log.error(str(exc))
+                retries += 1
+                log.warning(f"reconnection attempt ({retries})")
+                continue
+            except (db_api.ConnectionError) as exc:
+                log.error(str(exc))
+                if self.mq.is_connected:
+                    log.warning("force-stopping instrument to preserve database consistency")
+                    self.mq.stop_measurement()
+                continue
+            except KeyboardInterrupt:
+                log.warning(f"terminated by user (KeyboardInterrupt)")
+                return
 
     def run_once(self):
-        api = self.api
-        mq = self.mq
+        """Initialize the start-sequence and wait for a 'new measurement' event.
+
+        Keeps scheduling until either a 'stop measurement' event is received or
+        the instrument is forcibly stopped. The instrument is put under control
+        of the Componist while this method is blocking.
+        """
+
+# TODO : smth to watch out for...
+
+#   except json.decoder.JSONDecodeError as json_hint:
+#       log.error(f"Parsing error in JSON file: {json_hint}")
+#       rc = (30)
+#   except FileNotFoundError as missing_file:
+#       log.error(f"The specified file was not found: '{missing_file}'")
+#       rc = (21)
+
 
         # 1. subscribe, so we catch all further changes:
-        events = api.iter_events(r'(new|start|stop) measurement')
+        events = self.api.iter_events(r'(new|start|stop) measurement')
 
         # 2. then initialize the current state of affairs:
-        current_meas = api.get("/api/measurements/current")
-        mq_is_running = mq.is_running  # avoid race-condition
+        current_meas = self.api.get("/api/measurements/current")
+        mq_is_running = self.mq.is_running  # avoid race-condition
         # two bools make 4 cases..
         if current_meas is None:
             if not mq_is_running:
@@ -91,7 +134,7 @@ class Componist:
                 # not OK! let the api know about the actual state:
                 log.warning(f"clearing current measurement slot from previous run")
                 href = current_meas["_links"]["self"]["href"]
-                sc, loc = api.patch(href, { "isRunning": False })
+                sc, loc = self.api.patch(href, { "isRunning": False })
                 assert sc == 204, f"unexpected status-code [{sc}] for {loc}"
                 # Bug! THIS DOESN'T WORK, because the '.iter_events()'
                 #  is (still) not being primed for some reason (this
@@ -99,7 +142,7 @@ class Componist:
                 #  don't wait for ourselves). We can do without..
                 #e = next(events)
                 #assert e.event.startswith("stop"), f"unexpected event: '{e.event}'"
-                assert api.get("/api/measurements/current") is None, "unexpected: meas/current not empty"
+                assert self.api.get("/api/measurements/current") is None, "unexpected: meas/current not empty"
 
         # 3. good, all we gotta do now is wait:
         log.info("waiting for new measurement event...")
@@ -109,12 +152,12 @@ class Componist:
         assert e.event.startswith("new"), f"unexpected event: {e.event}"
         #  ..however, we have no choice but to force-stop IoniTOF in
         #  this case to keep everything consistent:
-        if mq.is_running:
+        if self.mq.is_running:
             log.warning(f"force-stopping IoniTOF in response to {e.event}")
-            mq.stop_measurement()
+            self.mq.stop_measurement()
 
         # 4. the state is now 'new measurement' and we manage the start-up:
-        current_meas = api.get(e.data)
+        current_meas = self.api.get(e.data)
         href = current_meas["_links"]["self"]["href"]
         master_recipe_dir = current_meas["recipeDirectory"]
 
@@ -135,13 +178,13 @@ class Componist:
         # das *koennte* man vll. optional machen.. fuer's REPLAY ist's eh ein bischen unpraktisch
 
 
-  #     mq.start_measurement(master_recipe_dir2recipe_h5_file)
+  #     self.mq.start_measurement(master_recipe_dir2recipe_h5_file)
 #         A__ this may raise  if itof is already running!!
-        mq.start_measurement()  # blocks..
+        self.mq.start_measurement()  # blocks..
         ##<<<<<<
 
         # confirm the state on the api:
-        sc, loc = api.patch(href, { "isRunning": True })
+        sc, loc = self.api.patch(href, { "isRunning": True })
         assert sc == 204, f"unexpected status-code [{sc}] for {loc}"
         e = next(events)
         assert e.event.startswith("start"), f"unexpected event: {e.event}"
@@ -153,8 +196,8 @@ class Componist:
         #    OR mq.is_running == False
         #   ~> clean up the state again and start over (in the daemon case)
 
-        with double_lock(api, mq):
-            while mq.is_running:
+        with double_lock(self.api, self.mq):
+            while self.mq.is_running:
                 log.info("keep scheduling..."); time.sleep(5)
                 # siehe componist
 
