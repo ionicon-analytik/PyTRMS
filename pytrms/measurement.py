@@ -16,84 +16,70 @@ __all__ = ['Measurement']
 
 
 class Measurement(ABC):
-    """Class for PTRMS-measurements and batch processing.
+    """Class for AME-measurements and batch (post)-processing.
 
-    Synchronizes with the database API.
+    Synchronizes with the database API to conduct new measurements.
 
-    In the online case, this would slowly produce the current trace, one
-    after another.
-    In the offline case, this would quickly iterate over the traces in the given
-    measurement file.
+    The following shows some example outputs of attaching to a
+    measurement on the database API that we need to connect to:
+    >>> api = pytrms.clients.db_api.IoniConnect()           # doctest: +SKIP
 
-    ???
+    The keyword argument must be one of `id` (defaults to 'last')...
+    >>> Measurement(api)                                    # doctest: +SKIP
+    <PreparingMeasurement ...>
+    >>> Measurement(api, id=5)                              # doctest: +SKIP
+    <FinishedMeasurement [id=5] @ 'uno'>
+    >>> Measurement(api, id='current')                      # doctest: +SKIP
+    <RunningMeasurement ...>
+    >>> Measurement(api, id='last')                         # doctest: +SKIP
+    <FinishedMeasurement ...>
 
-    # WAS WOLLEN WIR HIER EIGENTLICH??
-    # a) diesen praktischen iterator (sourcefile, specdata) erhalten
-    # b) start/stop "Protokoll" implementieren (geht schon, s.u.)
-    #KANN AUS DB_API.py wieder raus !!
-    # c) [future] einen schoenen Zugang zum batch-processing schaffen
+    ...or `recipe` for a new measurement that has not been started:
+    >>> Measurement(api, recipe='uno')                      # doctest: +SKIP
+    <PreparingMeasurement [id=??] @ 'uno'>
 
-# EDIT -------------------------------------------- EDIT
-#
-# neue IDee: wir haben IMMER eine Url (und ein Ioniconnect)
-#
-# ~> dies IST der db-synchronisator
-# => 
-#
-#
-# EDIT -------------------------------------------- EDIT
+    A `PreparingMeasurement` has no url and no filenames, because
+    it does not yet exist on the API. But it can be started and
+    made to change its state in sync with the AME system:
+    >>> m = Measurement(api, recipe='my_recipe')            # doctest: +SKIP
+    >>> m.start(singleSpecDuration_ms=3000.0)               # doctest: +SKIP
+    >>> m                                                   # doctest: +SKIP
+    <RunningMeasurement ...>
+    >>> m.url                                               # doctest: +SKIP
+    /api/measurements/6
 
-        # 4 faelle:
-        #  entweder es wird eine URL konkret angegeben:
-        #  => dann kennt der user bereits die Messung, sie kann laufen oder nicht
-        # oder es wird KEINE Url angegeben,
-        # => dann will der user entweder Preparen (noch keine URL) und dann ~> POST
-        #    oder er kennt sie noch nicht und will die laufende Messung haben
+    The sourcefiles will be synchronized with the API and be
+    made available for batch processing:
+    >>> batch = Measurement(api, id='last?stopped=true')    # doctest: +SKIP
+    <FinishedMeasurement ...>
+    >>> batch.filenames                                     # doctest: +SKIP
+    ["D:/AMEData/yesterday/one.h5, ... ]
 
-
-#       # ~> Was mir *daran* nicht gefaellt ist eben der Error !
-#       #  ich will einfach NUR attach'en und dann seh ich ja, was der zustand ist
-
-#       # was WILL man denn? Es gibt doch nur 2 use-cases (weniger als moegliche cases)
-#       # a) online: Dann evtl. starten ~~> also NIHCT last, sonder NEU
-#       # b) offline/batch processing ~> dann auch NICHT das running/current..
-#       # c) neue batch anlegen aus .h5 files
-#       # [d) neu starten, aber dann muss man a) auch sehen, was sache ist!]
-
-#       # aber stop ~> wird zum last..
-#       # Ja, schon klar, nur will ich ja den JETZT zustand abbilden
-#       def attach(api):
-#           if api.is_running:
-#               loc = api._get_location("/api/measurements/current")
-#               return RunningMeasurement(api, loc)
-#           else:
-#               return PreparingMeasurement(api, '')
     """
 
-    # TODO :: ich will hier die API ins Zentrum stellen!
-    #  meas hat eine .url, die es identifiziert (s.u.)
-    #  die sourcefiles werden dann von der API geladen (lazy)
-    ##  ... bzw. man kann eine neue batch zusammenstellen und hochladen
+    # TODO :: 
+    # - [x] ich will hier die API ins Zentrum stellen!
+    # - [ ] meas hat eine .url, die es identifiziert (s.u.)
+    # - [ ] die sourcefiles werden dann von der API geladen (lazy)
+    # - [ ]  ... bzw. man kann eine neue batch zusammenstellen und hochladen
     #  
-    #  wir haben diese __iter__ dinger jetzt im peakdame.helpers !
+    # - [ ] wir haben diese __iter__ dinger jetzt im peakdame.helpers !
     #  ..aber unten verweist das eh nur auf reader.iter_specdata() UND 
     #    ausserdem ist das nicht aktuell, weil der kein (file, specdata)
     #    iteriert!! 
     #### ~~> besser in eine separate Funktion oder so (um das "austauschbar" zu haben)
     #  
-    #  "backend" (ptr) kommt weg! Dafuer kann man ein Instrument hernehmen.
-    #  zum "starten" wird hier NUR auf die API geposted und dann auf AME
-    #  GEWARTET dass es aktiv wird: { "isRunning": True }
+    # - [x] "backend" (ptr) kommt weg! Dafuer kann man ein Instrument hernehmen.
+    # - [x] zum "starten" wird hier NUR auf die API geposted und dann auf AME
+    #       GEWARTET dass es aktiv wird: { "isRunning": True }
 
-    #  Der state haengt also ganz klar an der API: 
-    #  - es gibt genau 0 oder 1 'current' / RunningMeasurement
-    #  - ein PreparingMeasurement kann gestartet werden, genau dann
-    #    wenn die API es zulaesst (kein anderes running) ~> POST
-    #  - ein FinishedMeasurement laedt seine sourcefiles von der API
-    #  - [evtl. auch Funktion, um neue batch zu erstellen, die aber nicht
-    #     gestartet wird 
-    #         TODOO :: kann die API fordern, dass nur Measurement ohne
-    #     #             /sourcefiles gestartet werden koennen)
+    #  - [x] Der state haengt also ganz klar an der API: 
+    #  - [x] es gibt genau 0 oder 1 'current' / RunningMeasurement
+    #  - [x] ein PreparingMeasurement kann gestartet werden, genau dann
+    #        wenn die API es zulaesst (kein anderes running) ~> POST
+    #  - [x] ein FinishedMeasurement laedt seine sourcefiles von der API
+    #  - [ ] [evtl. auch Funktion, um neue batch zu erstellen, die aber nicht
+    #         gestartet wird 
 
     def _new_state(self, newstate):
         assert issubclass(newstate, Measurement), "invalid call to _new_state"
@@ -115,15 +101,19 @@ class Measurement(ABC):
         assert isinstance(api, (_IoniConnectBase)) , f"api must implement {type(_IoniConnectBase)}"
         assert api.is_connected, f"no connection to {api}"
 
-        id_passed = kwargs.get('id')  # keyword only arg!
+        if 'id' in kwargs and 'recipe' in kwargs:
+            raise TypeError("keyword arguments 'id' and 'recipe' are mutually exclusive")
 
-        if id_passed is None:
-            cls = PreparingMeasurement
-
-        if cls is PreparingMeasurement:
-            inst = object.__new__(cls)
+        if 'recipe' in kwargs:
+            inst = object.__new__(PreparingMeasurement)
             inst._id = None
+            inst._recipe = str(kwargs['recipe'])
+
+            api.get_location("/api/recipes/" + inst._recipe)  # may throw!
+
             return inst
+
+        id_passed = kwargs.get('id', "last")
 
         if cls is not Measurement:
             log.warning(f"direct init of '{cls.__name__}', I hope you know what you're doing!")
@@ -135,22 +125,25 @@ class Measurement(ABC):
         url_resolved = api.get_location("/api/measurements/" + str(id_passed))  # may throw!
 
         j = api.get(url_resolved)
-        if j["startDateTime"] is None:
+        if j["startTimestamp_UTC"] is None:
             inst = object.__new__(PreparingMeasurement)
             inst._id = j["measurementID"]
+            inst._recipe = j["recipeDirectory"].split('/')[-1]
             return inst
 
-        if j["stopDateTime"] is None:
+        if j["stopTimestamp_UTC"] is None:
             inst = object.__new__(RunningMeasurement)
             inst._id = j["measurementID"]
+            inst._recipe = j["recipeDirectory"].split('/')[-1]
             return inst
 
         if True:
             inst = object.__new__(FinishedMeasurement)
             inst._id = j["measurementID"]
+            inst._recipe = j["recipeDirectory"].split('/')[-1]
             return inst
 
-        raise RuntimeError("invalid program: we should not have come here")
+        raise RuntimeError("invalid program: we should never have come here")
 
     @property
     def id(self):
@@ -172,13 +165,6 @@ class Measurement(ABC):
         `pytrms.instrument.Instrument` for more direct control.
         """
         return type(self) is RunningMeasurement
-
-    @property
-    def info(self):
-        j = self.api.get(self.url)
-        del j["_links"]
-        del j["_embedded"]
-        return j
 
     @property
     def filenames(self):
@@ -209,80 +195,38 @@ class Measurement(ABC):
         return None
 
 
-    def __init__(self, api, *, id="last"):
+    _id = None
+    _recipe = None
+
+    def __init__(self, api, *, id=None, recipe=None):
         self.api = api
 
     def __eq__(self, other):
-        return isinstance(other, Measurement) and other._id == self._id
+        return isinstance(other, Measurement) and hash(other) == hash(self)
 
     def __hash__(self):
-        return hash(self.url)  # self._id would work, but it's boring (1-based)
+        return hash(self._recipe + str(self._id)) if self._id else hash(self._recipe)
 
     def __repr__(self):
-        return f"<{type(self).__name__} @ {self.url}>"
+        return f"<{type(self).__name__} [id={self._id if self._id else '??'}] @ '{self._recipe}'>"
 
 
 class PreparingMeasurement(Measurement):
-    """
 
-    ## TODO :: wer setzt jetzt diese ganzen properties, wenn
-    ### wir nur noch die payload POST'en ???
-    #
-    # da muss "jemand" auf ein 'new measurement' event hoeren..
-
-    @property
-    def single_spec_duration_ms(self):
-        return self.ptr.get('ACQ_SRV_SpecTime_ms')
-
-    @single_spec_duration_ms.setter
-    def single_spec_duration_ms(self, value):
-        self.ptr.set('ACQ_SRV_SpecTime_ms', int(value), unit='ms')
-
-    @property
-    def extraction_time_us(self):
-        return self.ptr.get('ACQ_SRV_ExtractTime')
-
-    @extraction_time_us.setter
-    def extraction_time_us(self, value):
-        self.ptr.set('ACQ_SRV_ExtractTime', int(value), unit='us')
-
-    @property
-    def max_flight_time_us(self):
-        return self.ptr.get('ACQ_SRV_MaxFlighttime')
-
-    @max_flight_time_us.setter
-    def max_flight_time_us(self, value):
-        self.ptr.set('ACQ_SRV_MaxFlighttime', int(value), unit='us')
-
-    @property
-    def expected_mass_range_amu(self):
-        return self.ptr.get('ACQ_SRV_ExpectMRange')
-
-    @expected_mass_range_amu.setter
-    def expected_mass_range_amu(self, value):
-        self.ptr.set('ACQ_SRV_ExpectMRange', int(value), unit='amu')
-
-    """
-
-    def start(self, recipeDirectory, *
-              , singleSpecDuration_ms=1000.0
-            # , pulsingPeriod_ns=0.0
-            # , startDelay_ns=0.0
-            # , timebinWidth_ps=0.0
-            # , poissonDeadtime_ns=0.0
-            # , numberOfTimebins=0.0
-              # TODO :: ~> inst_info oder @property info oder so (kann auch api noch anpassen..)
-              #  was ist hier ueberhaupt relevant? timebinWidth_ps schon, aber nur read-only ?!
-          ):
+    def start(self, *, singleSpecDuration_ms=1000.0):
         """Start a measurement via the AME system.
+
+        The `recipeDirectory` must be the name of a valid (master) recipe,
+        which is usually found in `C:/Ionicon/AME/Recipes`.
+
+        Keyword arguments are passed with the payload of the POST request.
 
         Note: This does *not* start the PTR instrument directly, but instead
          signals AME to start a new measurement out of the given `recipeDirectory`.
 
-        Keyword arguments are passed with the payload of the POST request.
         """
         payload = {
-            "recipeDirectory": str(recipeDirectory),
+            "recipeDirectory": self._recipe,
             "singleSpecDuration_ms": float(singleSpecDuration_ms),
         }
         # first, set us up to check the correct ordering of events:
@@ -332,7 +276,7 @@ class RunningMeasurement(Measurement):
         attaching to running measurement).
 
         """
-        # Note: this will usually only be called by our peakd'ame,
+        # Note: this will usually only be called by our peakd'AME,
         #  who's following along the IoniTOF's current sourcefile.
 
         if filename in self.filenames:
