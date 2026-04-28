@@ -6,13 +6,7 @@
 # the local computer and is running a 'webAPI' server    #
 #                                                        #
 ##########################################################
-try:
-    import pytrms
-except ModuleNotFoundError:
-    # find module if running from the example folder
-    # in a cloned repository from GitHub:
-    sys.path.insert(0, join(dirname(__file__), '..'))
-    import pytrms
+import pytrms
 
 ptr = pytrms.connect('localhost')
 

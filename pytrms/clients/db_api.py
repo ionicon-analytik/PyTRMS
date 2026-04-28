@@ -7,19 +7,19 @@ import urllib3.util
 
 import requests
 import requests.adapters
-import requests.exceptions
+from requests.exceptions import HTTPError, ConnectionError
 
 from .ssevent import SSEventListener
-from .._base import _IoniClientBase
+from .._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
 
 _unsafe = namedtuple('http_response', ['status_code', 'href'])
 
-__all__ = ['IoniConnect']
+__all__ = ['IoniConnect', 'ConnectionError']
 
 
-class IoniConnect(_IoniClientBase):
+class IoniConnect(_IoniConnectBase):
 
     # Note: this retry-policy is specifically designed for the
     #  SQLite Error 5: 'database locked', which may take potentially
@@ -48,10 +48,13 @@ class IoniConnect(_IoniClientBase):
         '''Returns `True` if connection to IoniTOF could be established.'''
         try:
             assert self.session is not None, "not connected"
-            self.get("/api/status")
+            self.get("/api/ping")
             return True
-        except:
+        except (AssertionError, ConnectionError):
             return False
+        except HTTPError:
+            # wtf?!
+            raise
 
     @property
     def is_running(self):
@@ -60,67 +63,47 @@ class IoniConnect(_IoniClientBase):
             assert self.session is not None, "not connected"
             self.get_location("/api/measurements/current")
             return True
-        except (AssertionError, requests.exceptions.HTTPError):
+        except (AssertionError, HTTPError):
             return False
 
-    def connect(self, timeout_s=10):
-        self.session = requests.sessions.Session()
-        self.session.mount('http://',  self._http_adapter)
-        self.session.mount('https://', self._http_adapter)
+    @property
+    def status(self):
+        '''Show the status of the API.'''
         try:
-            self.current_meas_loc = self.get_location("/api/measurements/current")
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 410:  # Gone
-                # OK, no measurement running..
-                self.current_meas_loc = ''
-                return
-        except requests.exceptions.ConnectionError as e:
-            self.session = self.current_meas_loc = None
-            log.error(f"{type(e).__name__}: {str(e)}")
-            raise
-
-    def disconnect(self):
-        if self.session is not None:
-            del self.session
-            self.session = None
-            self.current_meas_loc = None
-
-    def start_measurement(self, path=None):
-        '''Start a new measurement and block until the change is confirmed.
-
-        If 'path' is not None, write to the given .h5 file.
-        '''
-        assert not self.is_running, "measurement already running @ " + str(self.current_meas_loc)
-
-        payload = {}
-        if path is not None:
-            assert os.path.isdir(path), "must point to a (recipe-)directory: " + str(path)
-            payload |= { "recipeDirectory": str(path) }
-
-        self.current_meas_loc = self.post("/api/measurements", payload)
-        self.put(self.current_meas_loc, { "isRunning": True })
-
-        return self.current_meas_loc
-
-    def stop_measurement(self, future_cycle=None):
-        '''Stop the current measurement and block until the change is confirmed.
-
-        If 'future_cycle' is not None and in the future, schedule the stop command.
-        '''
-        loc = self.current_meas_loc or self.get_location("/api/measurements/current")
-        self.patch(loc, { "isRunning": False })
-        self.current_meas_loc = ''
+            return self.get("/api/status")
+        except:
+            return "not connected"
 
     def __init__(self, host='127.0.0.1', port=5066):
         super().__init__(host, port)
         self.url = f"http://{self.host}:{self.port}"
         self._http_adapter = requests.adapters.HTTPAdapter(max_retries=self._retry_policy)
         self.session = None
-        self.current_meas_loc = None
         try:
             self.connect(timeout_s=3.3)
-        except requests.exceptions.ConnectionError:
+        except ConnectionError:
             log.warning("no connection! make sure the DB-API is running and try again")
+
+    def connect(self, timeout_s=10):
+        if self.session is None:
+            self.session = requests.sessions.Session()
+            self.session.mount('http://',  self._http_adapter)
+            self.session.mount('https://', self._http_adapter)
+
+        started_at = time.monotonic()
+        while time.monotonic() < started_at + timeout_s:
+            if self.is_connected:
+                break
+
+            time.sleep(10e-3)
+        else:
+            self.disconnect()
+            raise TimeoutError(f"[{self}] no connection to server")
+
+    def disconnect(self):
+        if self.session is not None:
+            del self.session
+            self.session = None
 
     def get(self, endpoint, **kwargs):
         """Make a GET request to `endpoint` and parse JSON if applicable."""
@@ -138,9 +121,9 @@ class IoniConnect(_IoniClientBase):
             log.warning(f"unexpected 'content-type: {r.headers['content-type']}'")
             return r.content
 
-        except requests.exceptions.HTTPError as e:
+        except HTTPError as e:
             if e.response.status_code == 410:  # Gone
-                log.debug(f"nothing there at '{endpoint}' 0_o ?!")
+                log.debug(f"nothing there at '{endpoint}' ...")
                 return None
             raise
 
@@ -400,8 +383,8 @@ class IoniConnect(_IoniClientBase):
          stream-implementation), unless the server sends a keep-alive at regular
          intervals (as every well-behaved server should be doing)!
         """
-        # Note: DO NOT inject our `requests.session` with the 'session' kw-arg!!
-        #  For some unknown reason this didn't work. Maybe in combination with
-        #  the new _http_adapter? Who knows.. let the listener use its own session:
+        # Note: DO NOT inject our `requests.session` with the 'session' kw-arg!
+        #  This "obviously" doesn't work, because the TCP stream will
+        #  block forever, thereby interfering with all other requests.
         yield from SSEventListener(event_re, host_url=self.url, endpoint="/api/events")
 

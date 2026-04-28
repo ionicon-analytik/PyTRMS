@@ -733,6 +733,11 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
         If 'path' is not None, write to the given .h5 file. On 'localhost'
         this will be checked and may raise `FileExistsError`.
+
+        May raise a `ValueError` if measurement is already running with
+        a *different* path (or it has been altered in the meantime).
+
+        Otherwise, this is a no-op.
         '''
         if path is not None:
             path = path.replace('/', '\\')  # IoniTOF accepts only windows style!
@@ -740,16 +745,51 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             if self.host in ("localhost", "127.0.0.1") and os.path.exists(path):
                 raise FileExistsError(path)
 
-            self.write('ACQ_SRV_Start_Meas_Record', path.replace('/', '\\'))
+        if self.is_running:
+            # "half" no-op: we can ignore this, unless the caller wanted a 'path':
+            if path and path != self.current_sourcefile:
+                raise ValueError(f"measurement already running @ '{path}'")
+            return
+
+        if self._overallcycle[0] != 0:
+            log.warning("_overallcycle was not reset by IoniTOF! forcing...")
+            self._overallcycle.append(0)
+
+        if path is not None:
+            self.write('ACQ_SRV_Start_Meas_Record', path)
         else:
             self.write('ACQ_SRV_Start_Meas_Quick', True)
-        timeout_s = 30
+
+        # follow start-sequence: IoniTOF sometimes takes forever to get going..
+        timeout_s = 60  # !
+        acquiring = False
+        sf_inited = False
+        cyc_reset = False
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
-            if self.is_running:
-                break
+            # (for development: IoniTOF4.0 *currently* has this sequence of events...)
+            #print(time.monotonic() - started_at, self._overallcycle, self._sf_filename, self._server_state)
 
             time.sleep(10e-3)
+            if not acquiring:
+                if self._server_state[0] == 'ACQ_Aquire':
+                    log.debug(f"start-sequence: { self._server_state = }")
+                    acquiring = True
+                continue
+
+            if not sf_inited:
+                if self._sf_filename[0] != '':
+                    log.debug(f"start-sequence: { self._sf_filename = }")
+                    sf_inited = True
+                continue
+
+            if not cyc_reset:
+                if self._overallcycle[0] == 0:
+                    log.debug(f"start-sequence: { self._overallcycle = }")
+                    log.debug(f"start-sequence: { self.is_running = }")
+                    break
+                continue
+
         else:
             self.disconnect()
             raise TimeoutError(f"[{self}] error starting measurement")
@@ -757,7 +797,14 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     def stop_measurement(self, future_cycle=None):
         '''Stop the current measurement and block until the change is confirmed.
 
-        If 'future_cycle' is not None and in the future, schedule the stop command.'''
+        If 'future_cycle' is not None and in the future, schedule the stop command.
+
+        This is a no-op if the measurement is already running.
+        '''
+        if not self.is_running:
+            # nothing to do..
+            return
+
         if future_cycle is None or not future_cycle > self._overallcycle[0]:
             self.write('ACQ_SRV_Stop_Meas', True)
         else:
@@ -766,7 +813,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         if future_cycle is not None:
             self.block_until(future_cycle)
         # ..for this timeout to be applicable:
-        timeout_s = 30
+        timeout_s = 20
         started_at = time.monotonic()
         while time.monotonic() < started_at + timeout_s:
             # confirm change of state:

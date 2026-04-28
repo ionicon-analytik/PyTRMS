@@ -5,6 +5,7 @@ from collections import namedtuple
 from collections.abc import Iterable
 
 import requests
+import requests.exceptions
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +101,9 @@ class SSEventListener(Iterable):
                     msg += val.lstrip()
                 else:
                     log.warning(f"unknown SSE-key <{key}> in stream")
+        except requests.exceptions.ChunkedEncodingError:
+            # (Response ended prematurely) API is down, no point in waiting:
+            return  # (raises StopIteration)
         finally:
             _response.close()
             log.debug(f"closed connection to {self.uri}")

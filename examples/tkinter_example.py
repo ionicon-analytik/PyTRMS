@@ -6,16 +6,7 @@
 # the local computer and is running a 'webAPI' server    #
 #                                                        #
 ##########################################################
-try:
-    import pytrms
-except ModuleNotFoundError:
-    # find module if running from the example folder
-    # in a cloned repository from GitHub:
-    sys.path.insert(0, join(dirname(__file__), '..'))
-    import pytrms
-
 import tkinter as tk
-
 import matplotlib
 matplotlib.use('TKAgg')
 
@@ -26,6 +17,8 @@ from matplotlib.backends.backend_tkagg import (
 )
 
 from numpy.random import random
+
+import pytrms
 
 
 class MainFrame(tk.Frame):
@@ -83,7 +76,7 @@ class MainFrame(tk.Frame):
         self.axes.set_ylim([0,1])
         self.line, = self.axes.plot(random(5))
         figure_canvas.get_tk_widget().pack(side=tk.BOTTOM, fill=tk.BOTH, expand=1)
-    
+
     def make_menu(self):
         menu = tk.Menu(self.master)
 
@@ -143,8 +136,8 @@ if __name__ == '__main__':
 
     root = tk.Tk()
     root.geometry("640x480")
-    
+
     app = MainFrame(root)
-    
+
     app.mainloop() 
 
