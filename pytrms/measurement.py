@@ -3,13 +3,10 @@
 
 """
 import time
-import json
 import logging
 from operator import attrgetter, itemgetter
-from itertools import chain
 from abc import abstractmethod, ABC
 
-from .readers import IoniTOFReader
 from .clients import ssevent
 from ._base import _IoniConnectBase
 
@@ -107,7 +104,8 @@ class Measurement(ABC):
         # Note (reminder): If __new__() does not return an instance of cls,
         #  then the new instance’s __init__() method will *not* be invoked!
         #  => OK, but we *always* return an `isinstance(.., Measurement)`
-        #     so __init__() will be invoked.
+        #     so __init__() *will* be invoked: That's why the subclasses
+        #     should not define their own, unless the arguments really match!
         if not len(args):
             raise TypeError(f"{cls.__name__} missing 1 required positional argument: 'api'")
         if len(args) > 1:
@@ -265,9 +263,6 @@ class PreparingMeasurement(Measurement):
         self.ptr.set('ACQ_SRV_ExpectMRange', int(value), unit='amu')
 
     """
-
-    def __init__(self, api):
-        self.api = api
 
     def start(self, recipeDirectory, *
               , singleSpecDuration_ms=1000.0

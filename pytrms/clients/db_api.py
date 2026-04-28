@@ -123,7 +123,7 @@ class IoniConnect(_IoniConnectBase):
 
         except HTTPError as e:
             if e.response.status_code == 410:  # Gone
-                log.debug(f"nothing there at '{endpoint}' 0_o ?!")
+                log.debug(f"nothing there at '{endpoint}' ...")
                 return None
             raise
 

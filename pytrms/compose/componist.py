@@ -84,7 +84,8 @@ class Componist:
                 retries += 1
                 log.warning(f"reconnection attempt ({retries})")
                 continue
-            except (db_api.ConnectionError) as exc:
+            except (db_api.ConnectionError, StopIteration) as exc:
+                # Note: StopIteration from next(events)..
                 log.error(str(exc))
                 if self.mq.is_connected:
                     log.warning("force-stopping instrument to preserve database consistency")
@@ -102,7 +103,7 @@ class Componist:
         of the Componist while this method is blocking.
         """
 
-# TODO : smth to watch out for...
+#>>>>>>>> TODO : smth to watch out for...
 
 #   except json.decoder.JSONDecodeError as json_hint:
 #       log.error(f"Parsing error in JSON file: {json_hint}")
@@ -110,6 +111,7 @@ class Componist:
 #   except FileNotFoundError as missing_file:
 #       log.error(f"The specified file was not found: '{missing_file}'")
 #       rc = (21)
+#<<<<<<TODO
 
 
         # 1. subscribe, so we catch all further changes:
@@ -181,7 +183,7 @@ class Componist:
   #     self.mq.start_measurement(master_recipe_dir2recipe_h5_file)
 #         A__ this may raise  if itof is already running!!
         self.mq.start_measurement()  # blocks..
-        ##<<<<<<
+        ##<<<<<<TODO
 
         # confirm the state on the api:
         sc, loc = self.api.patch(href, { "isRunning": True })

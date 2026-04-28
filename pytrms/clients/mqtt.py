@@ -751,7 +751,9 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
                 raise ValueError(f"measurement already running @ '{path}'")
             return
 
-        assert self._overallcycle[0] == 0, "_overallcycle was not reset"
+        if self._overallcycle[0] != 0:
+            log.warning("_overallcycle was not reset by IoniTOF! forcing...")
+            self._overallcycle.append(0)
 
         if path is not None:
             self.write('ACQ_SRV_Start_Meas_Record', path)
