@@ -4,25 +4,23 @@
 #                                               #
 #                                               #
 #################################################
-import winsound
+import pytrms
 
 try:
-    import pytrms
+    from winsound import Beep
 except ModuleNotFoundError:
-    # find module if running from the example folder
-    # in a cloned repository from GitHub:
-    sys.path.insert(0, join(dirname(__file__), '..'))
-    import pytrms
+    Beep = print
+    Beep("run `pip install winsound` for the real experience")
 
 
 def BeepStart():
-    winsound.Beep(440, 500)
-    winsound.Beep(660, 500)
-    winsound.Beep(880, 500)
+    Beep(440, 500)
+    Beep(660, 500)
+    Beep(880, 500)
 
 def BeepStop():
-    winsound.Beep(660, 500)
-    winsound.Beep(330, 1500)
+    Beep(660, 500)
+    Beep(330, 1500)
 
 
 ptr = pytrms.connect('localhost')
