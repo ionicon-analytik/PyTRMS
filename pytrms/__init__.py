@@ -48,27 +48,25 @@ def enable_extended_logging(log_level=logging.DEBUG):
 
 
 def load(path):
-    '''Open a datafile for post-analysis or batch processing.
+    """Open a datafile for post-analysis or batch processing.
 
-    `path` may be a glob-expression to collect a whole batch.
-
-    returns a `Measurement` instance.
-    '''
+    """
     import glob
-    from .measurement import FinishedMeasurement
+    from .batch import Batch
 
     files = glob.glob(path)
 
-    return FinishedMeasurement(*files)
+  # return Batch(*files)
+    return Batch([str(path)])  # let's start with 1 file (as in README)
 
 
 def connect(host='localhost', port=None, method='mqtt'):
-    '''Connect a client to a running measurement server.
+    """Connect a client to a running measurement server.
 
     'method' is the preferred connection, either 'mqtt' (default), 'webapi' or 'modbus'.
 
     returns an `Instrument` if connected successfully.
-    '''
+    """
     from .instrument import Instrument
 
     if method.lower() == 'mqtt':
