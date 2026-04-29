@@ -1,9 +1,12 @@
 #################################################
 #                                               #
-# Script for defined breath measurements        #
+# Script for defined breath measurements.       #
 #                                               #
+# > see 'breath_processing.py' for analysis!    #
 #                                               #
 #################################################
+import time
+
 import pytrms
 
 try:
@@ -31,31 +34,27 @@ path = 'D:/Data/' + filename
 
 print('please wait to exhale until told.')
 
-ptr.start(path)
+ptr.start_measurement(path)
 time.sleep(10)
 
 BeepStart()
 print('Exhale now!')
-time.sleep(110)
+time.sleep(75)
 
 print('Ready to stop.')
 time.sleep(10)
 BeepStop()
 
-ptr.stop()
+ptr.stop_measurement()
 
-filename = time.strftime(filename, time.localtime())
-path = os.path.join(folder, filename)
-
-print('commencing with BG measurement in 1 minute...')
+print('commencing with background measurement in 1 minute...')
 time.sleep(60)
 
-ptr.start('D:/Data/BK_%Y-%m-%d_%H-%M-%S.h5')
+ptr.start_measurement('D:/Data/BK_%Y-%m-%d_%H-%M-%S.h5')
 
 print('BG Started / 120 s to go')
 time.sleep(120)
 
-ptr.stop()
+ptr.stop_measurement()
 
 print('thank you. please start over again...')
-

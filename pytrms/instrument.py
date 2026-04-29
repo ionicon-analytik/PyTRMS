@@ -76,9 +76,11 @@ class Instrument(ABC):
         ## ...how it should be: just:
         return raw
 
-    def set(self, varname, value, unit='-'):
+    def set(self, varname, value):
         """Set a variable to a new value."""
-        return self.backend.set(varname, value, unit='-')
+        # TODO :: this is not an interface implementation...
+      # return self.backend.set(varname, value, unit='-')
+        return self.backend.write(varname, value)
 
 #   def start_measurement(self, filename=''):
 #       # this method must be implemented by each state

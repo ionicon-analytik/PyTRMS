@@ -3,7 +3,7 @@
 # example for a GUI build with tkinter                   #
 #                                                        #
 # this assumes, that a PTR instrument is connected to    #
-# the local computer and is running a 'webAPI' server    #
+# the local computer and is running a 'MQTT' server      #
 #                                                        #
 ##########################################################
 import tkinter as tk
@@ -36,7 +36,7 @@ class MainFrame(tk.Frame):
 
     def init_window(self):
 
-        self.master.title("Ionicon webAPI Example")
+        self.master.title("Ionicon self-made GUI Example")
 
         # allow the widget to take the full space of the root window:
         self.pack()
@@ -47,12 +47,6 @@ class MainFrame(tk.Frame):
         label1.pack()
         self.host_var.set('localhost')
         txt = tk.Entry(self.master, textvariable=self.host_var)
-        txt.pack()
-
-        label2 = tk.Label(self.master, text='Port:')
-        label2.pack()
-        self.port_var.set('8002')
-        txt = tk.Entry(self.master, textvariable=self.port_var)
         txt.pack()
 
         buttonConnect = tk.Button(self.master, text="Connect",command=self.connect)
@@ -85,11 +79,11 @@ class MainFrame(tk.Frame):
 
         menu.add_cascade(label="File", menu=file_menu)
 
-        webAPI_menu = tk.Menu(menu)
-        webAPI_menu.add_command(label="Connect", command=self.connect)
-        webAPI_menu.add_command(label="Disconnect", command=self.disconnect)
+        API_menu = tk.Menu(menu)
+        API_menu.add_command(label="Connect", command=self.connect)
+        API_menu.add_command(label="Disconnect", command=self.disconnect)
 
-        menu.add_cascade(label="webAPI", menu=webAPI_menu)
+        menu.add_cascade(label="API", menu=API_menu)
 
         return menu
 
@@ -98,12 +92,12 @@ class MainFrame(tk.Frame):
 
     def connect(self):
         try:
-            host, port = self.host_var.get(), int(self.port_var.get())
+            host = self.host_var.get()
         except ValueError as exc:
             print(exc)
             return
 
-        self.ptr = pytrms.connect(host, port)
+        self.ptr = pytrms.connect(host)
         if self.ptr is None:
             self.disconnect()
             return 
