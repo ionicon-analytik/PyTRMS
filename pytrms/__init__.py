@@ -1,5 +1,3 @@
-_version = '0.9.10'
-
 import logging
 from functools import wraps
 
@@ -57,7 +55,7 @@ def load(path):
     files = glob.glob(path)
 
   # return Batch(*files)
-    return Batch([str(path)])  # let's start with 1 file (as in README)
+    return Batch([str(path)])  # let's start with 1 file (as in README, see doctest!)
 
 
 def connect(host='localhost', port=None, method='mqtt'):
