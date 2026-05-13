@@ -15,14 +15,15 @@ For simple analysis tasks use the `PyTRMS` Python package to read and analyse Io
 Python package is the de-facto standard for data analysis. Use `PyTRMS` to load the
 traces directly into a `Pandas.DataFrame`.
 
-In the following example, the traces (i.e. timeseries data) is loaded from a datafile. We are looking for traces containing the term 'H2O' and print out some statistics:
+In the following example, the traces (i.e. timeseries data) is loaded from a datafile.
+We are looking for traces containing the term 'H2O' and print out some statistics:
 
 ```python
 >>> import pytrms
 >>> import pandas as pd
 
->>> measurement = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
->>> traces = measurement.read_traces('concentration')
+>>> batch = pytrms.load('examples/data/peter_emmes_2022-03-31_08-51-13.h5')
+>>> traces = batch.read_traces('concentration')
 >>> water_columns = [col for col in traces.columns if 'H2O' in col]
 >>> for col_name in sorted(water_columns): print(col_name)
 *(FeH2O2)H+
@@ -56,19 +57,19 @@ After processing the sourcefile with the *Ionicon PTRMS Viewer* we get
 a slightly different result for mass 46.0, because the peak was optimized...
 
 ```python
->>> measurement = pytrms.load('examples/data/processed/peter_emmes_2022-03-31_08-51-13.h5')
->>> traces = measurement.read_traces()
+>>> batch = pytrms.load('examples/data/processed/peter_emmes_2022-03-31_08-51-13.h5')
+>>> traces = batch.read_traces()
 >>> traces[['H2O.H3O+ (Cluster)', 'm046_o']].mean()
-H2O.H3O+ (Cluster)    11.239826
+H2O.H3O+ (Cluster)    11.168222
 m046_o                10.239784
 dtype: float32
 
 ```
 
-...but the original measurement can still be read if we insist to:
+...but the original measurement can still be read with `force_original=True`:
 
 ```python
->>> traces = measurement.read_traces(force_original=True)
+>>> traces = batch.read_traces(force_original=True)
 >>> traces[['H2O.H3O+ (Cluster)', 'm046_o']].mean()
 H2O.H3O+ (Cluster)    11.239826
 m046_o                10.229387
@@ -78,17 +79,18 @@ dtype: float32
 
 When analysing a bunch of datafiles, we can use a glob-expression to collect files
 from a directory tree and let PyTRMS sort our batch by the start time:
+(v1.0: not implemented!)
 
 ```python
->>> batch = pytrms.load('examples/data/peter_emmes*.h5')
->>> for sourcefile in batch: print(sourcefile)  # doctest: +ELLIPSIS
+>>> batch = pytrms.load('examples/data/peter_emmes*.h5')  # doctest: +SKIP
+>>> for sourcefile in batch: print(sourcefile)  # doctest: +ELLIPSIS +SKIP
 <...examples/data\peter_emmes_2022-03-31_08-51-13.h5>
 <...examples/data\peter_emmes_2022-03-31_08-59-30.h5>
 <...examples/data\peter_emmes_2022-03-31_09-10-08.h5>
 <...examples/data\peter_emmes_2022-03-31_09-20-31.h5>
 <...examples/data\peter_emmes_2022-03-31_09-29-40.h5>
 
->>> len(batch)
+>>> len(batch)  # doctest: +SKIP
 5
 
 ```

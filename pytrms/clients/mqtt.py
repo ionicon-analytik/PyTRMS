@@ -268,7 +268,7 @@ def follow_calc_conz_info(client, self, msg):
     log.debug(f"updating tm-/pi-table from {msg.topic}...")
     self._calcconzinfo.append(CalcConzInfo.load_json(msg.payload.decode('latin-1')))
 
-follow_calc_conz_info.topics = ["PTR/Act/PTR_CalcConzInfo"]
+follow_calc_conz_info.topics = ["PTR-Instrument/Act/PTR_CalcConzInfo"]
 
 def follow_schedule(client, self, msg):
     with follow_schedule._lock:

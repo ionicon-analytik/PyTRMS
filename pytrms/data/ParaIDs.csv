@@ -36,19 +36,19 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 34	DPS_Unc	DBL	RW	PTR-Instrument	PTR_Write		Unc	V		F
 35	DPS_Ihc	DBL	RW	PTR-Instrument	PTR_Write		Ihc	mA		F
 36	DPS_IhcOnOff	BOOL	RW	PTR-Instrument	PTR_Write		Ihc On/Off			F
-37	DPS_Pdrift_Ctrl_OnOff		RW	PTR-Instrument	PTR_Write		p-drift controlled			F
-38	DPS_Pdrift_Ctrl_Val		RW	PTR-Instrument	PTR_Write		p-drift ctrl Value  			F
+37	DPS_Pdrift_Ctrl_OnOff	BOOL	RW	PTR-Instrument	PTR_Write		p-drift controlled			F
+38	DPS_Pdrift_Ctrl_Val	DBL	RW	PTR-Instrument	PTR_Write		p-drift ctrl Value  			F
 39	SourceValve	DBL	RW	PTR-Instrument	PTR_Write		Source Valve			F
 40	PrimionIdx	I32	RW	PTR-Instrument	PTR_Write		Prim Ion Idx			F
 41	E_N	DBL	R	PTR-Instrument			E/N	Td		F
-42	FC_H2O	DBL	R	PTR-Instrument	PTR_Write		FC H2O	sccm		F
+42	FC_H2O	DBL	RW	PTR-Instrument	PTR_Write		FC H2O	sccm		F
 43	SmartGAS1_Conc	DBL	R	PTR-Instrument			Conz1 SG			T
 44	SmartGAS2_Conc	DBL	R	PTR-Instrument			Conz2 SG			T
 45	SmartGAS3_Conc	DBL	R	PTR-Instrument			Conz3 SG			T
 46	DPS_IncMeasure			PTR-Instrument			Inc			F
 47	DPS_Uhc	DBL	RW	PTR-Instrument	PTR_Write		Uhc	V		F
-48	Spare_48 									F
-49	Spare_49 									F
+48	WaterLevel	DBL	R	PTR-Instrument			Water Level	ml		F
+49	IonSourceOnTime	DBL	R	PTR-Instrument			Ion Source On Time	d		F
 50	Press_Foreline	DBL	R	PTR-Instrument			p-Foreline	mbar		F
 51	Press_Drift	DBL	R	PTR-Instrument			p-Drift	mbar		F
 52	Press_Skimmer	DBL	R	PTR-Instrument			p-Skimmer	mbar		F
@@ -59,19 +59,19 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 57	Spare_57 									F
 58	Spare_58 									F
 59	Spare_59 									F
-60	T-Drift	DBL	R	PTR-Instrument	PTR_Write		T-Drift	°C		F
-61	T-Inlet	DBL	R	PTR-Instrument	PTR_Write		T-Inlet	°C		F
-62	T-Opt1	DBL	R	PTR-Instrument	PTR_Write		T-Opt1	°C		F
-63	T-Opt2	DBL	R	PTR-Instrument	PTR_Write		T-Opt2	°C		F
+60	T-Drift	DBL	RW	PTR-Instrument	PTR_Write		T-Drift	°C		F
+61	T-Inlet	DBL	RW	PTR-Instrument	PTR_Write		T-Inlet	°C		F
+62	T-Opt1	DBL	RW	PTR-Instrument	PTR_Write		T-Opt1	°C		F
+63	T-Opt2	DBL	RW	PTR-Instrument	PTR_Write		T-Opt2	°C		F
 64	Spare_64 									F
 65	MPV_Dir	ARRAY_OF_U8	RW	PTR-Instrument	PTR_Write		MPV Dir			F
 66	MPV_Pos	ARRAY_OF_U8	RW	PTR-Instrument	PTR_Write		MPV Pos			F
 67	MPV_Dir_1	U8		PTR-Instrument	PTR_Write		MPV Dir			T
 68	MPV_Dir_2	U8		PTR-Instrument	PTR_Write		MPV Dir2			T
 69	MPV_Dir_3	U8		PTR-Instrument	PTR_Write		MPV Dir3			T
-70	MPV_1			PTR-Instrument	PTR_Write		MPValve1			T
-71	MPV_2			PTR-Instrument	PTR_Write		MPValve2			T
-72	MPV_3			PTR-Instrument	PTR_Write		MPValve3			T
+70	MPV_1	I32		PTR-Instrument	PTR_Write		MPValve1			T
+71	MPV_2	I32		PTR-Instrument	PTR_Write		MPValve2			T
+72	MPV_3	I32		PTR-Instrument	PTR_Write		MPValve3			T
 73	DPS_Uf	DBL	RW	PTR-Instrument	PTR_Write		Uf	V		F
 74	DPS_U1	DBL	RW	PTR-Instrument	PTR_Write		UF1	V		F
 75	DPS_U2	DBL	RW	PTR-Instrument	PTR_Write		UF2	V		F
@@ -302,35 +302,35 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 300	EmptyID									F
 301	GC1_Runtime	DBL	RW	PTR-Instrument			GC Runtime			F
 302	GC1_ColTemp	DBL	R	PTR-Instrument			GC Col Temp			F
-303	GC1_CaseTemp	DBL	R	PTR-Instrument			GC Case Temp			F
-304	GC1_HeatingPower	DBL	RW	PTR-Instrument			GC Heat Power			F
+303	GC1_CaseTemp	DBL	R	PTR-Instrument			GC Case Temp	°C		F
+304	GC1_HeatingPower	DBL	RW	PTR-Instrument			GC Heat Power	%		F
 305	GC1_CarrierFlow	DBL	RW	PTR-Instrument			GC Carrier Flow			F
 306	Spare306									F
 307	Spare307									F
 308	Spare308									F
-309	Spare309									F
-310	GC2_OutputVoltage	DBL	R	PTR-Instrument			GC2 Output Voltage			F
+309	GC2_Runtime	DBL	R	PTR-Instrument			GC2 Runtime	s		F
+310	GC2_OutputVoltage	DBL	R	PTR-Instrument			GC2 Output Voltage	V		F
 311	GC1_CMD	DBL	RW	PTR-Instrument						F
 312	GC1_Mode	DBL	RW	PTR-Instrument			GC Mode			F
-313	GC1_TempSet	DBL	RW	PTR-Instrument			GC Temp Set			F
-314	GC1_InjectTimeSet	DBL	RW	PTR-Instrument			GC Injecttime Set			F
-315	GC1_MeasureTimeSet	DBL	RW	PTR-Instrument			GC Measuretime Set			F
+313	GC1_TempSet	DBL	RW	PTR-Instrument			GC Temp Set	°C		F
+314	GC1_InjectTimeSet	DBL	RW	PTR-Instrument			GC Injecttime Set	s		F
+315	GC1_MeasureTimeSet	DBL	RW	PTR-Instrument			GC Measuretime Set	s		F
 316	GC1_FC4GCset	DBL	RW	PTR-Instrument			GC FC set			F
 317	GC2_Enable	BOOL	RW	PTR-Instrument			GC2 Enable			F
 318	GC2_StartRamp	BOOL	RW	PTR-Instrument			GC2 Start Ramp			F
 319	GC2_StartConstantTemperature	BOOL	RW	PTR-Instrument			GC2 Start Temp			F
-320	GC2_InjectTime	DBL	RW	PTR-Instrument			GC2 Inject Time Set			F
+320	GC2_InjectTime	DBL	RW	PTR-Instrument			GC2 Inject Time Set	s		F
 321	GC2_ConstantTemperature	DBL	RW	PTR-Instrument			GC2 Temp Set			F
 322	GC2_FC	DBL	RW	PTR-Instrument			FC GC			F
 323	GC2_FC_Makeup	DBL	RW	PTR-Instrument			FC FastGC Makeup			F
 324	GC2_FC_Ri	DBL	RW	PTR-Instrument			FC FastGC Ri			F
-325	GC2_Wire_Temperature	DBL	RW	PTR-Instrument			GC2 Wire Temperature			F
-326	GC2_Case_Temperature	DBL	RW	PTR-Instrument			GC2 Case Temperature			F
+325	GC2_Wire_Temperature	DBL	RW	PTR-Instrument			GC2 Wire Temperature	°C		F
+326	GC2_Case_Temperature	DBL	RW	PTR-Instrument			GC2 Case Temperature	°C		F
 327	GC2_ValveOn	BOOL	RW	PTR-Instrument			GC2 Valve On			F
 328	GC2_State	I32	RW	PTR-Instrument			GC2 State			F
 329	EC_Funnel_Offset	DBL	RW	PTR-Instrument			Funnel Offset	V		F
 330	EC_Hex_OnOff	ARRAY_OF_BOOL	RW	PTR-Instrument			Hex On			F
-331	EC_Hex_Frequency	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Freq	Mhz		F
+331	EC_Hex_Frequency	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Freq	Hz		F
 332	EC_Hex_Amplitude	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Ampl			F
 333	EC_Hex_Offset	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Offset	V		F
 334	EC_Hex_OffsPositive	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Offset Pol			F
@@ -356,10 +356,10 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 354	ACQ_SRV_MassCal_a	DBL	RW	DataCollection			MassCal a			F
 355	ACQ_SRV_MassCal_b	DBL	RW	DataCollection			MassCal b			F
 356	ACQ_SRV_NumberOfTimeBins	DBL	RW	DataCollection			Nr of Tbins			F
-357	ACQ_SRV_AutoCalOnOff	DBL	RW	DataCollection			Autocal On			F
+357	ACQ_SRV_AutoCalOnOff	BOOL	RW	DataCollection			Autocal On			F
 358	ACQ_SRV_AutoCalPeriod_sec	DBL	RW	DataCollection			Autocal Periode	s		F
 359	ACQ_SRV_PauseMeasurement	BOOL	RW	DataCollection			Pause Measurement			F
-360	EC_RFSup_Frequency	DBL	RW	PTR-Instrument				Mhz		F
+360	EC_RFSup_Frequency	DBL	RW	PTR-Instrument				Hz		F
 361	EC_RFSup_Amplitude-1	DBL	RW	PTR-Instrument						F
 362	EC_RFSup_Amplitude-2	DBL	RW	PTR-Instrument						F
 363	EC_RFSup_Amplitude-3	DBL	RW	PTR-Instrument						F
@@ -373,14 +373,14 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 371	EC_FC_PresetIdx	DBL	RW	PTR-Instrument						F
 372	EC_Xtras_AO_PresetIdx	DBL	RW	PTR-Instrument						F
 373	EC_Xtras_DO_PresetIdx	DBL	RW	PTR-Instrument						F
-374	Spare374									F
-375	Spare375									F
-376	Spare376									F
-377	Spare377									F
-378	Spare378									F
-379	Spare379									F
-380	Spare380									F
-381	Spare381									F
+374	FSM_URV	DBL	RW	PTR-Instrument			URV	V		F
+375	FSM_URVOnOff	BOOL	RW	PTR-Instrument			URV OnOff			F
+376	FSM_UFunnel	DBL	RW	PTR-Instrument			UFunnel	V		F
+377	FSM_UFunnelOnOff	BOOL	RW	PTR-Instrument			UFunnel OnOff			F
+378	FSM_UF1	DBL	RW	PTR-Instrument			UF1	V		F
+379	FSM_UF1OnOff	BOOL	RW	PTR-Instrument			UF1 OnOff			F
+380	FSM_UF2	DBL	RW	PTR-Instrument			UF2	V		F
+381	FSM_UF2OnOff	BOOL	RW	PTR-Instrument			UF2 OnOff			F
 382	Spare382									F
 383	Spare383									F
 384	Capno5_CurrentCO2	DBL	R	Capno5			CO2			F
@@ -641,17 +641,17 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 639	EC_Hex_Show									F
 640	DLG_PTR_PressOV_Std									F
 641	DLG_PTR_PressOV_Wiesel									F
-642	Charon_ADL			Charon			Charon ADL			F
-643	Charon_DIR			Charon			Charon DIR			F
-644	Charon_HEPA			Charon			Charon HEPA			F
-645	Charon_Denuder			Charon			Charon Denuder			F
-646	Charon_VOC			Charon			Charon VOC			F
-647	Charon_AnalogValve			Charon			Charon Analog Valve			F
-648	Charon_TC1			Charon			Charon Temp 1			F
-649	Charon_TC2			Charon			Charon Temp 2			F
-650	Charon_ValveMode			Charon			Charon Valvemode			F
-651	Charon_ADLPressure			Charon			Charon ADL press			F
-652	Charon_DriftPressure			Charon			Charon Drift press			F
+642	Charon_ADL	DBL	RW	Charon			Charon ADL			F
+643	Charon_DIR	DBL	RW	Charon			Charon DIR			F
+644	Charon_HEPA	DBL	RW	Charon			Charon HEPA			F
+645	Charon_Denuder	DBL	RW	Charon			Charon Denuder			F
+646	Charon_VOC	DBL	RW	Charon			Charon VOC			F
+647	Charon_AnalogValve	DBL	RW	Charon			Charon Analog Valve			F
+648	Charon_TC1	DBL	RW	Charon			Charon Temp 1			F
+649	Charon_TC2	DBL	RW	Charon			Charon Temp 2			F
+650	Charon_ValveMode	DBL	RW	Charon			Charon Valvemode			F
+651	Charon_ADLPressure	DBL	RW	Charon			Charon ADL press			F
+652	Charon_DriftPressure	DBL	RW	Charon			Charon Drift press			F
 653	GPS_Lat			GPS			Lat			F
 654	GPS_Lon			GPS			Lon			F
 655	GPS_Alt			GPS			Alt			F
@@ -669,24 +669,24 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 667	CommonScheduledCMD	STRING	W	IC_Command			CommonScheduledCommand			F
 668	spare668									F
 669	spare669									F
-670	FUS_SRC_IQ	ARRAY_OF_DBL	R				Fusion Source IQ			F
-671	FUS_SRC_US	ARRAY_OF_DBL	RW				Fusion Source US			F
-672	FUS_SRC_UL	ARRAY_OF_DBL	RW				Fusion Source UL			F
-673	FUS_SRC_UQ	ARRAY_OF_DBL	RW				Fusion Source UQ			F
+670	FUS_SRC_IQ	ARRAY_OF_DBL	R				Fusion Source IQ	mA		F
+671	FUS_SRC_US	ARRAY_OF_DBL	RW				Fusion Source US	V		F
+672	FUS_SRC_UL	ARRAY_OF_DBL	RW				Fusion Source UL	V		F
+673	FUS_SRC_UQ	ARRAY_OF_DBL	RW				Fusion Source UQ	V		F
 674	spare674									F
-675	FUS_DC_UInlet									F
-676	FUS_DC_U1									F
-677	FUS_DC_U2									F
-678	FUS_DC_UF1									F
-679	FUS_DC_U4									F
-680	FUS_DC_U5									F
-681	FUS_DC_UF2									F
+675	FUS_DC_UInlet	DBL	RW					V		F
+676	FUS_DC_U1	DBL	RW					V		F
+677	FUS_DC_U2	DBL	RW					V		F
+678	FUS_DC_UF1	DBL	RW					V		F
+679	FUS_DC_U4	DBL	RW					V		F
+680	FUS_DC_U5	DBL	RW					V		F
+681	FUS_DC_UF2	DBL	RW					V		F
 682	FUS_SRC_IQ_OnOff	ARRAY_OF_BOOL	RW				Fusion Source IQ On			F
-683	spare683									F
-684	spare684									F
-685	spare685									F
-686	spare686									F
-687	spare687									F
+683	EC_Hex_OnOff_Neg	ARRAY_OF_BOOL	RW	PTR-Instrument			Hex On			F
+684	EC_Hex_Frequency_Neg	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Freq	Hz		F
+685	EC_Hex_Amplitude_Neg	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Ampl			F
+686	EC_Hex_Offset_Neg	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Offset	V		F
+687	EC_Hex_OffsPositive_Neg	ARRAY_OF_DBL	RW	PTR-Instrument			Hex Offset Pol			F
 688	spare688									F
 689	spare689									F
 690	AUTO_StepSwitchTime1									F
@@ -753,7 +753,7 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 751	PCFC	ARRAY_OF_DBL	RW				PC/FC			F
 752	LFC	ARRAY_OF_DBL	RW				LFC			F
 753	LFC_Flush	ARRAY_OF_BOOL	RW				FlushLFC			F
-754	Flowmeter	ARRAY_OF_DBL	R	PTR-Instrument	PTR_Write		Flowmeter			T
+754	Flowmeter	ARRAY_OF_DBL	R		PTR_Write		Flowmeter			T
 755	PWM_Value	ARRAY_OF_DBL	RW				ServoValve 			F
 756	PWM_OutputMode	ARRAY_OF_BOOL	R				ServoValveMode			F
 757	Temp_Mode	ARRAY_OF_U8	RW				TemperatureControlMode			F
@@ -783,27 +783,27 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 781	TPS_W_Refl2_Back_En	BOOL	RW	TOFSupply			Refl Back On			F
 782	TPS_W_Refl3_Grid_En	BOOL	RW	TOFSupply			Refl Grid On			F
 783	TPS_W_Refl3_Back_En	BOOL	RW	TOFSupply			Refl Back On			F
-784	TPS_Comp_L	DBL	RW	TOFSupply			Comp_L	Value		F
+784	TPS_Comp_L	DBL	RW	TOFSupply			Comp_L	V		F
 785	TPS_I-Comp_L	DBL	R	TOFSupply			I-Comp Low	mA		F
 786	TPS_Comp_L_En	BOOL	RW	TOFSupply			Comp Low On			F
-787	TPS_Comp_H	DBL	RW	TOFSupply			Comp_L	Value		F
+787	TPS_Comp_H	DBL	RW	TOFSupply			Comp_L	V		F
 788	TPS_I-Comp_H	DBL	R	TOFSupply			I-Comp High	mA		F
 789	TPS_Comp_H_En	BOOL	RW	TOFSupply			Comp High On			F
-790	TPS_Comp_L_Neg	DBL	RW	TOFSupply			Comp_L Neg	Value		F
+790	TPS_Comp_L_Neg	DBL	RW	TOFSupply			Comp_L Neg	V		F
 791	TPS_I-Comp_L_Neg	DBL	R	TOFSupply			I-Comp Low Neg	mA		F
 792	TPS_Comp_L_Neg_En	BOOL	RW	TOFSupply			Comp Low On Neg			F
-793	TPS_Comp_H_Neg	DBL	RW	TOFSupply			Comp_L Neg	Value		F
+793	TPS_Comp_H_Neg	DBL	RW	TOFSupply			Comp_L Neg	V		F
 794	TPS_I-Comp_H_Neg	DBL	R	TOFSupply			I-Comp High Neg	mA		F
 795	TPS_Comp_H_Neg_En	BOOL	RW	TOFSupply			Comp High On Neg			F
 796	TPS_Lens_Neg	ARRAY_OF_DBL	RW	TOFSupply			Lens_Neg	V		F
 797	TPS_Lens_Neg_OnOff	ARRAY_OF_BOOL	RW	TOFSupply			Lens_Neg On	V		F
 798	PWM_ControlMode	ARRAY_OF_BOOL	R				Control Mode			F
 799	spare799									F
-800	spare800									F
-801	spare801									F
-802	spare802									F
-803	spare803									F
-804	spare804									F
+800	SEQU_StepNumber	I32	RW	Sequencer						F
+801	SEQU_RunNumber	I32	RW	Sequencer						F
+802	SEQU_UseMean	I32	RW	Sequencer						F
+803	SEQU_StartCycleMean	I32	RW	Sequencer						F
+804	SEQU_StopCycleMean	I32	RW	Sequencer						F
 805	spare805									F
 806	spare806									F
 807	TPS_Push_L_Neg	DBL	RW	TOFSupply			Push Low Neg	V		F
@@ -856,3 +856,28 @@ ID	Name	DataType	Access	ServerName	LVWriteQueueName	SharedVariable	PrettyName	Un
 854	uCTemp	ARRAY_OF_DBL	R	ADDON						F
 855	ucAI	ARRAY_OF_DBL	R	ADDON						F
 856	ucAO	ARRAY_OF_DBL	R	ADDON						F
+857	Slim_CMD	DBL	RW	PTR-Instrument			CMD			F
+858	Slim_V_P_TW	DBL	RW	PTR-Instrument			V_P_TW	V		F
+859	Slim_V_N_TW	DBL	RW	PTR-Instrument			V_N_TW	V		F
+860	Slim_V_P_TWX	DBL	RW	PTR-Instrument			V_P_TWX	V		F
+861	Slim_V_N_TWX	DBL	RW	PTR-Instrument			V_N_TWX	V		F
+862	Slim_V_SGS	DBL	RW	PTR-Instrument			V_SGS	V		F
+863	Slim_V_SGD	DBL	RW	PTR-Instrument			V_SGD	V		F
+864	Slim_V_IG	DBL	RW	PTR-Instrument			V_IG	V		F
+865	Slim_V_TG	DBL	RW	PTR-Instrument			V_TG	V		F
+866	Slim_V_LGS	DBL	RW	PTR-Instrument			V_LGS	V		F
+867	Slim_V_LGD	DBL	RW	PTR-Instrument			V_LGD	V		F
+868	Slim_V_TGD	DBL	RW	PTR-Instrument			V_TGD	V		F
+869	Slim_V_Guard_TGS	DBL	RW	PTR-Instrument			V_Guard	V		F
+870	Slim_V_P_TW_En	BOOL	RW	PTR-Instrument			V_P_TW On			F
+871	Slim_V_N_TW_En	BOOL	RW	PTR-Instrument			V_N_TW On			F
+872	Slim_V_P_TWX_En	BOOL	RW	PTR-Instrument			V_P_TWX On			F
+873	Slim_V_N_TWX_En	BOOL	RW	PTR-Instrument			V_N_TWX On			F
+874	Slim_V_SGS_En	BOOL	RW	PTR-Instrument			V_SGS On			F
+875	Slim_V_SGD_En	BOOL	RW	PTR-Instrument			V_SGD On			F
+876	Slim_V_IG_En	BOOL	RW	PTR-Instrument			V_IG On			F
+877	Slim_V_TG_En	BOOL	RW	PTR-Instrument			V_TG On			F
+878	Slim_V_LGS_En	BOOL	RW	PTR-Instrument			V_LGS On			F
+879	Slim_V_LGD_En	BOOL	RW	PTR-Instrument			V_LGD On			F
+880	Slim_V_TGD_En	BOOL	RW	PTR-Instrument			V_TGD On			F
+881	Slim_V_Guard_TGS_En	BOOL	RW	PTR-Instrument			V_Guard On			F

@@ -37,13 +37,13 @@ class IoniTOFReader:
     @lru_cache
     def time_of_file_creation(self):
         """The pandas.Timestamp of the file creation."""
-        return convert_labview_to_posix(float(self.hf.attrs['FileCreatedTime_UTC']), self.utc_offset_sec)
+        return convert_labview_to_posix(float(self.hf.attrs['FileCreatedTime_UTC'][0]), self.utc_offset_sec)
 
     @property
     @lru_cache
     def utc_offset_sec(self):
         """The pandas.Timestamp of the 0th file cycle."""
-        return int(self.hf.attrs['UTC_Offset'])
+        return int(self.hf.attrs['UTC_Offset'][0])
 
     @property
     def inst_type(self):
@@ -78,23 +78,23 @@ class IoniTOFReader:
 
     @property
     def timebin_width_ps(self):
-        return float(self.hf.attrs.get('Timebin width (ps)'))
+        return float(self.hf.attrs['Timebin width (ps)'][0])
 
     @property
     def poisson_deadtime_ns(self):
-        return float(self.hf.attrs.get('PoissonDeadTime (ns)'))
+        return float(self.hf.attrs['PoissonDeadTime (ns)'][0])
 
     @property
     def pulsing_period_ns(self):
-        return float(self.hf.attrs.get('Pulsing Period (ns)'))
+        return float(self.hf.attrs['Pulsing Period (ns)'][0])
 
     @property
     def start_delay_ns(self):
-        return float(self.hf.attrs.get('Start Delay (ns)'))
+        return float(self.hf.attrs['Start Delay (ns)'][0])
 
     @property
     def single_spec_duration_ms(self):
-        return float(self.hf.attrs.get('Single Spec Duration (ms)'))
+        return float(self.hf.attrs['Single Spec Duration (ms)'][0])
 
     def __init__(self, path):
         self.hf = h5py.File(path, 'r', swmr=False)
@@ -152,12 +152,22 @@ class IoniTOFReader:
         # de-duplicate trace-columns to prevent issues...
         return rv.loc[:, ~rv.columns.duplicated()]
 
-    def read_calctraces(self, index='abs_cycle'):
+    def read_calctraces(self, index='abs_cycle', force_original=False):
         """Reads the calculated traces into a DataFrame.
 
         - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
         """
-        return self.read_addtraces('CalcTraces', index)
+        if force_original:
+            rv = self._read_datainfo('CalcTraces')
+        else:
+            try:
+                rv = self._read_datainfo('PROCESSED/CalcTraces')
+            except KeyError:
+                rv = self._read_datainfo('CalcTraces')
+
+        rv.index = list(self.iter_index(index))
+
+        return rv
 
     @lru_cache
     def read_traces(self, kind='conc', index='abs_cycle', force_original=False):
@@ -175,7 +185,7 @@ class IoniTOFReader:
         else:
             try:
                 return self._read_processed_traces(kind, index)
-            except GroupNotFoundError:
+            except KeyError:
                 return self._read_original_traces(kind, index)
 
     def read_all(self, kind='conc', index='abs_cycle', force_original=False):
@@ -192,6 +202,7 @@ class IoniTOFReader:
         return pd.concat([
             self.read_traces(kind, index, force_original),
             self.read_addtraces(None, index),
+            self.read_calctraces(index, force_original),
         ], axis='columns')
 
     def iter_index(self, kind='abs_cycle'):
@@ -277,10 +288,19 @@ class IoniTOFReader:
         self.hf.visit(func)
 
         # ...and return only groups with both /Data and /Info datasets:
-        return dataloc.intersection(infoloc)
+        rv = dataloc.intersection(infoloc)
+
+        # the CalcTraces are "special" again.. I was really just interested
+        # in the AddTraces! Here I need to distinguish again between orig/processed:
+        rv -= set(('CalcTraces', 'PROCESSED/CalcTraces',))
+
+        return rv
 
     def traces(self):
-        """Returns a  'pandas.DataFrame' with all traces concatenated."""
+        """Returns a `pandas.DataFrame` with all traces concatenated.
+
+        Short-hand for `.read_all('conc', 'abs_cycle', force_original=False)`.
+        """
         return self.read_all(kind='conc', index='abs_cycle', force_original=False)
 
     # TODO :: optimize: gib eine 'smarte' Series zurueck, die sich die aufgerufenen
