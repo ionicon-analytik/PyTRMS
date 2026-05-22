@@ -4,6 +4,7 @@
 """
 import time
 import logging
+from collections import defaultdict
 from operator import attrgetter, itemgetter
 from abc import abstractmethod, ABC
 
@@ -199,9 +200,63 @@ class Measurement(ABC):
 
     _id = None
     _recipe = None
+    _known_etags = dict()
 
     def __init__(self, api, *, id=None, recipe=None):
         self.api = api
+
+    def new_folder(self, suffix=""):
+        """Prepare a new results-directory for the AME toolchain.
+
+        This creates a new directory and copies all relevant files from
+        the recipe-directory. Also, the peaktable found next to the
+        sourcefile will be uploaded to the database.
+
+        A 'new results' event will be emitted on the API.
+
+        Arguments:
+        - suffix: a string appended to the folder name
+
+        Returns:
+            the full path to the new folder
+        """
+        st, href = self.api.post(self.url + "/results", data={ }, params={ "suffix": str(suffix) })
+        assert st in [201, 204], "unexpected status code: " + st
+
+        fe = defaultdict(list)
+        j = self.api.get(self.url)
+        files_ep = j["_links"]["describedby"]["href"] + "/files"
+        j = self.api.get(files_ep)
+        for f in j["_embedded"]["files"]:
+            name = f["name"]
+            etag = f["etag"]
+            if etag == self._known_etags.get(name):
+                log.warning("skipping unchanged file: " + name)
+            else:
+                ext = f["extension"]
+                fe[ext].append((name, etag))
+
+        for pt_file, etag in sorted(fe[".ionipt"]):
+            log.info("upload peaks...... " + pt_file)
+            content = self.api.get(files_ep + "/content", params={ "name": pt_file})
+            # TODO ::
+            # - api.get doesn't want this (octet-stream)
+            # - broken: takes filename!
+            r = self.api.sync(content)
+            log.info("done sync'ing peaks: " + str(r))
+            self._known_etags[pt_file] = etag
+
+        self.api.post("/api/alarms/state", { "enabled": False })
+        for alarm_file, etag in sorted(fe[".alm"]):
+            log.info("upload alarms..... " + alarm_file)
+            content = self.api.get(files_ep + "/content", params={ "name": alarm_file})
+            # TODO ::
+            # - api.get doesn't want this (octet-stream)
+            # - broken: takes filename!
+            self.api.upload("/api/alarms/upload", content)
+            self._known_etags[alarm_file] = etag
+
+        return self.api.get(href)["path"]
 
     def __eq__(self, other):
         return isinstance(other, Measurement) and hash(other) == hash(self)
@@ -245,15 +300,20 @@ class PendingMeasurement(Measurement):
         e = next(event_g)
         assert e.event == "new measurement", "wrong event, got: " + str(e)
         assert e.data == self.url, "wrong event-href, got: " + str(e)
+
+        result_dir = self.new_folder(suffix="")
+        log.info(f"created new folder at '{result_dir}'...")
+        e = next(event_g)
+        assert e.event == "new result", "wrong event, got: " + str(e)
+
         log.info(f"starting new measurement '{self.url}'...")
         try:
             # ...and the AME system *should* respond with 'start measurement':
             e = next(event_g)
+            assert e.event == "start measurement", "wrong event, got: " + str(e)
+            assert e.data == self.url, "wrong event-href, got: " + str(e)
         except StopIteration:
             raise TimeoutError("the system didn't respond. make sure AME is running!")
-
-        assert e.event == "start measurement", "wrong event, got: " + str(e)
-        assert e.data == self.url, "wrong event-href, got: " + str(e)
 
         self._new_state(RunningMeasurement)
 
@@ -324,61 +384,6 @@ class RunningMeasurement(Measurement):
         last_sourcefile = sourcefile
         # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def new_folder(self):
-        """Prepare a new results-directory for the AME toolchain.
-
-        This creates a new directory and copies all relevant files from
-        the recipe-directory. Also, the peaktable found next to the
-        sourcefile will be uploaded to the database.
-
-        Returns:
-            the filename to be used by IoniTOF
-        """
-        # Note: this will be called either by the Componist before
-        #  starting the measurement or by any action-script with a
-        #  'new-folder-action' type.
-
-        #?? A 'new results' event will be emitted on the API.
-
-    #ef maybe_create_folder(action_number, action_cycle):
-    # (aus dem actionsetup.py)
-    # das gehoert wirklich hierher:
-    # action:
-    #  m = Measurement(current)  ~> MUSS es geben
-    #  m.new_folder()
-
-        if not do_create_folder:
-            log.debug("create-folder-action: not requested! skipping...")
-            return
-    
-        if not action_cycle > 0:
-            log.warning(f"create-folder-action refused ({action_cycle = })! skipping...")
-            return
-    
-        ## BINGO! das sind wir!!
-        j = api.get("/api/measurements/last")
-        ## BINGO!! ham wa auch:
-        source_recipe_dir  = j["recipeDirectory"]
-        ## BINGO!!! das kommt uns auch bekannt vor:
-        from pytrms.helpers import setup_measurement_dir
-        recipe = setup_measurement_dir(source_recipe_dir, data_root_dir='D:/AMEData',
-                suffix=f'_Action{action_number}', date_fmt="%Y_%m_%d__%H_%M_%S")
-        log.info("setup new folder.. " + str(recipe.dirname))
-        if recipe.pt_file:
-            log.info("upload peaks...... " + recipe.pt_file)
-            r = api.sync(recipe.pt_file)
-            log.info("done sync'ing peaks: " + str(r))
-        api.post("/api/alarms/state", { "enabled": False })
-        for alarm_file in recipe.alarm_files:
-            log.info("upload alarms..... " + alarm_file)
-            api.upload("/api/alarms/upload", alarm_file)
-        # Note [#3010]: for some reason, IoniTOF will start a new file *after the next*
-        #  scheduled cycle, but anyway: we now schedule it 1 cycle prior, such that the
-        #  new file is aligned with the AME-numbers:
-        ionitof.schedule_filename(recipe.h5_file, action_cycle - 1)
-        # nicht BINGO?! Genau hier ^^^^ setzt der Componist (a.k.a. "das AME system") ein!!
-        #post(new results) ~> event ~> ? ~> Componist??
-        # BZW.. das action-script hat's ja ge-called, also soll's doch scheduln.
 
     def stop(self):
         """Stop the current measurement via the AME system.
