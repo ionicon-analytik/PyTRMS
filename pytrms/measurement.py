@@ -26,19 +26,19 @@ class Measurement(ABC):
 
     The keyword argument must be one of `id` (defaults to 'last')...
     >>> Measurement(api)                                    # doctest: +SKIP
-    <PreparingMeasurement ...>
+    <PendingMeasurement ...>
     >>> Measurement(api, id=5)                              # doctest: +SKIP
-    <FinishedMeasurement [id=5] @ 'uno'>
+    <StoppedMeasurement [id=5] @ 'uno'>
     >>> Measurement(api, id='current')                      # doctest: +SKIP
     <RunningMeasurement ...>
     >>> Measurement(api, id='last')                         # doctest: +SKIP
-    <FinishedMeasurement ...>
+    <StoppedMeasurement ...>
 
     ...or `recipe` for a new measurement that has not been started:
     >>> Measurement(api, recipe='uno')                      # doctest: +SKIP
-    <PreparingMeasurement [id=??] @ 'uno'>
+    <PendingMeasurement [id=??] @ 'uno'>
 
-    A `PreparingMeasurement` has no url and no filenames, because
+    A `PendingMeasurement` has no url and no filenames, because
     it does not yet exist on the API. But it can be started and
     made to change its state in sync with the AME system:
     >>> m = Measurement(api, recipe='my_recipe')            # doctest: +SKIP
@@ -51,7 +51,7 @@ class Measurement(ABC):
     The sourcefiles will be synchronized with the API and be
     made available for batch processing:
     >>> batch = Measurement(api, id='last?stopped=true')    # doctest: +SKIP
-    <FinishedMeasurement ...>
+    <StoppedMeasurement ...>
     >>> batch.filenames                                     # doctest: +SKIP
     ["D:/AMEData/yesterday/one.h5, ... ]
 
@@ -75,9 +75,9 @@ class Measurement(ABC):
 
     #  - [x] Der state haengt also ganz klar an der API: 
     #  - [x] es gibt genau 0 oder 1 'current' / RunningMeasurement
-    #  - [x] ein PreparingMeasurement kann gestartet werden, genau dann
+    #  - [x] ein PendingMeasurement kann gestartet werden, genau dann
     #        wenn die API es zulaesst (kein anderes running) ~> POST
-    #  - [x] ein FinishedMeasurement laedt seine sourcefiles von der API
+    #  - [x] ein StoppedMeasurement laedt seine sourcefiles von der API
     #  - [ ] [evtl. auch Funktion, um neue batch zu erstellen, die aber nicht
     #         gestartet wird 
 
@@ -105,7 +105,7 @@ class Measurement(ABC):
             raise TypeError("keyword arguments 'id' and 'recipe' are mutually exclusive")
 
         if 'recipe' in kwargs:
-            inst = object.__new__(PreparingMeasurement)
+            inst = object.__new__(PendingMeasurement)
             inst._id = None
             inst._recipe = str(kwargs['recipe'])
 
@@ -122,25 +122,27 @@ class Measurement(ABC):
             inst._id = id_passed
             return inst
 
-        url_resolved = api.get_location("/api/measurements/" + str(id_passed))  # may throw!
+        mep = "/api/measurements/"
+        url = str(id_passed) if id_passed.startswith(mep) else mep + str(id_passed)
+        url_resolved = api.get_location(url)  # may throw!
 
         j = api.get(url_resolved)
         if j["startTimestamp_UTC"] is None:
-            inst = object.__new__(PreparingMeasurement)
+            inst = object.__new__(PendingMeasurement)
             inst._id = j["measurementID"]
-            inst._recipe = j["recipeDirectory"].split('/')[-1]
+            inst._recipe = j["recipeDirectory"]
             return inst
 
         if j["stopTimestamp_UTC"] is None:
             inst = object.__new__(RunningMeasurement)
             inst._id = j["measurementID"]
-            inst._recipe = j["recipeDirectory"].split('/')[-1]
+            inst._recipe = j["recipeDirectory"]
             return inst
 
         if True:
-            inst = object.__new__(FinishedMeasurement)
+            inst = object.__new__(StoppedMeasurement)
             inst._id = j["measurementID"]
-            inst._recipe = j["recipeDirectory"].split('/')[-1]
+            inst._recipe = j["recipeDirectory"]
             return inst
 
         raise RuntimeError("invalid program: we should never have come here")
@@ -211,7 +213,7 @@ class Measurement(ABC):
         return f"<{type(self).__name__} [id={self._id if self._id else '??'}] @ '{self._recipe}'>"
 
 
-class PreparingMeasurement(Measurement):
+class PendingMeasurement(Measurement):
 
     def start(self, *, singleSpecDuration_ms=1000.0):
         """Start a measurement via the AME system.
@@ -396,12 +398,12 @@ class RunningMeasurement(Measurement):
         assert e.event == "stop measurement", "wrong event, got: " + str(e)
         assert e.data == self.url, "wrong event-href, got: " + str(e)
 
-        self._new_state(FinishedMeasurement)
+        self._new_state(StoppedMeasurement)
 
         return self
 
 
-class FinishedMeasurement(Measurement):
+class StoppedMeasurement(Measurement):
 
     # TODO :: this should just be an interface to sync with the API
     #  all file-processing should happen in a 'batch' that may be
