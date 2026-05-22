@@ -1,4 +1,5 @@
 import os.path
+import re
 from functools import partial, lru_cache
 from itertools import islice
 
@@ -130,19 +131,23 @@ class IoniTOFReader:
     def read_addtraces(self, matches=None, index='abs_cycle'):
         """Reads all /AddTraces into a DataFrame.
 
-        - 'index' one of abs_cycle|abs_time|rel_cycle|rel_time
+        - 'matches' - callable, regex or compiled regex applied to `._locate_datainfo()`
+        - 'index' - one of abs_cycle|abs_time|rel_cycle|rel_time
         """
-        if matches is not None:
-            if callable(matches):
-                filter_fun = matches
-            elif isinstance(matches, str):
-                filter_fun = lambda x: matches.lower() in x.lower()
-            else:
-                raise ValueError(repr(matches))
-            locs = list(filter(filter_fun, self._locate_datainfo()))
-        else:
-            locs = self._locate_datainfo()
+        if matches is None:
+            matches = ".*"
 
+        if callable(matches):
+            filter_fun = matches
+        elif isinstance(matches, str):
+            rex = re.compile("AddTraces/" + matches)
+            filter_fun = rex.match
+        elif isinstance(matches, re.Pattern):
+            filter_fun = matches.match
+        else:
+            raise ValueError(repr(matches))
+
+        locs = list(filter(filter_fun, self._locate_datainfo()))
         if not len(locs):
             raise ValueError(f"no match for {matches} in {self._locate_datainfo()}")
 
