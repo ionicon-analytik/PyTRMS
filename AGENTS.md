@@ -12,7 +12,6 @@ This is a Poetry-managed Python 3.12 project (PTR-MS scientific instrumentation 
 ### Notes
 
 - No linter/formatter is configured in the repo. There are no flake8, ruff, mypy, or black configs.
-- The `testcontainers` test dependency requires Docker, but Docker is **optional** — the current test suite passes fully without it. Only add Docker if you need container-based integration tests.
 - The `testdata` git submodule points to an internal Ionicon server (`git.ionicon.local`) and will not resolve from outside their network. This does not affect the test suite.
 - Poetry installs to `~/.cache/pypoetry/virtualenvs/`. Use `poetry run` to execute commands in the virtualenv, or `poetry env info --path` to find it.
 - Ensure `~/.local/bin` is on `PATH` so the `poetry` command is available (the update script handles this).
