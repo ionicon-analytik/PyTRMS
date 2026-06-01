@@ -6,6 +6,9 @@ import time
 import threading
 import contextlib
 import logging
+from collections import deque
+from functools import partial
+from itertools import islice
 
 from ..clients import db_api, mqtt
 
@@ -55,6 +58,59 @@ def double_lock(api, mq):
     finally:
         t_api.join()
         t_mq.join()
+
+
+def _make_buffered_schedule_fun(mqtt_client):
+    '''
+    returns: a callable 'schedule_fun(parID, value, schedule_cycle)'
+    '''
+    q = deque()
+    b = threading.BoundedSemaphore()
+
+    def consumer():
+        nonlocal q
+
+        while len(q) or b.acquire():  # blocks...
+            if not mqtt_client.is_running:
+                break
+
+            adjusted_batch_size = max(10, int(0.1 * len(q)))
+
+            # by splitting the batch, we could also recover from
+            #  being too late to schedule it!
+            batch = islice(q, adjusted_batch_size)
+            try:
+                print(time.time(), len(q))
+                mqtt_client.schedule_many(batch, on_missed_cycle_raise=True)
+            except ValueError:
+                # some funny guy queued a sentinel :)
+                break
+            except TimeoutError:
+                raise # or recover..
+
+            # collect the remainder (even items appended in the meantime):
+            q = deque(islice(q, adjusted_batch_size, None))
+            # sleep to reach throughput..
+            # TODO :: muss man rumprobieren! ist jetzt 10 alle 2 sekunden erst mal..
+            # throughput_per_sec=5
+            buffer_time_sec = 2 # adjusted_batch_size / throughput_per_sec
+            time.sleep(buffer_time_sec)
+
+    t = threading.Thread(target=consumer)
+    t.daemon = False
+    t.start()
+    log.debug(f"started consumer {t}")
+
+    def s(*arg_tuple):
+        assert t.is_alive(), f"consumer thread is dead, instrument running? ({t.ident=})"
+        q.append(arg_tuple)
+        try:
+            b.release()
+        except ValueError:
+            # already released, batch still processing..
+            pass
+
+    return s, q, b, t
 
 
 class Componist:
@@ -107,6 +163,8 @@ class Componist:
         the instrument is forcibly stopped. The instrument is put under control
         of the Componist while this method is blocking.
         """
+        foresight_runs = 10
+
         # 1. then initialize the current state of affairs:
         current_meas = self.api.get("/api/measurements/current")
         mq_is_running = self.mq.is_running  # avoid race-condition
@@ -162,8 +220,11 @@ class Componist:
         # this may raise! the recipe must have exactly one Composition file:
         comp_name = next(name for name in names if name.startswith("Composition"))
         composition = self.api.get(recipe_ref + "/files/content", params={ "name": comp_name })
-        # TODO :: with this:
-        log.info("init. scheduling..."); time.sleep(1)
+
+        log.info("initialize the schedule...")
+        sched_fun = _make_buffered_schedule_fun(self.mq)
+        sched_coro = composition.schedule_routine(sched_fun, foresight_runs=foresight_runs)
+        sched_coro.send(0)  # i.e. the self.mq.current_cycle!
 
         sf_path = result_path + os.path.basename(result_path) + ".h5"
         self.mq.start_measurement(sf_path)  # blocks..
@@ -176,8 +237,9 @@ class Componist:
         # and keep scheduling!
         with double_lock(self.api, self.mq) as go:
             while go:
-                log.info("keep scheduling..."); time.sleep(5)
-                # TODO siehe componist
+                wake_cycle = sched_coro.send(self.mq.current_cycle)
+                log.info("next schedule refill at {wake_cycle=}...")
+                self.mq.block_until(wake_cycle)
 
         log.info("STOPPED")
 

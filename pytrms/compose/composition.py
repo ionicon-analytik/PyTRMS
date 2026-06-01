@@ -221,13 +221,18 @@ class Composition(Iterable):
         '''the duration in cycles of each cyclic AME run.'''
         return sum(step.duration for step in self.steps)
 
-    def dump(self, ofstream):
-        '''Write this configuration into a filestream.
+    def dump(self, filename):
+        '''Write this configuration into a file.'''
+        with open(filename, 'x') as f:
+            self._dumps(f)
+
+    def _dumps(self, ofstream):
+        '''testmethod!
 
         >>> c = Composition([Step('uno', {'OP_Mode': 1}, 10, 2)])
         >>> from io import StringIO
         >>> s = StringIO()
-        >>> c.dump(s)
+        >>> c._dumps(s)
         >>> s.seek(0)
         0
 
@@ -398,7 +403,7 @@ class Composition(Iterable):
 
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
-        sequence = self.sequence()
+        sequence = self.sequence(generate_automation=True)
         # Note [#3147]: calculate the "foresight" adaptively!
         #  too short, and actions might not find the next run
         #  too long, and the upload may get slow (hopefully the lesser issue)
