@@ -1,8 +1,10 @@
 import os
+import io
 import time
 import json
 import logging
 from collections import namedtuple
+from contextlib import contextmanager
 import urllib3.util
 
 import requests
@@ -216,6 +218,30 @@ class IoniConnect(_IoniConnectBase):
             r.close()
 
         return _unsafe(r.status_code, out_file)
+
+    @contextmanager
+    def open(self, endpoint, name, decode=False):
+        """Use a /files endpoint to stream content similar to a file.
+
+        Returns:
+            a file-like object
+        """
+        if not endpoint.startswith('/'):
+            endpoint = '/' + endpoint
+        if not endpoint.endswith('/files'):
+            raise ValueError("only endpoints ending in /files are currently supported")
+
+        content_type = 'application/octet-stream'
+        r = self._fetch_object(endpoint + "/content", 'get', stream=True,
+                params={ "name": name }, headers={'accept': content_type})
+        try:
+            # request was successful, enter context-block...
+            assert r.headers['content-type'] == content_type, "unexcepted content-type"
+            # Note: we're not yet making use of the stream and just read
+            #  everything into memory. See the .download() method as alternative.
+            yield io.StringIO(r.text) if decode else io.BytesIO(r.raw.data)
+        finally:
+            r.close()
 
     def _fetch_object(self, endpoint, method='get', **kwargs):
         if not endpoint.startswith('/'):

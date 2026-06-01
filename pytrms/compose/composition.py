@@ -116,12 +116,7 @@ class Composition(Iterable):
     USE_MARKER     = 'AUTO_UseMean'
 
     @staticmethod
-    def load(filename):
-        with open(filename, 'r') as ifstream:
-            return Composition._loads(ifstream)
-
-    @staticmethod
-    def _loads(ifstream):
+    def load(ifstream):
         """helper method for testing and format display.
 
         >>> from io import StringIO
@@ -140,7 +135,7 @@ class Composition(Iterable):
         ...   }
         ... ]
         ... ''')
-        >>> c = Composition._loads(s)
+        >>> c = Composition.load(s)
         >>> c.steps
         [uno: (2/10) sec ~> {'OP_Mode': 1}]
 
@@ -163,7 +158,7 @@ class Composition(Iterable):
         ...   "spec_duration_ms": 123.4
         ... }
         ... ''')
-        >>> c = Composition._loads(s)
+        >>> c = Composition.load(s)
         >>> c.steps
         [uno: (2/10) sec ~> {'OP_Mode': 1}]
 
@@ -180,7 +175,7 @@ class Composition(Iterable):
         ...   "version": "1.1"
         ... }
         ... ''')
-        >>> c = Composition._loads(s)
+        >>> c = Composition.load(s)
         Traceback (most recent call last):
             ...
         NotImplementedError: version = '1.1'
@@ -221,18 +216,13 @@ class Composition(Iterable):
         '''the duration in cycles of each cyclic AME run.'''
         return sum(step.duration for step in self.steps)
 
-    def dump(self, filename):
-        '''Write this configuration into a file.'''
-        with open(filename, 'x') as f:
-            self._dumps(f)
-
-    def _dumps(self, ofstream):
-        '''testmethod!
+    def dump(self, ofstream):
+        '''Write this configuration into a open file object.
 
         >>> c = Composition([Step('uno', {'OP_Mode': 1}, 10, 2)])
         >>> from io import StringIO
         >>> s = StringIO()
-        >>> c._dumps(s)
+        >>> c.dump(s)
         >>> s.seek(0)
         0
 
@@ -354,7 +344,10 @@ class Composition(Iterable):
             future_cycle = future_cycle + step_info.duration
 
     @coroutine
-    def schedule_routine(self, schedule_fun, foresight_runs=5):
+    def schedule_routine(self, schedule_fun, *,
+            foresight_runs=5,
+            generate_automation=True
+        ):
         '''Create a coroutine that receives the current cycle and yields the last scheduled cycle.
 
         'schedule_fun' should be a callable taking three arguments '(parID, value, schedule_cycle)'
@@ -366,7 +359,7 @@ class Composition(Iterable):
         >>> co.run_duration_cycles
         35
 
-        >>> coro = co.schedule_routine(print, foresight_runs=2)
+        >>> coro = co.schedule_routine(print, foresight_runs=2, generate_automation=False)
         >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
         Eins 1 0
         Zwei 2 10
@@ -386,7 +379,7 @@ class Composition(Iterable):
         >>> co.run_duration_cycles
         10
 
-        >>> coro = co.schedule_routine(print, foresight_runs=1)
+        >>> coro = co.schedule_routine(print, foresight_runs=1, generate_automation=False)
         >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
         Eins 1 0
         Eins 1 10
@@ -403,7 +396,7 @@ class Composition(Iterable):
 
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
-        sequence = self.sequence(generate_automation=True)
+        sequence = self.sequence(generate_automation=generate_automation)
         # Note [#3147]: calculate the "foresight" adaptively!
         #  too short, and actions might not find the next run
         #  too long, and the upload may get slow (hopefully the lesser issue)

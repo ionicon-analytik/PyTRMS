@@ -10,6 +10,7 @@ from collections import deque
 from functools import partial
 from itertools import islice
 
+from .composition import Composition
 from ..clients import db_api, mqtt
 
 log = logging.getLogger(__name__)
@@ -219,7 +220,8 @@ class Componist:
         names = (f["name"] for f in j["_embedded"]["files"])
         # this may raise! the recipe must have exactly one Composition file:
         comp_name = next(name for name in names if name.startswith("Composition"))
-        composition = self.api.get(recipe_ref + "/files/content", params={ "name": comp_name })
+        with self.api.open(recipe_ref + "/files", name=comp_name) as f:
+            composition = Composition.load(f)
 
         log.info("initialize the schedule...")
         sched_fun = _make_buffered_schedule_fun(self.mq)
