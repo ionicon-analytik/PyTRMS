@@ -216,6 +216,11 @@ class Composition(Iterable):
         '''whether or not the iteration of steps will ever finish.'''
         return self.max_runs > 0
 
+    @property
+    def run_duration_cycles(self):
+        '''the duration in cycles of each cyclic AME run.'''
+        return sum(step.duration for step in self.steps)
+
     def dump(self, ofstream):
         '''Write this configuration into a filestream.
 
@@ -351,34 +356,69 @@ class Composition(Iterable):
 
         >>> co = Composition([
         ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
-        ...         Step("Zwoa", {"Zwei": 2}, 10, start_delay=3)
+        ...         Step("Zwoa", {"Zwei": 2}, 25, start_delay=5)
         ...      ])
+        >>> co.run_duration_cycles
+        35
+
         >>> coro = co.schedule_routine(print, foresight_runs=2)
-        >>> wake_cycle = coro.send(1)  # yields at least 'foresight_runs'
+        >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
         Eins 1 0
         Zwei 2 10
+        Eins 1 35
+        Zwei 2 45
+        Eins 1 70
+
+        >>> wake_cycle  # should wake up in time!
+        63
+
+        An example with only 1 step: Even low 'foresight_runs' produce
+        enough information ahead of time (minimum in this case: 40 seconds):
+
+        >>> co = Composition([
+        ...         Step("OnlyOne", {"Eins": 1}, 10, start_delay=2),
+        ...      ])
+        >>> co.run_duration_cycles
+        10
+
+        >>> coro = co.schedule_routine(print, foresight_runs=1)
+        >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
+        Eins 1 0
+        Eins 1 10
         Eins 1 20
-        Zwei 2 30
+        Eins 1 30
         Eins 1 40
 
-        >>> wake_cycle  # should wake up in time before the last run has begun..
-        30
+        >>> wake_cycle  # should wake up in time!
+        40
 
         '''
-        if self.max_runs > 0:
-            foresight_runs = max(int(foresight_runs), self.max_runs)
-        assert foresight_runs > 0, "foresight_runs must be positive"
+        if not foresight_runs > 0:
+            raise ValueError("foresight_runs must be positive")
 
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
         sequence = self.sequence()
-        run_duration_cycles = sum(step.duration for step in self.steps)
-        foresight_cycles = foresight_runs * run_duration_cycles
+        # Note [#3147]: calculate the "foresight" adaptively!
+        #  too short, and actions might not find the next run
+        #  too long, and the upload may get slow (hopefully the lesser issue)
+        #  Usually, the default of 5 runs a 80 sec generate a 400 sec = 6 2/3 min
+        #  foresight window...
+        min_foresight_sec = 40  # time lower bound, so actions may work
+        min_foresight_cyc = 12  # cycle lower bound, so scheduling still works
+        ssd_sec = self.spec_duration_ms * 1e-3  # s/ms
+        foresight_cycles = max(
+                foresight_runs * self.run_duration_cycles,
+                min_foresight_sec / ssd_sec,
+                min_foresight_cyc)
+        # ...that would lead to a wakeup call 100 sec before the time.
+        # Note, how the lower bounds guarantee 10 sec or 3 cycles minimum:
+        propose_wakup = int(0.25 * foresight_cycles)
+        log.debug(f"schedule_routine: using { foresight_cycles = }")
         next_cycle, set_values = next(sequence)
         while True:
-            # receive current cycle, yield proposed wake cycle...
-            current_cycle = yield next_cycle - run_duration_cycles * max(foresight_runs - 2, 1)
-            log.debug(f"schedule_routine: got [{current_cycle}]")
+            wake_cycle = next_cycle - propose_wakup
+            current_cycle = yield wake_cycle
             while next_cycle < current_cycle + foresight_cycles:
                 log.debug(f'scheduling cycle [{next_cycle}] ~> {set_values}')
                 for parID, value in set_values.items():
