@@ -61,70 +61,6 @@ def double_lock(api, mq):
         t_mq.join()
 
 
-
-def _make_buffered_schedule_fun(mqtt_client, batch_size=10, timeout=0.2):
-
-    '''
-    returns: a callable 'schedule_fun(parID, value, schedule_cycle)'
-    usage:
-      fun = make_fun()
-      fun(par_id, value, future_cycle)
-      fun(par_id, value, future_cycle)
-       ...
-      fun()  ~> sentinel, joins thread
-    '''
-    q = deque()
-    cv = threading.Condition()
-    done = False
-
-    def consumer():
-        while not done:
-            with cv:
-                # If empty, block indefinitely until someone notifies us
-                if not q:
-                    cv.wait()
-
-                # We have at least one item. Set a deadline.
-                deadline = time.time() + timeout
-
-                # Keep waiting while:
-                #   - we are not done
-                #   - the batch is still small
-                #   - the timer has not expired
-                while not done and len(q) < batch_size:
-                    remaining = deadline - time.time()
-                    if remaining <= 0:
-                        break          # timer expired -> flush what we have
-                    cv.wait(remaining) # release lock, sleep, re-acquire
-
-                # --- we hold the lock here ---
-                batch = list(q)
-                q.clear()
-
-            # --- lock released ---
-            if batch:
-                mqtt_client.schedule_many(batch)  # recover?!
-
-    t = threading.Thread(target=consumer)
-    t.start()
-    log.debug(f"started consumer {t}")
-
-    def put(*arg_tuple):
-        assert t.is_alive(), f"consumer thread is dead, instrument running? ({t.ident=})"
-        with cv:
-            q.append(arg_tuple)
-            cv.notify()  # wake consumer
-
-    def close():
-        nonlocal done
-        with cv:
-            done = True
-            cv.notify()
-        t.join()
-
-    return put, close
-
-
 class Componist:
     """
     The Great Componist: Conductor of Composition files for AME.
@@ -137,7 +73,7 @@ class Componist:
         self.api = api_client
         self.mq = mqtt_client
 
-    def run_forever(self):
+    def run_forever(self, *, foresight_runs=10):
         """Run the Componist as a daemon.
 
         This checks for the clients to be connected and re-connects as neccessary.
@@ -151,11 +87,12 @@ class Componist:
                 if not self.api.is_connected: self.api.connect()
 
                 log.info(f"connected to both {self.api} and {self.mq}")
-                self.run_once()
+                self.run_once(foresight_runs=foresight_runs)
             except (TimeoutError, AssertionError) as exc:
                 log.error(str(exc))
                 retries += 1
                 log.warning(f"reconnection attempt ({retries})")
+                time.sleep(1)
                 continue
             except (db_api.ConnectionError, StopIteration) as exc:
                 # Note: StopIteration from next(events)..
@@ -168,15 +105,13 @@ class Componist:
                 log.warning(f"terminated by user (KeyboardInterrupt)")
                 return
 
-    def run_once(self):
+    def run_once(self, *, foresight_runs=10):
         """Initialize the start-sequence and wait for a 'new measurement' event.
 
         Keeps scheduling until either a 'stop measurement' event is received or
         the instrument is forcibly stopped. The instrument is put under control
         of the Componist while this method is blocking.
         """
-        foresight_runs = 10
-
         # 1. then initialize the current state of affairs:
         current_meas = self.api.get("/api/measurements/current")
         mq_is_running = self.mq.is_running  # avoid race-condition
@@ -235,9 +170,14 @@ class Componist:
             composition = Composition.load(f)
 
         log.info("initialize the schedule...")
-        sched_fun, cancel = _make_buffered_schedule_fun(self.mq)
-        sched_coro = composition.schedule_routine(sched_fun, foresight_runs=foresight_runs)
-        sched_coro.send(0)  # i.e. the self.mq.current_cycle!
+        sched_coro = composition.schedule_routine(foresight_runs=foresight_runs)
+        # before starting the measurement, fill the whole target horizon.
+        # Note, that we send 0, i.e. the self.mq.current_cycle, which may
+        #  not coincide with the composition 'start_cycle', but it doesn't
+        #  matter; the composition will figure it out:
+        batch, wake_cycle = sched_coro.send(0)
+        if batch:
+            self.mq.schedule_many(batch, on_missed_cycle_raise=False)
 
         sf_path = result_path + os.path.basename(result_path) + ".h5"
         self.mq.start_measurement(sf_path)  # blocks..
@@ -250,10 +190,12 @@ class Componist:
         # and keep scheduling!
         with double_lock(self.api, self.mq) as go:
             while go:
-                wake_cycle = sched_coro.send(self.mq.current_cycle)
-                log.info(f"next schedule refill at {wake_cycle=}...")
+                batch, wake_cycle = sched_coro.send(self.mq.current_cycle)
+                if batch:
+                    self.mq.schedule_many(batch, on_missed_cycle_raise=True)
+
+                log.info(f"next schedule refill at { wake_cycle = }...")
                 self.mq.block_until(wake_cycle)
 
         log.info("STOPPED")
-        cancel()
 

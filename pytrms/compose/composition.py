@@ -344,33 +344,28 @@ class Composition(Iterable):
             future_cycle = future_cycle + step_info.duration
 
     @coroutine
-    def schedule_routine(self, schedule_fun, *,
-            foresight_runs=5,
-            generate_automation=True
-        ):
+    def schedule_routine(self, *, foresight_runs=3, generate_automation=True):
         '''Create a coroutine that receives the current cycle and yields the last scheduled cycle.
 
-        'schedule_fun' should be a callable taking three arguments '(parID, value, schedule_cycle)'
+        Example for a Composition with two steps. The initial horizon covers
+        the first 2 full runs as specified plus a safety margin:
 
         >>> co = Composition([
-        ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
-        ...         Step("Zwoa", {"Zwei": 2}, 25, start_delay=5)
+        ...         Step("Oans", {"Eins": 1}, 20, start_delay=2),
+        ...         Step("Zwoa", {"Zwei": 2}, 35, start_delay=5)
         ...      ])
         >>> co.run_duration_cycles
-        35
+        55
 
-        >>> coro = co.schedule_routine(print, foresight_runs=2, generate_automation=False)
-        >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
-        Eins 1 0
-        Zwei 2 10
-        Eins 1 35
-        Zwei 2 45
-        Eins 1 70
+        >>> coro = co.schedule_routine(foresight_runs=2, generate_automation=False)
+        >>> batch, wake_cycle = coro.send(0)  # yields at least the two 'foresight_runs':
+        >>> batch
+        [('Eins', 1, 0), ('Zwei', 2, 20), ('Eins', 1, 55), ('Zwei', 2, 75), ('Eins', 1, 110), ('Zwei', 2, 130)]
 
-        >>> wake_cycle  # should wake up in time!
-        63
+        >>> wake_cycle == co.run_duration_cycles * 2  # wake us up when foresight_runs expired:
+        True
 
-        An example with only 1 step: Even low 'foresight_runs' produce
+        An example with only 1 step: Even the low 'foresight_runs=1' produce
         enough information ahead of time (minimum in this case: 40 seconds):
 
         >>> co = Composition([
@@ -379,49 +374,89 @@ class Composition(Iterable):
         >>> co.run_duration_cycles
         10
 
-        >>> coro = co.schedule_routine(print, foresight_runs=1, generate_automation=False)
-        >>> wake_cycle = coro.send(1)  # yields at least the two 'foresight_runs':
-        Eins 1 0
-        Eins 1 10
-        Eins 1 20
-        Eins 1 30
-        Eins 1 40
+        >>> coro = co.schedule_routine(foresight_runs=1, generate_automation=False)
+        >>> batch, wake_cycle = coro.send(1)  # yields at least 40 seconds (== cycles):
+        >>> batch
+        [('Eins', 1, 0), ('Eins', 1, 10), ('Eins', 1, 20), ('Eins', 1, 30), ('Eins', 1, 40), ('Eins', 1, 50)]
 
-        >>> wake_cycle  # should wake up in time!
-        40
+        >>> wake_cycle  # the safety margin is much larger than the foresight_runs:
+        11
+
+        >>> batch, _ = coro.send(wake_cycle)  # continues the sequence one run at a time...
+        >>> batch
+        [('Eins', 1, 60)]
+
+        >>> batch, _ = coro.send(wake_cycle)  # ...without repetition...
+        >>> batch
+        []
+
+        >>> batch, _ = coro.send(42)  # ...but immediately catching up!
+        >>> batch
+        [('Eins', 1, 70), ('Eins', 1, 80), ('Eins', 1, 90)]
+
+        An finite example that schedules only 2 runs and raises StopIteration:
+
+        >>> co = Composition([
+        ...         Step("Oans", {"Eins": 1}, 10, start_delay=2),
+        ...         Step("Zwoa", {"Zwei": 2}, 25, start_delay=5)
+        ...      ], max_runs=2, start_cycle=5)
+        >>> co.run_duration_cycles
+        35
+
+        >>> coro = co.schedule_routine(foresight_runs=7, generate_automation=False)
+        >>> batch, wake_cycle = coro.send(0)
+        >>> batch
+        [('Eins', 1, 5), ('Zwei', 2, 15), ('Eins', 1, 40), ('Zwei', 2, 50)]
+
+        >>> wake_cycle
+        0
+
+        >>> batch, wake_cycle = coro.send(0)  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+          ...
+        StopIteration
 
         '''
         if not foresight_runs > 0:
             raise ValueError("foresight_runs must be positive")
 
+        ssd_sec = self.spec_duration_ms * 1e-3  # s/ms
+
         # feed all future updates for a given current cycle to the Dirigent
         log.debug("schedule_routine: initializing...")
         sequence = self.sequence(generate_automation=generate_automation)
-        # Note [#3147]: calculate the "foresight" adaptively!
-        #  too short, and actions might not find the next run
-        #  too long, and the upload may get slow (hopefully the lesser issue)
-        #  Usually, the default of 5 runs a 80 sec generate a 400 sec = 6 2/3 min
-        #  foresight window...
-        min_foresight_sec = 40  # time lower bound, so actions may work
-        min_foresight_cyc = 12  # cycle lower bound, so scheduling still works
-        ssd_sec = self.spec_duration_ms * 1e-3  # s/ms
-        foresight_cycles = max(
-                foresight_runs * self.run_duration_cycles,
-                min_foresight_sec / ssd_sec,
-                min_foresight_cyc)
-        # ...that would lead to a wakeup call 100 sec before the time.
-        # Note, how the lower bounds guarantee 10 sec or 3 cycles minimum:
-        propose_wakup = int(0.25 * foresight_cycles)
-        log.debug(f"schedule_routine: using { foresight_cycles = }")
+        refill_chunk_cycles = foresight_runs * self.run_duration_cycles
+        # Note [#3147]: calculate the size of the refill chunk adaptively:
+        #  it should guarantee that the number of requested runs is always
+        #  in the schedule! also, we use an absolute and relative safety
+        #  margin:
+        min_foresight_sec = 40
+        min_foresight_cyc = 12
+        min_relative_margin = int(refill_chunk_cycles * 0.05)
+        leeway_cycles = max(
+            min_foresight_cyc,              # e.g., 12 cycles
+            min_foresight_sec / ssd_sec,    # e.g., 40 seconds worth
+            min_relative_margin,            # proportional safety, if desired
+        )
+        foresight_cycles = refill_chunk_cycles + leeway_cycles
+        propose_wakup    = refill_chunk_cycles  # wake after consuming one batch
+
         next_cycle, set_values = next(sequence)
+        current_cycle = yield None
         while True:
-            wake_cycle = next_cycle - propose_wakup
-            current_cycle = yield wake_cycle
-            while next_cycle < current_cycle + foresight_cycles:
-                log.debug(f'scheduling cycle [{next_cycle}] ~> {set_values}')
-                for parID, value in set_values.items():
-                    schedule_fun(parID, value, next_cycle)
-                next_cycle, set_values = next(sequence)
+            batch = []
+            try:
+                while next_cycle < current_cycle + foresight_cycles:
+                    log.debug(f'scheduling cycle [{next_cycle}] ~> {set_values}')
+                    for parID, value in set_values.items():
+                        batch.append((parID, value, next_cycle))
+                    next_cycle, set_values = next(sequence)
+
+                wake_cycle = current_cycle + propose_wakup
+                current_cycle = yield batch, wake_cycle
+
+            except StopIteration:
+                yield batch, current_cycle
 
     def __iter__(self):
         rv = namedtuple('sequence_info', ['step', 'run', 'step_info'])
