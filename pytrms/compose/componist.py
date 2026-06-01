@@ -64,6 +64,12 @@ def double_lock(api, mq):
 def _make_buffered_schedule_fun(mqtt_client):
     '''
     returns: a callable 'schedule_fun(parID, value, schedule_cycle)'
+    usage:
+      fun = make_fun()
+      fun(par_id, value, future_cycle)
+      fun(par_id, value, future_cycle)
+       ...
+      fun()  ~> sentinel, joins thread
     '''
     q = deque()
     b = threading.BoundedSemaphore()
@@ -72,8 +78,6 @@ def _make_buffered_schedule_fun(mqtt_client):
         nonlocal q
 
         while len(q) or b.acquire():  # blocks...
-            if not mqtt_client.is_running:
-                break
 
             adjusted_batch_size = max(10, int(0.1 * len(q)))
 
@@ -81,7 +85,6 @@ def _make_buffered_schedule_fun(mqtt_client):
             #  being too late to schedule it!
             batch = islice(q, adjusted_batch_size)
             try:
-                print(time.time(), len(q))
                 mqtt_client.schedule_many(batch, on_missed_cycle_raise=True)
             except ValueError:
                 # some funny guy queued a sentinel :)
@@ -102,7 +105,7 @@ def _make_buffered_schedule_fun(mqtt_client):
     t.start()
     log.debug(f"started consumer {t}")
 
-    def s(*arg_tuple):
+    def s_fun(*arg_tuple):
         assert t.is_alive(), f"consumer thread is dead, instrument running? ({t.ident=})"
         q.append(arg_tuple)
         try:
@@ -110,8 +113,11 @@ def _make_buffered_schedule_fun(mqtt_client):
         except ValueError:
             # already released, batch still processing..
             pass
+        if not arg_tuple:
+            # sentinel..
+            t.join()
 
-    return s, q, b, t
+    return s_fun
 
 
 class Componist:
@@ -244,4 +250,5 @@ class Componist:
                 self.mq.block_until(wake_cycle)
 
         log.info("STOPPED")
+        sched_fun()
 
