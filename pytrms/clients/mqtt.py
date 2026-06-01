@@ -671,8 +671,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
             cmds.append(_build_write_command(parID, new_value, future_cycle))
 
-        log.info(f"scheduling ({len(cmds)}) new values for cycle ({future_cycle})")
-
+        log.info(f"scheduling ({len(cmds)}) new values...")
         payload = {
             "Header": _build_header(),
             "CMDs": cmds,
