@@ -61,7 +61,9 @@ def double_lock(api, mq):
         t_mq.join()
 
 
-def _make_buffered_schedule_fun(mqtt_client):
+
+def _make_buffered_schedule_fun(mqtt_client, batch_size=10, timeout=0.2):
+
     '''
     returns: a callable 'schedule_fun(parID, value, schedule_cycle)'
     usage:
@@ -72,52 +74,55 @@ def _make_buffered_schedule_fun(mqtt_client):
       fun()  ~> sentinel, joins thread
     '''
     q = deque()
-    b = threading.BoundedSemaphore()
+    cv = threading.Condition()
+    done = False
 
     def consumer():
-        nonlocal q
+        while not done:
+            with cv:
+                # If empty, block indefinitely until someone notifies us
+                if not q:
+                    cv.wait()
 
-        while len(q) or b.acquire():  # blocks...
+                # We have at least one item. Set a deadline.
+                deadline = time.time() + timeout
 
-            adjusted_batch_size = max(10, int(0.1 * len(q)))
+                # Keep waiting while:
+                #   - we are not done
+                #   - the batch is still small
+                #   - the timer has not expired
+                while not done and len(q) < batch_size:
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        break          # timer expired -> flush what we have
+                    cv.wait(remaining) # release lock, sleep, re-acquire
 
-            # by splitting the batch, we could also recover from
-            #  being too late to schedule it!
-            batch = islice(q, adjusted_batch_size)
-            try:
-                mqtt_client.schedule_many(batch, on_missed_cycle_raise=True)
-            except ValueError:
-                # some funny guy queued a sentinel :)
-                break
-            except TimeoutError:
-                raise # or recover..
+                # --- we hold the lock here ---
+                batch = list(q)
+                q.clear()
 
-            # collect the remainder (even items appended in the meantime):
-            q = deque(islice(q, adjusted_batch_size, None))
-            # sleep to reach throughput..
-            # TODO :: muss man rumprobieren! ist jetzt 10 alle 2 sekunden erst mal..
-            # throughput_per_sec=5
-            buffer_time_sec = 2 # adjusted_batch_size / throughput_per_sec
-            time.sleep(buffer_time_sec)
+            # --- lock released ---
+            if batch:
+                mqtt_client.schedule_many(batch)  # recover?!
 
     t = threading.Thread(target=consumer)
-    t.daemon = False
     t.start()
     log.debug(f"started consumer {t}")
 
-    def s_fun(*arg_tuple):
+    def put(*arg_tuple):
         assert t.is_alive(), f"consumer thread is dead, instrument running? ({t.ident=})"
-        q.append(arg_tuple)
-        try:
-            b.release()
-        except ValueError:
-            # already released, batch still processing..
-            pass
-        if not arg_tuple:
-            # sentinel..
-            t.join()
+        with cv:
+            q.append(arg_tuple)
+            cv.notify()  # wake consumer
 
-    return s_fun
+    def close():
+        nonlocal done
+        with cv:
+            done = True
+            cv.notify()
+        t.join()
+
+    return put, close
 
 
 class Componist:
@@ -230,7 +235,7 @@ class Componist:
             composition = Composition.load(f)
 
         log.info("initialize the schedule...")
-        sched_fun = _make_buffered_schedule_fun(self.mq)
+        sched_fun, cancel = _make_buffered_schedule_fun(self.mq)
         sched_coro = composition.schedule_routine(sched_fun, foresight_runs=foresight_runs)
         sched_coro.send(0)  # i.e. the self.mq.current_cycle!
 
@@ -246,9 +251,9 @@ class Componist:
         with double_lock(self.api, self.mq) as go:
             while go:
                 wake_cycle = sched_coro.send(self.mq.current_cycle)
-                log.info("next schedule refill at {wake_cycle=}...")
+                log.info(f"next schedule refill at {wake_cycle=}...")
                 self.mq.block_until(wake_cycle)
 
         log.info("STOPPED")
-        sched_fun()
+        cancel()
 
