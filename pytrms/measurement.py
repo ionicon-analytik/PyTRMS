@@ -288,7 +288,7 @@ class PendingMeasurement(Measurement):
         }
         # first, set us up to check the correct ordering of events:
         sse = ssevent.SSEventListener(host_url=self.api.url, session=self.api.session)
-        sse.subscribe(r'(new|start|stop) measurement')
+        sse.subscribe(r'(new|start|stop) (measurement|result)')
         event_g = sse.follow_events(timeout_s=10, prime=True)
         e = next(event_g)  # prime the generator..
         assert e.event == "new connection", "invalid program: generator not primed"

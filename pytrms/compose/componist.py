@@ -6,7 +6,11 @@ import time
 import threading
 import contextlib
 import logging
+from collections import deque
+from functools import partial
+from itertools import islice
 
+from .composition import Composition
 from ..clients import db_api, mqtt
 
 log = logging.getLogger(__name__)
@@ -69,7 +73,7 @@ class Componist:
         self.api = api_client
         self.mq = mqtt_client
 
-    def run_forever(self):
+    def run_forever(self, *, foresight_runs=10):
         """Run the Componist as a daemon.
 
         This checks for the clients to be connected and re-connects as neccessary.
@@ -83,11 +87,12 @@ class Componist:
                 if not self.api.is_connected: self.api.connect()
 
                 log.info(f"connected to both {self.api} and {self.mq}")
-                self.run_once()
+                self.run_once(foresight_runs=foresight_runs)
             except (TimeoutError, AssertionError) as exc:
                 log.error(str(exc))
                 retries += 1
                 log.warning(f"reconnection attempt ({retries})")
+                time.sleep(1)
                 continue
             except (db_api.ConnectionError, StopIteration) as exc:
                 # Note: StopIteration from next(events)..
@@ -100,7 +105,7 @@ class Componist:
                 log.warning(f"terminated by user (KeyboardInterrupt)")
                 return
 
-    def run_once(self):
+    def run_once(self, *, foresight_runs=10):
         """Initialize the start-sequence and wait for a 'new measurement' event.
 
         Keeps scheduling until either a 'stop measurement' event is received or
@@ -161,9 +166,18 @@ class Componist:
         names = (f["name"] for f in j["_embedded"]["files"])
         # this may raise! the recipe must have exactly one Composition file:
         comp_name = next(name for name in names if name.startswith("Composition"))
-        composition = self.api.get(recipe_ref + "/files/content", params={ "name": comp_name })
-        # TODO :: with this:
-        log.info("init. scheduling..."); time.sleep(1)
+        with self.api.open(recipe_ref + "/files", name=comp_name) as f:
+            composition = Composition.load(f)
+
+        log.info("initialize the schedule...")
+        sched_coro = composition.schedule_routine(foresight_runs=foresight_runs)
+        # before starting the measurement, fill the whole target horizon.
+        # Note, that we send 0, i.e. the self.mq.current_cycle, which may
+        #  not coincide with the composition 'start_cycle', but it doesn't
+        #  matter; the composition will figure it out:
+        batch, wake_cycle = sched_coro.send(0)
+        if batch:
+            self.mq.schedule_many(batch, on_missed_cycle_raise=False)
 
         sf_path = result_path + os.path.basename(result_path) + ".h5"
         self.mq.start_measurement(sf_path)  # blocks..
@@ -176,8 +190,12 @@ class Componist:
         # and keep scheduling!
         with double_lock(self.api, self.mq) as go:
             while go:
-                log.info("keep scheduling..."); time.sleep(5)
-                # TODO siehe componist
+                batch, wake_cycle = sched_coro.send(self.mq.current_cycle)
+                if batch:
+                    self.mq.schedule_many(batch, on_missed_cycle_raise=True)
+
+                log.info(f"next schedule refill at { wake_cycle = }...")
+                self.mq.block_until(wake_cycle)
 
         log.info("STOPPED")
 

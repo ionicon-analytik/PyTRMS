@@ -662,7 +662,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             if parID in __class__.set_value_limit and new_value > __class__.set_value_limit[parID]:
                 raise ValueError(f"will not exceed set-value limit of {__class__.set_value_limit[parID]} on '{parID}'")
 
-            if (self.is_running and future_cycle == 0) or future_cycle <= self.current_cycle:
+            if (self.is_running and future_cycle == 0) or (0 < future_cycle and future_cycle <= self.current_cycle):
                 if on_missed_cycle_raise:
                     raise TimeoutError(f"attempting to schedule cycle ({future_cycle}) which is in the past")
 
@@ -671,8 +671,10 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
             cmds.append(_build_write_command(parID, new_value, future_cycle))
 
-        log.info(f"scheduling ({len(cmds)}) new values for cycle ({future_cycle})")
+        if not len(cmds):
+            raise ValueError("empty collection of parID-value-future_cycle tuples")
 
+        log.info(f"scheduling ({len(cmds)}) new values...")
         payload = {
             "Header": _build_header(),
             "CMDs": cmds,
