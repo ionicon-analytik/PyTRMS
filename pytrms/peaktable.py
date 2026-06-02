@@ -278,7 +278,7 @@ class PeakTable:
 
     @staticmethod
     def _parse_ionipt(file):
-        
+
         def _make_peak(ioni_p, borders, shift, parent):
             return Peak(ioni_p["center"],
                 label=ioni_p["name"],

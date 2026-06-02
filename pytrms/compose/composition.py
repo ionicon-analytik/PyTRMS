@@ -432,14 +432,14 @@ class Composition(Iterable):
         #  margin:
         min_foresight_sec = 40
         min_foresight_cyc = 12
-        min_relative_margin = int(refill_chunk_cycles * 0.05)
-        leeway_cycles = max(
+        min_relative_margin = refill_chunk_cycles * 0.05
+        leeway_cycles = int(max(
             min_foresight_cyc,              # e.g., 12 cycles
             min_foresight_sec / ssd_sec,    # e.g., 40 seconds worth
             min_relative_margin,            # proportional safety, if desired
-        )
+        ))
         foresight_cycles = refill_chunk_cycles + leeway_cycles
-        propose_wakup    = refill_chunk_cycles  # wake after consuming one batch
+        propose_wakup = leeway_cycles  # wake to keep chunk always filled
 
         next_cycle, set_values = next(sequence)
         current_cycle = yield None

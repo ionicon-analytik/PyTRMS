@@ -164,11 +164,30 @@ class IoniConnect(_IoniConnectBase):
         r = self._make_link(parent_ep, child_ep, sever=True, **kwargs)
         return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 
-    def upload(self, endpoint, filename):
-        """Upload the file at `filename` to `endpoint`."""
+    def upload(self, endpoint, file):
+        """Upload the file-name or -stream `file` to `endpoint`.
+
+        When passing a file-stream, it should be opened with 'rb' mode.
+        """
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
-        with open(filename, 'rb') as f:
+
+        if isinstance(file, str):
+            fp = open(file, 'rb')
+            fp_name = file
+            finalize = True
+        elif isinstance(file, io.FileIO):
+            fp = file
+            fp_name = fp.name
+            finalize = False
+        elif isinstance(file, io.IOBase):
+            fp = file
+            fp_name = "file_upload_" + str(id(fp))
+            finalize = False
+        else:
+            raise TypeError(type(file).__name__)
+
+        try:
             # Note (important!): this is a "form-data" entry, where the server
             #  expects the "name" to be 'file' and rejects it otherwise:
             name = 'file'
@@ -176,8 +195,11 @@ class IoniConnect(_IoniConnectBase):
                     # Note: the requests library will set the content-type automatically
                     #  and also add a randomly generated "boundary" to separate files:
                     #headers={'content-type': 'multipart/form-data'}, No!
-                    files=[(name, (filename, f, ''))])
+                    files=[(name, (fp_name, fp, ''))])
             r.raise_for_status()
+        finally:
+            if finalize:
+                fp.close()
 
         return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
 

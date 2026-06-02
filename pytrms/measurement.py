@@ -9,6 +9,7 @@ from operator import attrgetter, itemgetter
 from abc import abstractmethod, ABC
 
 from .clients import ssevent
+from .peaktable import PeakTable
 from ._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
@@ -237,23 +238,20 @@ class Measurement(ABC):
                 fe[ext].append((name, etag))
 
         for pt_file, etag in sorted(fe[".ionipt"]):
-            log.info("upload peaks...... " + pt_file)
-            content = self.api.get(files_ep + "/content", params={ "name": pt_file})
-            # TODO ::
-            # - api.get doesn't want this (octet-stream)
-            # - broken: takes filename!
-            r = self.api.sync(content)
-            log.info("done sync'ing peaks: " + str(r))
+            log.info("upload peaks....... " + pt_file)
+            with self.api.open(files_ep, name=pt_file) as f:
+                pt = PeakTable._parse_ionipt(f)
+
+            r = self.api.sync(pt)
+            log.debug("done sync'ing peaks: " + str(r))
             self._known_etags[pt_file] = etag
 
+        # Alarms: first, reset the enabled state globally...
         self.api.post("/api/alarms/state", { "enabled": False })
         for alarm_file, etag in sorted(fe[".alm"]):
-            log.info("upload alarms..... " + alarm_file)
-            content = self.api.get(files_ep + "/content", params={ "name": alarm_file})
-            # TODO ::
-            # - api.get doesn't want this (octet-stream)
-            # - broken: takes filename!
-            self.api.upload("/api/alarms/upload", content)
+            log.info("upload alarms...... " + alarm_file)
+            with self.api.open(files_ep, name=alarm_file) as f:
+                self.api.upload("/api/alarms/upload", f)
             self._known_etags[alarm_file] = etag
 
         return self.api.get(href)["path"]

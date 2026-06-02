@@ -128,7 +128,7 @@ class Componist:
             if mq_is_running:
                 # not OK! weren't *WE* the one supposed to be scheduling this!?
                 hint = (' hint: to clean up, stop IoniTOF and use '
-                    + '`POST ' + current_href + ' { "isRunning": "false" }`)')
+                    + '`PATCH ' + current_href + ' { "isRunning": "false" }`)')
                 raise RuntimeError("duplicate or crashed Componist left measurement running!" + hint)
             if not mq_is_running:
                 # not OK! let the api know about the actual state:
@@ -179,7 +179,8 @@ class Componist:
         if batch:
             self.mq.schedule_many(batch, on_missed_cycle_raise=False)
 
-        sf_path = result_path + os.path.basename(result_path) + ".h5"
+        # create .h5 path from directory name (Windows style slashes):
+        sf_path = result_path + '\\' + os.path.basename(result_path) + ".h5"
         self.mq.start_measurement(sf_path)  # blocks..
 
         # confirm the state on the api:
