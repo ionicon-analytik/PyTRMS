@@ -360,9 +360,10 @@ class Composition(Iterable):
         >>> coro = co.schedule_routine(foresight_runs=2, generate_automation=False)
         >>> batch, wake_cycle = coro.send(0)  # yields at least the two 'foresight_runs':
         >>> batch
-        [('Eins', 1, 0), ('Zwei', 2, 20), ('Eins', 1, 55), ('Zwei', 2, 75), ('Eins', 1, 110), ('Zwei', 2, 130)]
+        [('Eins', 1, 0), ('Zwei', 2, 20), ('Eins', 1, 55), ('Zwei', 2, 75), ('Eins', 1, 110)]
 
-        >>> wake_cycle == co.run_duration_cycles * 2  # wake us up when foresight_runs expired:
+        The suggested wakeup is such that 2 runs are always on the scheduler:
+        >>> wake_cycle < 110 + 20 - 2 * co.run_duration_cycles
         True
 
         An example with only 1 step: Even the low 'foresight_runs=1' produce
@@ -377,22 +378,22 @@ class Composition(Iterable):
         >>> coro = co.schedule_routine(foresight_runs=1, generate_automation=False)
         >>> batch, wake_cycle = coro.send(1)  # yields at least 40 seconds (== cycles):
         >>> batch
-        [('Eins', 1, 0), ('Eins', 1, 10), ('Eins', 1, 20), ('Eins', 1, 30), ('Eins', 1, 40), ('Eins', 1, 50)]
+        [('Eins', 1, 0), ('Eins', 1, 10), ('Eins', 1, 20)]
 
-        >>> wake_cycle  # the safety margin is much larger than the foresight_runs:
-        11
+        >>> wake_cycle < 30 - 10  # wake up in time to schedule cycle 30
+        True
 
-        >>> batch, _ = coro.send(wake_cycle)  # continues the sequence one run at a time...
-        >>> batch
-        [('Eins', 1, 60)]
+        >>> coro.send(wake_cycle)  # continues the sequence one run at a time...
+        ([('Eins', 1, 30)], 25)
 
-        >>> batch, _ = coro.send(wake_cycle)  # ...without repetition...
-        >>> batch
-        []
+        >>> coro.send(wake_cycle)  # ...without repetition...
+        ([], 25)
 
-        >>> batch, _ = coro.send(42)  # ...but immediately catching up!
-        >>> batch
-        [('Eins', 1, 70), ('Eins', 1, 80), ('Eins', 1, 90)]
+        >>> coro.send(wake_cycle)  # ...totally idempotent...
+        ([], 25)
+
+        >>> coro.send(42)  # ...but immediately catching up!
+        ([('Eins', 1, 40), ('Eins', 1, 50), ('Eins', 1, 60)], 54)
 
         An finite example that schedules only 2 runs and raises StopIteration:
 
@@ -403,15 +404,15 @@ class Composition(Iterable):
         >>> co.run_duration_cycles
         35
 
-        >>> coro = co.schedule_routine(foresight_runs=7, generate_automation=False)
+        >>> coro = co.schedule_routine(foresight_runs=77, generate_automation=False)
         >>> batch, wake_cycle = coro.send(0)
         >>> batch
         [('Eins', 1, 5), ('Zwei', 2, 15), ('Eins', 1, 40), ('Zwei', 2, 50)]
 
         >>> wake_cycle
-        0
+        50
 
-        >>> batch, wake_cycle = coro.send(0)  # doctest: +ELLIPSIS
+        >>> coro.send(12)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
           ...
         StopIteration
@@ -430,13 +431,13 @@ class Composition(Iterable):
         #  it should guarantee that the number of requested runs is always
         #  in the schedule! also, we use an absolute and relative safety
         #  margin:
-        min_foresight_sec = 40
-        min_foresight_cyc = 12
+        min_foresight_sec = 12
+        min_foresight_cyc =  3
         min_relative_margin = refill_chunk_cycles * 0.05
         leeway_cycles = int(max(
-            min_foresight_cyc,              # e.g., 12 cycles
-            min_foresight_sec / ssd_sec,    # e.g., 40 seconds worth
-            min_relative_margin,            # proportional safety, if desired
+            min_foresight_cyc,
+            min_foresight_sec / ssd_sec,
+            min_relative_margin,
         ))
         foresight_cycles = refill_chunk_cycles + leeway_cycles
         propose_wakup = leeway_cycles  # wake to keep chunk always filled
@@ -456,7 +457,8 @@ class Composition(Iterable):
                 current_cycle = yield batch, wake_cycle
 
             except StopIteration:
-                yield batch, current_cycle
+                yield batch, next_cycle
+                break
 
     def __iter__(self):
         rv = namedtuple('sequence_info', ['step', 'run', 'step_info'])
