@@ -3,7 +3,7 @@ import io
 import time
 import json
 import logging
-from collections import namedtuple
+import collections
 from contextlib import contextmanager
 import urllib3.util
 
@@ -16,7 +16,7 @@ from .._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
 
-_unsafe = namedtuple('http_response', ['status_code', 'href'])
+_unsafe = collections.namedtuple('http_response', ['status_code', 'href'])
 
 __all__ = ['IoniConnect', 'ConnectionError']
 
@@ -191,11 +191,14 @@ class IoniConnect(_IoniConnectBase):
             # Note (important!): this is a "form-data" entry, where the server
             #  expects the "name" to be 'file' and rejects it otherwise:
             name = 'file'
-            r = self._create_object(endpoint, None, 'post',
+            r = self.session.post(self.url + endpoint, data=None,
                     # Note: the requests library will set the content-type automatically
                     #  and also add a randomly generated "boundary" to separate files:
                     #headers={'content-type': 'multipart/form-data'}, No!
-                    files=[(name, (fp_name, fp, ''))])
+                    files=[(name, (fp_name, fp, ''))],
+                    # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
+                    timeout = (6.06, 27),
+            )
             r.raise_for_status()
         finally:
             if finalize:
@@ -240,6 +243,17 @@ class IoniConnect(_IoniConnectBase):
             r.close()
 
         return _unsafe(r.status_code, out_file)
+
+    def content(self, endpoint, name):
+        """Use a /files endpoint to stream content similar to a file.
+
+        See also: .open() method for use as a file-like context-manager.
+
+        Returns:
+            the content as a string
+        """
+        with self.open(endpoint, name, decode=True) as f:
+            return f.read()
 
     @contextmanager
     def open(self, endpoint, name, decode=False):
@@ -301,14 +315,28 @@ class IoniConnect(_IoniConnectBase):
     def _create_object(self, endpoint, data, method='post', **kwargs):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
-        if data is not None:
-            if not isinstance(data, str):
-                # Note: default is `ensure_ascii=True`, but this escapes Umlaute!
-                data = json.dumps(data, ensure_ascii=False)
-            if 'headers' not in kwargs:
-                kwargs['headers'] = {'content-type': 'application/json'}
-            elif 'content-type' not in (k.lower() for k in kwargs['headers']):
-                kwargs['headers'].update({'content-type': 'application/json'})
+        if data is None:
+            raise ValueError("data cannot be None in create request")
+
+        # https://requests.readthedocs.io/en/latest/user/advanced/#streaming-uploads
+        passes_as_data = (
+            str,                        # OK: string data
+            bytes,                      # OK: raw string data
+            collections.abc.Generator,  # OK: streaming-upload
+            io.IOBase,                  # OK: chunk-encoded-requests
+        )
+        if isinstance(data, passes_as_data):
+            content_type = 'application/octet-stream'
+        else:
+            # serialize to JSON...
+            # Note: default is `ensure_ascii=True`, but this escapes Umlaute!
+            data = json.dumps(data, ensure_ascii=False)
+            content_type = 'application/json'
+
+        if 'headers' not in kwargs:
+            kwargs['headers'] = {'content-type': content_type}
+        elif 'content-type' not in (k.lower() for k in kwargs['headers']):
+            kwargs['headers'].update({'content-type': content_type})
         if 'timeout' not in kwargs:
             # https://requests.readthedocs.io/en/latest/user/advanced/#timeouts
             kwargs['timeout'] = (6.06, 27)
