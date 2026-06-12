@@ -3,7 +3,7 @@ import io
 import time
 import json
 import logging
-from collections import namedtuple
+import collections
 from contextlib import contextmanager
 import urllib3.util
 
@@ -16,7 +16,7 @@ from .._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
 
-_unsafe = namedtuple('http_response', ['status_code', 'href'])
+_unsafe = collections.namedtuple('http_response', ['status_code', 'href'])
 
 __all__ = ['IoniConnect', 'ConnectionError']
 
@@ -302,7 +302,13 @@ class IoniConnect(_IoniConnectBase):
         if not endpoint.startswith('/'):
             endpoint = '/' + endpoint
         if data is not None:
-            if not isinstance(data, str):
+            # https://requests.readthedocs.io/en/latest/user/advanced/#streaming-uploads
+            passes_as_data = (
+                str,                        # OK: raw string data
+                collections.abc.Generator,  # OK: streaming-upload
+                io.IOBase,                  # OK: chunk-encoded-requests
+            )
+            if not isinstance(data, passes_as_data):
                 # Note: default is `ensure_ascii=True`, but this escapes Umlaute!
                 data = json.dumps(data, ensure_ascii=False)
             if 'headers' not in kwargs:

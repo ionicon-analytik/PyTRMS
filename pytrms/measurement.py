@@ -196,6 +196,10 @@ class Measurement(ABC):
         # (siehe unten...)
         # Idee ist, dass dies dem .follow_specdata() noch abgenommen wird,
         # was die sache vereinfacht...
+
+        # Ich weiss goa ned ob des so a guade Idee is...
+        # eben WEIL die peaktable sich aendern kann!
+        # am ehesten noch, wenn man im last result nachschaute..
         return None
 
 
