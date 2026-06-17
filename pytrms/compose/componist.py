@@ -12,6 +12,7 @@ from itertools import islice
 
 from .composition import Composition
 from ..clients import db_api, mqtt
+from .._base import daemon
 
 log = logging.getLogger(__name__)
 
@@ -61,58 +62,23 @@ def double_lock(api, mq):
         t_mq.join()
 
 
-class Componist:
+
+class Componist(daemon.Daemon):
     """
     The Great Componist: Conductor of Composition files for AME.
 
     This synchronizes the startup sequence between the HTTP-API
-    and the PTR-Instrument (over MQTT). 
+    and the PTR-Instrument (over MQTT).
     """
 
-    def __init__(self, api_client, mqtt_client):
-        self.api = api_client
-        self.mq = mqtt_client
-
-    def run_forever(self, *, foresight_runs=10):
-        """Run the Componist as a daemon.
-
-        This checks for the clients to be connected and re-connects as neccessary.
-
-        A CTRL-C signal (SIGINT) will stop the daemon.
-        """
-        retries = 0
-        while True:
-            try:
-                if not self.mq.is_connected: self.mq.connect()
-                if not self.api.is_connected: self.api.connect()
-
-                log.info(f"connected to both {self.api} and {self.mq}")
-                self.run_once(foresight_runs=foresight_runs)
-            except (TimeoutError, AssertionError) as exc:
-                log.error(str(exc))
-                retries += 1
-                log.warning(f"reconnection attempt ({retries})")
-                time.sleep(1)
-                continue
-            except (db_api.ConnectionError, StopIteration) as exc:
-                # Note: StopIteration from next(events)..
-                log.error(str(exc))
-                if self.mq.is_connected:
-                    log.warning("force-stopping instrument to preserve database consistency")
-                    self.mq.stop_measurement()
-                continue
-            except KeyboardInterrupt:
-                log.warning(f"terminated by user (KeyboardInterrupt)")
-                return
-
-    def run_once(self, *, foresight_runs=10):
+    def run_once(self, foresight_runs=10):
         """Initialize the start-sequence and wait for a 'new measurement' event.
 
         Keeps scheduling until either a 'stop measurement' event is received or
         the instrument is forcibly stopped. The instrument is put under control
         of the Componist while this method is blocking.
         """
-        # 1. then initialize the current state of affairs:
+        # 1. initialize the current state of affairs:
         current_meas = self.api.get("/api/measurements/current")
         mq_is_running = self.mq.is_running  # avoid race-condition
         # two bools make 4 cases..
