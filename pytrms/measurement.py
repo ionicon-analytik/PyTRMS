@@ -124,8 +124,11 @@ class Measurement(ABC):
             inst._id = id_passed
             return inst
 
+        if id_passed is None:
+            raise ValueError("keyword argument 'id' cannot be None")
+
         mep = "/api/measurements/"
-        url = str(id_passed) if id_passed.startswith(mep) else mep + str(id_passed)
+        url = str(id_passed) if str(id_passed).startswith(mep) else mep + str(id_passed)
         url_resolved = api.get_location(url)  # may throw!
 
         j = api.get(url_resolved)
@@ -196,6 +199,10 @@ class Measurement(ABC):
         # (siehe unten...)
         # Idee ist, dass dies dem .follow_specdata() noch abgenommen wird,
         # was die sache vereinfacht...
+
+        # Ich weiss goa ned ob des so a guade Idee is...
+        # eben WEIL die peaktable sich aendern kann!
+        # am ehesten noch, wenn man im last result nachschaute..
         return None
 
 

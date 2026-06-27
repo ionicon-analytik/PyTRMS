@@ -140,7 +140,9 @@ class IoniTOFReader:
         if callable(matches):
             filter_fun = matches
         elif isinstance(matches, str):
-            rex = re.compile("AddTraces/" + matches)
+            if not matches.startswith("AddTraces/"):
+                matches = "AddTraces/" + matches
+            rex = re.compile(matches)
             filter_fun = rex.match
         elif isinstance(matches, re.Pattern):
             filter_fun = matches.match

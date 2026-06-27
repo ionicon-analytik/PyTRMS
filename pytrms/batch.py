@@ -31,10 +31,14 @@ class Batch:
 
     def attach_readers(self, filenames):
         self._readers = sorted((IoniTOFReader(f) for f in filenames), key=attrgetter('time_of_file'))
+        assert len(self._readers) > 0, "empty list of filenames given"
         self._check(self._readers)
 
     def __init__(self, filenames):
-        self.attach_readers(filenames)
+        if isinstance(filenames, str):
+            self.attach_readers([filenames])
+        else:
+            self.attach_readers(filenames)
 
     @property
     def number_of_timebins(self):
