@@ -255,8 +255,9 @@ class Composition(Iterable):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
 
         >>> presets = {}
-        >>> presets[0] = ('H3O+', {('Drift', 'Global_System.DriftPressureSet', 'FLOAT'): 2.6})
-        >>> presets[2] = ('O3+', {('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'): 75.0})
+        >>> _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])
+        >>> presets[0] = ('H3O+', {_key('Drift', 'Global_System.DriftPressureSet', 'FLOAT'): 2.6})
+        >>> presets[2] = ('O3+', {_key('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'): 75.0})
 
         next, define a couple of Steps that use the presets (a.k.a. 'OP_Mode'):
         >>> steps = []
@@ -281,14 +282,25 @@ class Composition(Iterable):
             raise ValueError('preset_items is None')
 
         # Note: the `preset_items` is a dict[step_index] ~> (name, preset_items)
-        #  and in the items one would expect these keys:
-        preset_keys = {
-            'PrimionIdx':       ('PrimionIdx', '', 'INT'),
-            'TransmissionIdx':  ('TransmissionIdx', '', 'INT'),
-            'DPS_Udrift':       ('UDrift', 'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift', 'FLOAT'),
-            'DPS_Pdrift_Ctrl_Val': ('Drift', 'Global_System.DriftPressureSet', 'FLOAT'),
-            'T-Drift':          ('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'),
+        #  and in the items one would expect these keys (highly ambiguous!):
+        #
+        # preset_item(name='PrimionIdx', ads_path='', dtype='INT'): 3,
+        # preset_item(name='TransmissionIdx', ads_path='', dtype='INT'): 1,
+        # preset_item(name='Drift', ads_path='Global_System.DriftPressureSet', dtype='FLOAT'): 2.3,
+        # preset_item(name='T-Drift', ads_path='Global_Temperatures.TempsSet[0]', dtype='FLOAT'): 85.0,
+        # preset_item(name='UDrift', ads_path='Global_DTS500.TR_DTS500_Set[0].SetU_Udrift', dtype='FLOAT'): 350.0,
+        #
+        pre_names_of_interest = {
+            'PrimionIdx': 'PrimionIdx',
+            'TransmissionIdx': 'TransmissionIdx',
         }
+        ads_paths_of_interest = {
+            'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift': 'DPS_Udrift',
+            'Global_System.DriftPressureSet': 'DPS_Pdrift_Ctrl_Val',
+            'Global_Temperatures.TempsSet[0]': 'T-Drift',
+        }
+        all_parIDs = list(ads_paths_of_interest.values()) + list(pre_names_of_interest.values())
+
         # make a deep copy of the `set_values`:
         set_values = [dict(step.set_values) for step in self.steps]
         carry = dict()
@@ -296,10 +308,19 @@ class Composition(Iterable):
             # replace OP_Mode with the stuff found in preset_items
             if 'OP_Mode' in entry:
                 index = entry['OP_Mode']
-                name, items = preset_items[index]
-                for parID, key in preset_keys.items():
-                    if key in items:
-                        entry[parID] = items[key]
+                preset_name, items = preset_items[index]
+
+                by_path = {t.ads_path: items[t] for t in items}
+                by_name = {t.name: items[t] for t in items}
+
+                for key in (by_path.keys() & ads_paths_of_interest.keys()):
+                    parID = ads_paths_of_interest[key]
+                    entry[parID] = by_path[key]
+
+                for key in (by_name.keys() & pre_names_of_interest.keys()):
+                    parID = pre_names_of_interest[key]
+                    entry[parID] = by_name[key]
+
                 del entry['OP_Mode']
 
             # Note: each preset is only an update of set-values over what has already
@@ -308,7 +329,7 @@ class Composition(Iterable):
             carry.update(entry)
             entry.update(carry)
             if check:
-                assert all(key in entry for key in preset_keys), "reaction-data missing in presets"
+                assert all(key in entry for key in all_parIDs), "reaction-data missing in presets"
 
         return set_values
 
