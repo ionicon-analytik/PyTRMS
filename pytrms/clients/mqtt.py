@@ -26,17 +26,6 @@ with open(_par_id_file) as f:
 
 ## >>>>>>>>    adaptor functions    <<<<<<<< ##
 
-def _build_header():
-    ts = datetime.now()
-    ts_isoformat = ts.astimezone().isoformat(timespec='milliseconds')
-    header = {
-        "TimeStamp": {
-            "Str": ts_isoformat[:-3] + ts_isoformat[-2:],  # TZ-info w/o the colon
-            "sec": ts.timestamp() + 2082844800,  # convert to LabVIEW time
-        },
-    }
-    return header
-
 def _build_data_element(value, unit="-"):
     elm = {
         "Datatype": "",
@@ -575,7 +564,6 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         topic, qos, retain = "DataCollection/Set/" + str(parID), 1, True
         log.info(f"setting '{parID}' ~> [{new_value}]")
         payload = {
-            "Header":      _build_header(),
             "DataElement": _build_data_element(new_value, unit),
         }
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
@@ -606,7 +594,6 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         log.info(f"writing '{parID}' ~> [{new_value}]")
         cmd = _build_write_command(parID, new_value)
         payload = {
-            "Header": _build_header(),
             "CMDs": [ cmd, ]
         }
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)
@@ -676,7 +663,6 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
 
         log.info(f"scheduling ({len(cmds)}) new values...")
         payload = {
-            "Header": _build_header(),
             "CMDs": cmds,
         }
         return self.publish_with_ack(topic, json.dumps(payload), qos=qos, retain=retain)

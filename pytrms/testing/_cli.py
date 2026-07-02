@@ -12,12 +12,10 @@ from .ionimock import IoniMock
 try:
     from . import msg_info
     from .._base.mqttclient import MqttClientBase
-    from ..clients.mqtt import _build_header, _build_data_element
 except ImportError:
     # using the cli?!
     from pytrms.testing import msg_info
     from pytrms._base.mqttclient import MqttClientBase
-    from pytrms.clients.mqtt import _build_header, _build_data_element
 
 # ===================== BEGIN CLI ======================= #
 

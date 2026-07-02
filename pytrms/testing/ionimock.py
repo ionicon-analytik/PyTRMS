@@ -18,7 +18,7 @@ from itertools import starmap
 import paho.mqtt.publish as publish
 
 from .._base.mqttclient import MqttClientBase
-from ..clients.mqtt import _build_header, _build_data_element
+from ..clients.mqtt import _build_data_element
 
 from . import msg_info
 
@@ -29,31 +29,24 @@ log = logging.getLogger(__name__)
 
 # prepare some common MQTT payloads...
 the_truth = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element(True)
 })
 cycle0 = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element(0)
 })
 no_CMDs = json.dumps({
-    "Header": _build_header(),
     "CMDs": []
 })
 no_source = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element('')
 })
 ACQ_Idle = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element("ACQ_Idle")
 })
 ACQ_Aquire = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element("ACQ_Aquire")
 })
 ACQ_SRV_SpecTime_ms = json.dumps({
-    "Header": _build_header(),
     "DataElement": _build_data_element(1000.0)
 })
 CLEAR = ""
@@ -182,7 +175,6 @@ class IoniMock(MqttClientBase):
         if path is not None:
             path = path or "D:\\wie\\Dieter.h5"
             data = json.dumps({
-                "Header": _build_header(),
                 "DataElement": _build_data_element(path)
             })
             self.publish_with_ack("DataCollection/Act/ACQ_SRV_SetFullStorageFile", data, qos=1, retain=True)
@@ -198,7 +190,6 @@ class IoniMock(MqttClientBase):
             cycle = 0
             while mock.is_running:
                 payload = json.dumps({
-                    "Header": _build_header(),
                     "DataElement": _build_data_element(cycle)
                 })
                 self.publish_with_ack('DataCollection/Act/ACQ_SRV_OverallCycle', payload, qos=2, retain=True)
