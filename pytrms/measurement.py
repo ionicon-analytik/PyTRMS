@@ -287,24 +287,28 @@ class PendingMeasurement(Measurement):
          signals AME to start a new measurement out of the given `recipeDirectory`.
 
         """
-        payload = {
-            "recipeDirectory": self._recipe,
-            "singleSpecDuration_ms": float(singleSpecDuration_ms),
-        }
         # first, set us up to check the correct ordering of events:
         sse = ssevent.SSEventListener(host_url=self.api.url, session=self.api.session)
         sse.subscribe(r'(new|start|stop) (measurement|result)')
         event_g = sse.follow_events(timeout_s=10, prime=True)
         e = next(event_g)  # prime the generator..
         assert e.event == "new connection", "invalid program: generator not primed"
-        # now, follow the protocol: this will trigger the event: 'new measurement'...
-        sc, loc = self.api.post("/api/measurements", payload)
-        assert sc == 201, f"unexpected http-status: {sc}"
-        self._id = int(loc.split('/')[-1])
-        # ...we back-check it...
-        e = next(event_g)
-        assert e.event == "new measurement", "wrong event, got: " + str(e)
-        assert e.data == self.url, "wrong event-href, got: " + str(e)
+
+        if self._id is None:
+            # we need to tell the database about our intention of existing!
+            payload = {
+                "recipeDirectory": self._recipe,
+                "singleSpecDuration_ms": float(singleSpecDuration_ms),
+            }
+            # now, follow the protocol: this will trigger the event: 'new measurement'...
+            sc, loc = self.api.post("/api/measurements", payload)
+            assert sc == 201, f"unexpected http-status: {sc}"
+            # ...we back-check it...
+            e = next(event_g)
+            assert e.event == "new measurement", "wrong event, got: " + str(e)
+            # ...and have our ID:
+            self._id = int(loc.split('/')[-1])
+            assert e.data == self.url, "wrong event-href, got: " + str(e)
 
         result_dir = self.new_folder(suffix="")
         log.info(f"created new folder at '{result_dir}'...")
