@@ -5,6 +5,7 @@ import json
 import logging
 import collections
 from contextlib import contextmanager
+from urllib.parse import urljoin
 import urllib3.util
 
 import requests
@@ -16,9 +17,16 @@ from .._base import _IoniConnectBase
 
 log = logging.getLogger(__name__)
 
-_unsafe = collections.namedtuple('http_response', ['status_code', 'href'])
-
 __all__ = ['IoniConnect', 'ConnectionError']
+
+
+def _unsafe(status_code, location, request_url):
+    _rv = collections.namedtuple('http_response', ['status_code', 'href'])
+    # Note: this resolves relative Location-header urls, e.g.
+    #  /api/average + average/sixty-five = /api/sixty-five
+    #  according to standard 201-Created response protocol:
+    resolved_loc = urljoin(request_url, location)
+    return _rv(status_code, resolved_loc)
 
 
 class IoniConnect(_IoniConnectBase):
@@ -137,32 +145,32 @@ class IoniConnect(_IoniConnectBase):
     def post(self, endpoint, data, **kwargs):
         """Append to the collection at `endpoint` the object defined by `data`."""
         r = self._create_object(endpoint, data, 'post', **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', ''))  # no default location known!
+        return _unsafe(r.status_code, r.headers.get('Location', ""), "")  # no default location known!
 
     def put(self, endpoint, data, **kwargs):
         """Replace the entire object at `endpoint` with `data`."""
         r = self._create_object(endpoint, data, 'put', **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def patch(self, endpoint, data, **kwargs):
         """Change parts of the object at `endpoint` with fields in `data`."""
         r = self._create_object(endpoint, data, 'patch', **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def delete(self, endpoint, **kwargs):
         """Attempt to delete the object at `endpoint`."""
         r = self._fetch_object(endpoint, 'delete', **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def link(self, parent_ep, child_ep, **kwargs):
         """Make the object at `parent_e[nd]p[oint]` refer to `child_e[nd]p[oint]`"""
         r = self._make_link(parent_ep, child_ep, sever=False, **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def unlink(self, parent_ep, child_ep, **kwargs):
         """Destroy the reference from `parent_e[nd]p[oint]` to `child_e[nd]p[oint]`"""
         r = self._make_link(parent_ep, child_ep, sever=True, **kwargs)
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def upload(self, endpoint, file):
         """Upload the file-name or -stream `file` to `endpoint`.
@@ -204,7 +212,7 @@ class IoniConnect(_IoniConnectBase):
             if finalize:
                 fp.close()
 
-        return _unsafe(r.status_code, r.headers.get('Location', r.request.path_url))
+        return _unsafe(r.status_code, r.headers.get('Location'), r.request.path_url)
 
     def download(self, endpoint, out_file='.'):
         """Download from `endpoint` into `out_file` (may be a directory).
