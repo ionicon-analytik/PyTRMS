@@ -1,5 +1,9 @@
+import sys
 import logging
 from functools import wraps
+
+if sys.flags.optimize:
+    raise RuntimeError("PyTRMS must not be run with Python optimization (python -O) enabled!")
 
 _logging_getLogger = logging.getLogger
 

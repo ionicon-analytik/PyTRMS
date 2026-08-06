@@ -391,6 +391,24 @@ _subscriber_functions = [fun for name, fun in list(vars().items())
 _NOT_INIT = object()
 
 
+def _on_iter_specdata_fullcycle(client, self, msg):
+    try:
+        _fc = _parse_fullcycle(msg.payload, need_add_data=True)
+        # IoniTOF cycle-indexing starts at 1, while 0 marks idle state:
+        if _fc.timecycle.abs_cycle > 0:
+            for i, _q in enumerate(self._iter_specdata_queues):
+                try:
+                    _q.put_nowait(_fc)
+                except queue.Full:
+                    # DO NOT FAIL INSIDE THE CALLBACK!
+                    log.error(f"iter_specdata({_q.maxsize}): fullcycle buffer overrun!")
+                    continue
+                log.debug(f"[{i}] received fullcycle, buffer at ({_q.qsize()}/{_q.maxsize})")
+    except Exception:
+        # DO NOT FAIL INSIDE THE CALLBACK!
+        log.exception("while parsing %s", msg.payload)
+
+
 class MqttClient(_MqttClientBase, _IoniClientBase):
     """a simplified client for the Ionicon MQTT API.
 
@@ -405,6 +423,8 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
     _calcconzinfo = deque([_NOT_INIT], maxlen=1)
     _sf_filename  = deque([""],        maxlen=1)
     _overallcycle = deque([0],         maxlen=1)
+    _iter_specdata_topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+    _iter_specdata_queues = []
     act_values    = dict()
     set_values    = dict()
 
@@ -499,6 +519,10 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         self.set_values.clear()
 
     def disconnect(self):
+        if self._iter_specdata_queues:
+            self._iter_specdata_queues.clear()
+            self.client.unsubscribe(self._iter_specdata_topic)
+            self.client.message_callback_remove(self._iter_specdata_topic)
         super().disconnect()
         # reset internal queues to their defaults:
         self._reset()
@@ -841,40 +865,30 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
           measurement is running.
         '''
         q = queue.Queue(buffer_size)
-        topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
-        qos = 2
-
-        def callback(client, self, msg):
-            try:
-                _fc = _parse_fullcycle(msg.payload, need_add_data=True)
-                # IoniTOF cycle-indexing starts at 1, while 0 marks idle state:
-                if _fc.timecycle.abs_cycle > 0:
-                    q.put_nowait(_fc)
-                log.debug(f"received fullcycle, buffer at ({q.qsize()}/{q.maxsize})")
-            except queue.Full:
-                # DO NOT FAIL INSIDE THE CALLBACK!
-                log.error(f"iter_specdata({q.maxsize}): fullcycle buffer overrun!")
-                client.unsubscribe(topic)
-            except Exception as ex:
-                # DO NOT FAIL INSIDE THE CALLBACK!
-                log.warning(f"got {ex!r} while parsing {len(msg.payload) = }")
+        qos = 1  # (guarantee (1): at least once)
 
         if not self.is_connected:
             raise Exception("no connection to MQTT broker")
 
         # Note: when using a simple generator function like this, the following lines
         #  will not be excecuted until the first call to `next` on the iterator!
-        #  this means, the callback will not yet be executed, the queue not filled 
+        #  this means, the callback will not yet be executed, the queue not filled
         #  and we might miss the first cycles...
-        self.client.message_callback_add(topic, callback)
-        self.client.subscribe(topic, qos)
+
+        if not self._iter_specdata_queues:
+            self.client.message_callback_add(self._iter_specdata_topic, _on_iter_specdata_fullcycle)
+            self.client.subscribe(self._iter_specdata_topic, qos)
+        self._iter_specdata_queues.append(q)
+
+        log.debug("iter_specdata(%s, %s) with %s active queues", timeout_s, buffer_size,
+                  len(self._iter_specdata_queues))
         try:
             # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
             #  if block is true and timeout is None, [the q.get()] operation goes into an
             #  uninterruptible wait on an underlying lock. This means that no exceptions
             #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
             if timeout_s is None and not self.is_running:
-                log.warning(f"waiting indefinitely for measurement to run...")
+                log.warning("waiting indefinitely for measurement to run...")
 
             yield q.get(block=True, timeout=timeout_s)
 
@@ -888,6 +902,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             else:
                 raise TimeoutError(f"[{self}] received specdata, but measurement won't start")
 
+            # ..and enter the main loop:
             while self.is_running or not q.empty():
                 if q.full():
                     # re-raise what we swallowed in the callback..
@@ -907,13 +922,10 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             raise TimeoutError(f"no measurement running after {timeout_s} seconds")
 
         finally:
-            #  ...also, when using more than one iterator, the first to finish will
-            #  unsubscribe and cause all others to stop maybe before the time!
-            #  all of this might not actually be an issue right now, but
-            # TODO :: fix this weird behaviour (can only be done by implementing the
-            #  iterator-protocol properly using a helper class)!
-            self.client.unsubscribe(topic)
-            self.client.message_callback_remove(topic)
+            self._iter_specdata_queues.remove(q)
+            if not self._iter_specdata_queues:
+                self.client.unsubscribe(self._iter_specdata_topic)
+                self.client.message_callback_remove(self._iter_specdata_topic)
 
     iter_specdata.__doc__ += _parse_fullcycle.__doc__
 
