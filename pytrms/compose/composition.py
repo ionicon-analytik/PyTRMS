@@ -254,7 +254,7 @@ class Composition(Iterable):
         }
         json.dump(self, ofstream, indent=2, default=vars)
 
-    def translate_op_modes(self, preset_items, check=True):
+    def translate_op_modes(self, preset_items, carry=True, check=True):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
 
         >>> presets = {}
@@ -326,20 +326,21 @@ class Composition(Iterable):
 
                 del entry['OP_Mode']
 
-            # Note: each preset is only an update of set-values over what has already
-            #  been set. thus, when following the sequence of OP_Modes, each one must
-            #  carry with it the set-values of all its predecessors:
-            carry.update(entry)
-            entry.update(carry)
+            if carry:
+                # Note: each preset is only an update of set-values over what has already
+                #  been set. thus, when following the sequence of OP_Modes, each one must
+                #  carry with it the set-values of all its predecessors:
+                carry.update(entry)
+                entry.update(carry)
             if check:
                 assert all(key in entry for key in all_parIDs), "reaction-data missing in presets"
 
         return set_values
 
     def expand_op_modes(self, presets):
-        '''Return a new Composition with ``OP_Mode`` replaced by concrete set-values.
+        '''Return a new Composition with `OP_Mode` replaced by concrete set-values.
 
-        ``presets`` is either a path to a presets XML file (see
+        `presets` is either a path to a presets XML file (see
         :func:`pytrms.helpers.parse_presets_file`) or the dict returned by that
         function. Other composition parameters are copied unchanged.
 
@@ -373,7 +374,7 @@ class Composition(Iterable):
         else:
             preset_items = presets
 
-        translated = self.translate_op_modes(preset_items, check=False)
+        translated = self.translate_op_modes(preset_items, carry=False, check=False)
         steps = [
             Step(step.name, set_values, step.duration, step.start_delay)
             for step, set_values in zip(self.steps, translated)
