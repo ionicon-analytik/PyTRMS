@@ -1,8 +1,8 @@
 """Tests for shared iter_specdata subscription handling."""
 
-from types import SimpleNamespace
-
 import queue
+
+from pytrms.clients.mqtt import MqttClient
 
 
 class _FakePahoClient:
@@ -27,7 +27,7 @@ class _FakePahoClient:
 def test_iter_specdata_queue_refcount():
     """Mirrors subscribe / finally refcount on MqttClient._iter_specdata_queues."""
     fake = _FakePahoClient()
-    topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+    topic = MqttClient._iter_specdata_topic
     queues = []
     q1, q2 = queue.Queue(10), queue.Queue(10)
 
