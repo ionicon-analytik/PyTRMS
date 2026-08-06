@@ -333,6 +333,60 @@ class Composition(Iterable):
 
         return set_values
 
+    def expand_op_modes(self, presets, check=True):
+        '''Return a new Composition with ``OP_Mode`` replaced by concrete set-values.
+
+        ``presets`` is either a path to a presets XML file (see
+        :func:`pytrms.helpers.parse_presets_file`) or the dict returned by that
+        function. Other composition parameters are copied unchanged.
+
+        >>> presets = {}
+        >>> _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])
+        >>> presets[0] = ('H3O+', {_key('Drift', 'Global_System.DriftPressureSet', 'FLOAT'): 2.6})
+        >>> presets[2] = ('O3+', {_key('T-Drift[°C]', 'Global_Temperatures.TempsSet[0]', 'FLOAT'): 75.0})
+        >>> steps = [
+        ...     Step('uno', {'OP_Mode': 0}, 10, 2),
+        ...     Step('due', {'Udrift': 420.0, 'T-Drift': 81.0}, 10, 2),
+        ...     Step('tre', {'OP_Mode': 2}, 10, 2),
+        ... ]
+        >>> co = Composition(steps, max_runs=3, start_cycle=5)
+        >>> expanded = co.expand_op_modes(presets, check=False)
+        >>> expanded is not co
+        True
+        >>> expanded.max_runs
+        3
+        >>> expanded.start_cycle
+        5
+        >>> co.steps[0].set_values
+        {'OP_Mode': 0}
+        >>> expanded.steps[0].set_values
+        {'DPS_Pdrift_Ctrl_Val': 2.6}
+        >>> expanded.steps[2].set_values
+        {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}
+
+        '''
+        import os
+        if isinstance(presets, (str, os.PathLike)):
+            try:
+                from ..helpers import parse_presets_file
+            except ImportError:
+                from pytrms.helpers import parse_presets_file
+            preset_items = parse_presets_file(presets)
+        else:
+            preset_items = presets
+
+        translated = self.translate_op_modes(preset_items, check=check)
+        steps = [
+            Step(step.name, set_values, step.duration, step.start_delay)
+            for step, set_values in zip(self.steps, translated)
+        ]
+        return Composition(
+            steps,
+            max_runs=self.max_runs,
+            start_cycle=self.start_cycle,
+            spec_duration_ms=self.spec_duration_ms,
+        )
+
     def sequence(self, generate_automation=False):
         '''A (possibly infinite) iterator over this Composition's future_cycles and steps.
 
