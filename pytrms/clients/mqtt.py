@@ -396,22 +396,17 @@ def _on_iter_specdata_fullcycle(client, self, msg):
         _fc = _parse_fullcycle(msg.payload, need_add_data=True)
         # IoniTOF cycle-indexing starts at 1, while 0 marks idle state:
         if _fc.timecycle.abs_cycle > 0:
-            for _q in self._iter_specdata_queues:
+            for i, _q in enumerate(self._iter_specdata_queues):
                 try:
                     _q.put_nowait(_fc)
                 except queue.Full:
                     # DO NOT FAIL INSIDE THE CALLBACK!
-                    log.error(
-                        f"iter_specdata({_q.maxsize}): fullcycle buffer overrun!"
-                    )
-        if self._iter_specdata_queues:
-            _q = self._iter_specdata_queues[0]
-            log.debug(
-                f"received fullcycle, buffer at ({_q.qsize()}/{_q.maxsize})"
-            )
-    except Exception as ex:
+                    log.error(f"iter_specdata({_q.maxsize}): fullcycle buffer overrun!")
+                    continue
+                log.debug(f"[{i}] received fullcycle, buffer at ({_q.qsize()}/{_q.maxsize})")
+    except Exception:
         # DO NOT FAIL INSIDE THE CALLBACK!
-        log.warning(f"got {ex!r} while parsing {len(msg.payload) = }")
+        log.exception("while parsing %s", msg.payload)
 
 
 class MqttClient(_MqttClientBase, _IoniClientBase):
@@ -870,29 +865,30 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
           measurement is running.
         '''
         q = queue.Queue(buffer_size)
-        qos = 2
+        qos = 1  # (guarantee (1): at least once)
 
         if not self.is_connected:
             raise Exception("no connection to MQTT broker")
 
-        if not self._iter_specdata_queues:
-            # Note: when using a simple generator function like this, the following lines
-            #  will not be excecuted until the first call to `next` on the iterator!
-            #  this means, the callback will not yet be executed, the queue not filled
-            #  and we might miss the first cycles...
-            self.client.message_callback_add(
-                self._iter_specdata_topic, _on_iter_specdata_fullcycle
-            )
-            self.client.subscribe(self._iter_specdata_topic, qos)
+        # Note: when using a simple generator function like this, the following lines
+        #  will not be excecuted until the first call to `next` on the iterator!
+        #  this means, the callback will not yet be executed, the queue not filled
+        #  and we might miss the first cycles...
 
+        if not self._iter_specdata_queues:
+            self.client.message_callback_add(self._iter_specdata_topic, _on_iter_specdata_fullcycle)
+            self.client.subscribe(self._iter_specdata_topic, qos)
         self._iter_specdata_queues.append(q)
+
+        log.debug("iter_specdata(%s, %s) with %s active queues", timeout_s, buffer_size,
+                  len(self._iter_specdata_queues))
         try:
             # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
             #  if block is true and timeout is None, [the q.get()] operation goes into an
             #  uninterruptible wait on an underlying lock. This means that no exceptions
             #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
             if timeout_s is None and not self.is_running:
-                log.warning(f"waiting indefinitely for measurement to run...")
+                log.warning("waiting indefinitely for measurement to run...")
 
             yield q.get(block=True, timeout=timeout_s)
 
@@ -906,6 +902,7 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
             else:
                 raise TimeoutError(f"[{self}] received specdata, but measurement won't start")
 
+            # ..and enter the main loop:
             while self.is_running or not q.empty():
                 if q.full():
                     # re-raise what we swallowed in the callback..
