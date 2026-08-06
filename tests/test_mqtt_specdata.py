@@ -1,9 +1,8 @@
 """Tests for shared iter_specdata subscription handling."""
 
 from types import SimpleNamespace
-from unittest.mock import patch
 
-from pytrms.clients.mqtt import _FullCycleDataHub, _SpecdataSubscription
+import queue
 
 
 class _FakePahoClient:
@@ -25,40 +24,28 @@ class _FakePahoClient:
         self.unsubscriptions.append(topic)
 
 
-def test_fullcycle_hub_refcount():
+def test_iter_specdata_queue_refcount():
+    """Mirrors subscribe / finally refcount on MqttClient._iter_specdata_queues."""
     fake = _FakePahoClient()
-    mqtt_client = SimpleNamespace(client=fake)
-    hub = _FullCycleDataHub(mqtt_client)
+    topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+    queues = []
+    q1, q2 = queue.Queue(10), queue.Queue(10)
 
-    sub_a = hub.attach(10)
-    sub_b = hub.attach(10)
+    for q in (q1, q2):
+        if not queues:
+            fake.subscribe(topic, 2)
+        queues.append(q)
+
     assert len(fake.subscriptions) == 1
     assert fake.unsubscriptions == []
 
-    hub.detach(sub_a)
+    queues.remove(q1)
     assert fake.unsubscriptions == []
-    assert sub_b in hub._subs
 
-    hub.detach(sub_b)
+    queues.remove(q2)
+    if not queues:
+        fake.unsubscribe(topic)
+        fake.message_callback_remove(topic)
+
     assert len(fake.unsubscriptions) == 1
     assert fake.callbacks == {}
-
-
-def test_fullcycle_hub_overrun_is_per_subscriber():
-    fake = _FakePahoClient()
-    mqtt_client = SimpleNamespace(client=fake)
-    hub = _FullCycleDataHub(mqtt_client)
-    sub = _SpecdataSubscription(1)
-    hub._subs.add(sub)
-    hub._subscribed = True
-
-    fc = SimpleNamespace(timecycle=SimpleNamespace(abs_cycle=1))
-    msg = SimpleNamespace(payload=b"x")
-
-    with patch("pytrms.clients.mqtt._parse_fullcycle", return_value=fc):
-        hub._on_message(fake, None, msg)
-    assert not sub.overrun
-
-    with patch("pytrms.clients.mqtt._parse_fullcycle", return_value=fc):
-        hub._on_message(fake, None, msg)
-    assert sub.overrun

@@ -390,152 +390,6 @@ _subscriber_functions = [fun for name, fun in list(vars().items())
 
 _NOT_INIT = object()
 
-_FULLCYCLE_TOPIC = "DataCollection/Act/ACQ_SRV_FullCycleData"
-_FULLCYCLE_QOS = 2
-
-
-class _SpecdataSubscription:
-    __slots__ = ("queue", "overrun")
-
-    def __init__(self, buffer_size):
-        self.queue = queue.Queue(buffer_size)
-        self.overrun = False
-
-
-class _FullCycleDataHub:
-    """Shared MQTT subscription fanning fullcycle data to per-iterator queues."""
-
-    def __init__(self, mqtt_client):
-        self._mqtt_client = mqtt_client
-        self._subs = set()
-        self._lock = RLock()
-        self._subscribed = False
-
-    def attach(self, buffer_size):
-        sub = _SpecdataSubscription(buffer_size)
-        with self._lock:
-            self._subs.add(sub)
-            if not self._subscribed:
-                self._mqtt_client.client.message_callback_add(
-                    _FULLCYCLE_TOPIC, self._on_message
-                )
-                self._mqtt_client.client.subscribe(_FULLCYCLE_TOPIC, _FULLCYCLE_QOS)
-                self._subscribed = True
-        return sub
-
-    def detach(self, sub):
-        with self._lock:
-            self._subs.discard(sub)
-            if self._subscribed and not self._subs:
-                self._mqtt_client.client.unsubscribe(_FULLCYCLE_TOPIC)
-                self._mqtt_client.client.message_callback_remove(_FULLCYCLE_TOPIC)
-                self._subscribed = False
-
-    def shutdown(self):
-        with self._lock:
-            self._subs.clear()
-            if self._subscribed:
-                self._mqtt_client.client.unsubscribe(_FULLCYCLE_TOPIC)
-                self._mqtt_client.client.message_callback_remove(_FULLCYCLE_TOPIC)
-                self._subscribed = False
-
-    def _on_message(self, client, userdata, msg):
-        try:
-            _fc = _parse_fullcycle(msg.payload, need_add_data=True)
-            if _fc.timecycle.abs_cycle <= 0:
-                return
-            with self._lock:
-                subs = tuple(self._subs)
-            for sub in subs:
-                if sub.overrun:
-                    continue
-                try:
-                    sub.queue.put_nowait(_fc)
-                except queue.Full:
-                    log.error(
-                        f"iter_specdata({sub.queue.maxsize}): fullcycle buffer overrun!"
-                    )
-                    sub.overrun = True
-            if subs:
-                q = subs[0].queue
-                log.debug(f"received fullcycle, buffer at ({q.qsize()}/{q.maxsize})")
-        except Exception as ex:
-            log.warning(f"got {ex!r} while parsing {len(msg.payload) = }")
-
-
-class _SpecdataIterator:
-    """Iterator over live fullcycle MQTT data (see `MqttClient.iter_specdata`)."""
-
-    def __init__(self, mqtt_client, timeout_s=None, buffer_size=300):
-        if not mqtt_client.is_connected:
-            raise Exception("no connection to MQTT broker")
-        self._mqtt_client = mqtt_client
-        self._timeout_s = timeout_s
-        self._hub = mqtt_client._get_fullcycle_data_hub()
-        self._sub = self._hub.attach(buffer_size)
-        self._stage = "first"
-
-    def __iter__(self):
-        return self
-
-    def close(self):
-        sub = self._sub
-        if sub is not None:
-            self._sub = None
-            self._hub.detach(sub)
-
-    def __del__(self):
-        self.close()
-
-    def __next__(self):
-        if self._sub is None:
-            raise StopIteration
-        try:
-            if self._stage == "first":
-                self._stage = "bootstrap"
-                if self._timeout_s is None and not self._mqtt_client.is_running:
-                    log.warning("waiting indefinitely for measurement to run...")
-                try:
-                    return self._sub.queue.get(block=True, timeout=self._timeout_s)
-                except queue.Empty:
-                    assert self._timeout_s is not None, "this should never happen"
-                    raise TimeoutError(
-                        f"no measurement running after {self._timeout_s} seconds"
-                    )
-
-            if self._stage == "bootstrap":
-                _started_at = time.monotonic()
-                while (
-                    self._timeout_s is None
-                    or time.monotonic() < _started_at + self._timeout_s
-                ):
-                    if self._mqtt_client.is_running:
-                        break
-                    time.sleep(10e-3)
-                else:
-                    raise TimeoutError(
-                        f"[{self._mqtt_client}] received specdata, but measurement won't start"
-                    )
-                self._stage = "stream"
-
-            while True:
-                if self._sub.overrun or self._sub.queue.full():
-                    raise queue.Full
-                if not self._mqtt_client.is_connected:
-                    raise StopIteration
-                if not self._mqtt_client.is_running and self._sub.queue.empty():
-                    raise StopIteration
-                try:
-                    return self._sub.queue.get(block=True, timeout=1.0)
-                except queue.Empty:
-                    continue
-        except StopIteration:
-            self.close()
-            raise
-        except Exception:
-            self.close()
-            raise
-
 
 class MqttClient(_MqttClientBase, _IoniClientBase):
     """a simplified client for the Ionicon MQTT API.
@@ -645,21 +499,14 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         self.set_values.clear()
 
     def disconnect(self):
-        hub = getattr(self, "_fullcycle_data_hub", None)
-        if hub is not None:
-            hub.shutdown()
-            del self._fullcycle_data_hub
+        topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+        if getattr(self, "_iter_specdata_queues", None):
+            self._iter_specdata_queues.clear()
+            self.client.unsubscribe(topic)
+            self.client.message_callback_remove(topic)
         super().disconnect()
         # reset internal queues to their defaults:
         self._reset()
-
-    def _get_fullcycle_data_hub(self):
-        try:
-            return self._fullcycle_data_hub
-        except AttributeError:
-            hub = _FullCycleDataHub(self)
-            self._fullcycle_data_hub = hub
-            return hub
 
     def get(self, parID, kind="set"):
         '''Return the last known value for the given `parID`.
@@ -997,10 +844,91 @@ class MqttClient(_MqttClientBase, _IoniClientBase):
         * [Important]: When the buffer runs full, a `queue.Full` exception will be raised!
           Therefore, the caller should consume the iterator as soon as possible while the
           measurement is running.
-        * Multiple concurrent iterators share one MQTT subscription; each iterator
-          unsubscribes only when it is exhausted or closed.
         '''
-        return _SpecdataIterator(self, timeout_s=timeout_s, buffer_size=buffer_size)
+        q = queue.Queue(buffer_size)
+        topic = "DataCollection/Act/ACQ_SRV_FullCycleData"
+        qos = 2
+
+        if not self.is_connected:
+            raise Exception("no connection to MQTT broker")
+
+        if not getattr(self, "_iter_specdata_queues", None):
+            self._iter_specdata_queues = []
+
+        if not self._iter_specdata_queues:
+            def callback(client, userdata, msg):
+                try:
+                    _fc = _parse_fullcycle(msg.payload, need_add_data=True)
+                    # IoniTOF cycle-indexing starts at 1, while 0 marks idle state:
+                    if _fc.timecycle.abs_cycle > 0:
+                        for _q in self._iter_specdata_queues:
+                            try:
+                                _q.put_nowait(_fc)
+                            except queue.Full:
+                                # DO NOT FAIL INSIDE THE CALLBACK!
+                                log.error(
+                                    f"iter_specdata({_q.maxsize}): fullcycle buffer overrun!"
+                                )
+                    if self._iter_specdata_queues:
+                        _q = self._iter_specdata_queues[0]
+                        log.debug(
+                            f"received fullcycle, buffer at ({_q.qsize()}/{_q.maxsize})"
+                        )
+                except Exception as ex:
+                    # DO NOT FAIL INSIDE THE CALLBACK!
+                    log.warning(f"got {ex!r} while parsing {len(msg.payload) = }")
+
+            # Note: when using a simple generator function like this, the following lines
+            #  will not be excecuted until the first call to `next` on the iterator!
+            #  this means, the callback will not yet be executed, the queue not filled
+            #  and we might miss the first cycles...
+            self.client.message_callback_add(topic, callback)
+            self.client.subscribe(topic, qos)
+
+        self._iter_specdata_queues.append(q)
+        try:
+            # Note: Prior to 3.0 on POSIX systems, and for *all versions on Windows*,
+            #  if block is true and timeout is None, [the q.get()] operation goes into an
+            #  uninterruptible wait on an underlying lock. This means that no exceptions
+            #  can occur, and in particular a SIGINT will not trigger a KeyboardInterrupt!
+            if timeout_s is None and not self.is_running:
+                log.warning(f"waiting indefinitely for measurement to run...")
+
+            yield q.get(block=True, timeout=timeout_s)
+
+            # make double sure that there's more to come..
+            _started_at = time.monotonic()
+            while timeout_s is None or time.monotonic() < _started_at + timeout_s:
+                if self.is_running:
+                    break
+
+                time.sleep(10e-3)
+            else:
+                raise TimeoutError(f"[{self}] received specdata, but measurement won't start")
+
+            while self.is_running or not q.empty():
+                if q.full():
+                    # re-raise what we swallowed in the callback..
+                    raise queue.Full
+
+                if not self.is_connected:
+                    # no more data will come, so better prevent a deadlock:
+                    break
+
+                try:
+                    yield q.get(block=True, timeout=1.0)  # seconds
+                except queue.Empty:
+                    continue
+
+        except queue.Empty:
+            assert timeout_s is not None, "this should never happen"
+            raise TimeoutError(f"no measurement running after {timeout_s} seconds")
+
+        finally:
+            self._iter_specdata_queues.remove(q)
+            if not self._iter_specdata_queues:
+                self.client.unsubscribe(topic)
+                self.client.message_callback_remove(topic)
 
     iter_specdata.__doc__ += _parse_fullcycle.__doc__
 
