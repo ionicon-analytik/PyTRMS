@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 import itertools
@@ -6,6 +7,8 @@ from collections.abc import Iterable
 from collections import namedtuple
 from itertools import tee
 from functools import wraps
+
+from ..helpers import parse_presets_file
 
 __all__ = ['Step', 'Composition']
 
@@ -333,7 +336,7 @@ class Composition(Iterable):
 
         return set_values
 
-    def expand_op_modes(self, presets, check=True):
+    def expand_op_modes(self, presets):
         '''Return a new Composition with ``OP_Mode`` replaced by concrete set-values.
 
         ``presets`` is either a path to a presets XML file (see
@@ -350,7 +353,7 @@ class Composition(Iterable):
         ...     Step('tre', {'OP_Mode': 2}, 10, 2),
         ... ]
         >>> co = Composition(steps, max_runs=3, start_cycle=5)
-        >>> expanded = co.expand_op_modes(presets, check=False)
+        >>> expanded = co.expand_op_modes(presets)
         >>> expanded is not co
         True
         >>> expanded.max_runs
@@ -365,17 +368,12 @@ class Composition(Iterable):
         {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}
 
         '''
-        import os
         if isinstance(presets, (str, os.PathLike)):
-            try:
-                from ..helpers import parse_presets_file
-            except ImportError:
-                from pytrms.helpers import parse_presets_file
             preset_items = parse_presets_file(presets)
         else:
             preset_items = presets
 
-        translated = self.translate_op_modes(preset_items, check=check)
+        translated = self.translate_op_modes(preset_items, check=False)
         steps = [
             Step(step.name, set_values, step.duration, step.start_delay)
             for step, set_values in zip(self.steps, translated)
