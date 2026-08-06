@@ -88,7 +88,7 @@ class IoniMock(MqttClientBase):
         self.publish_with_ack("DataCollection/Set/ACQ_SRV_SpecTime_ms",  ACQ_SRV_SpecTime_ms, qos=1, retain=True)
         log.info(f"[{self}] ready")
 
-    def play(self, record_file, speed=1.0, dry_run=False):
+    def play(self, record_file, *, alt_amedata="", speed=1.0, dry_run=False):
         """ b) replay
 
         - fill the scheduler
@@ -100,6 +100,8 @@ class IoniMock(MqttClientBase):
         """
         assert self.is_connected, "not connected"
         assert speed > 0, "speed must be positive"
+        if alt_amedata and dry_run:
+            print("WARNING: 'alt_amedata' is ignored with 'dry_run'!")
 
         def publish_from_content(m, *, z=None):
             # reload bytes on-demand from content:
@@ -123,18 +125,19 @@ class IoniMock(MqttClientBase):
         s = sched.scheduler()
         t0 = msg_info(*next(iter(messages))).timestamp
         for msg in starmap(msg_info, messages):
-
-    # TODO :: hier noch die start/stop related Sachen + v.a. die source-file (D:/AMEData!) rausfischen!
-
             t = msg.timestamp
             rel_time = (t - t0) / speed
-
             if dry_run:
                 s.enter(rel_time, 1, print_partial, argument=(msg,))
             elif isinstance(msg.payload, str):
                 s.enter(rel_time, 1, publish_from_content, argument=(msg,), kwargs={'z': z})
             else:
-                args = (msg.topic, msg.payload)
+                if alt_amedata and msg.topic == 'DataCollection/Act/ACQ_SRV_SetFullStorageFile':
+                    payload = msg.payload.replace(b'\\\\', os.sep.encode("latin-1")
+                                        ).replace(b'D:/AMEData', alt_amedata.encode("latin-1"))
+                else:
+                    payload = msg.payload
+                args = (msg.topic, payload)
                 kwargs = {
                     'qos': msg.qos,
                     'retain': True, # Note: overrides msg.retain!
@@ -199,7 +202,7 @@ class IoniMock(MqttClientBase):
         if self.t is None:
             self.t = threading.Thread(target=x, args=(self,), kwargs=None)
             self.t.start()
-        log.debug(f"[{self}] started overallcycle {t.name}")
+        log.debug(f"[{self}] started overallcycle {self.t.name}")
 
     t = None  # bg thread
 

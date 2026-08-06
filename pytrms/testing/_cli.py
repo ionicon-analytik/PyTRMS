@@ -63,10 +63,11 @@ def run(ctx):
 
 @cli.command()
 @click.option('-f', "--record-file", required=True, help="Path to the recorded file (e.g. *.REPLAY)")
+@click.option('-d', "--alt-amedata", type=str, required=False, help="Alternative to D:/AMEData replaced in message payload.")
 @click.option("--speed", default=1.0, type=float, help="Accelerate replay by this factor (may be < 1 for slower speed)")
 @click.option('-n', "--dry-run", is_flag=True, help="Don't do anything, just show what would happen")
 @click.pass_context
-def replay(ctx, record_file, speed, dry_run):
+def replay(ctx, record_file, alt_amedata, speed, dry_run):
     # a) one-off: lade replay file, play, fertig
     # b) daemon: warte auf IC_command und hoffe, dass es ein .REPLAY file gibt ?!
     #     |__ muss man etwas konstruieren, wsl. muss man die start_0.py hacken...
@@ -74,15 +75,16 @@ def replay(ctx, record_file, speed, dry_run):
     mock = ctx.obj
 
     mock.connect()
-    mock.play(record_file, speed, dry_run)
+    mock.play(record_file, alt_amedata=alt_amedata, speed=speed, dry_run=dry_run)
     mock.disconnect()
 
 @cli.command()
 @click.option('-f', "--record-file", required=True, help="Path to the recorded file (e.g. *.REPLAY)")
+@click.option('-d', "--alt-amedata", type=str, required=False, help="Alternative to D:/AMEData replaced in message payload.")
 @click.option("--speed", default=1.0, type=float, help="Accelerate replay by this factor (may be < 1 for slower speed)")
 @click.option('-n', "--dry-run", is_flag=True, help="Don't do anything, just show what would happen")
 @click.pass_context
-def daemon(ctx, record_file, speed, dry_run):
+def daemon(ctx, record_file, alt_amedata, speed, dry_run):
     # a) one-off: lade replay file, play, fertig
     # b) daemon: warte auf IC_command und hoffe, dass es ein .REPLAY file gibt ?!
     #     |__ muss man etwas konstruieren, wsl. muss man die start_0.py hacken...
@@ -98,7 +100,9 @@ def daemon(ctx, record_file, speed, dry_run):
             while not mock.is_running:
                 time.sleep(60e-3)
 
-            mock.play(record_file, speed, dry_run)  # blocks
+            mock.play(record_file, alt_amedata=alt_amedata, speed=speed, dry_run=dry_run)
+            # blocks...
+
             continue
 
     except KeyboardInterrupt:
