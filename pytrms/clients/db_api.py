@@ -10,7 +10,7 @@ import urllib3.util
 
 import requests
 import requests.adapters
-from requests.exceptions import HTTPError, ConnectionError
+from requests.exceptions import HTTPError, ConnectionError, Timeout
 
 from .ssevent import SSEventListener
 from .._base import _IoniConnectBase
@@ -100,16 +100,27 @@ class IoniConnect(_IoniConnectBase):
             self.session.mount('http://',  self._http_adapter)
             self.session.mount('https://', self._http_adapter)
 
-        started_at = time.monotonic()
-        while time.monotonic() < started_at + timeout_s:
-            if self.is_connected:
-                break
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                r = self.session.get(
+                    self.url + "/api/ping",
+                    headers={'accept': 'application/json'},
+                    # Short probe: dead port / blackholed connect fails fast; real
+                    # traffic still uses the generous default in _fetch_object().
+                    timeout=(0.5, 3.0),
+                )
+                r.raise_for_status()
+                return
+            except (ConnectionError, Timeout):
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(min(0.25, deadline - time.monotonic()))
+            except HTTPError:
+                raise
 
-            # ponytail: fixed 250 ms poll; upgrade path is backoff if connect storms matter
-            time.sleep(0.25)
-        else:
-            self.disconnect()
-            raise TimeoutError(f"[{self}] no connection to server")
+        self.disconnect()
+        raise TimeoutError(f"[{self}] no connection to server")
 
     def disconnect(self):
         if self.session is not None:
