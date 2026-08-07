@@ -105,7 +105,8 @@ class IoniConnect(_IoniConnectBase):
             if self.is_connected:
                 break
 
-            time.sleep(10e-3)
+            # ponytail: fixed 250 ms poll; upgrade path is backoff if connect storms matter
+            time.sleep(0.25)
         else:
             self.disconnect()
             raise TimeoutError(f"[{self}] no connection to server")

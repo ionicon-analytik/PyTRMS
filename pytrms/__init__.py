@@ -23,6 +23,11 @@ def getLoggerWithAnnouncement(name=None):
 logging.getLogger = getLoggerWithAnnouncement
 logging.TRACE = 5  # even more verbose than logging.DEBUG
 
+# urllib3 logs "[DEBUG] Starting new HTTP connection ..." on every TCP connect.
+# PyTRMS may poll the DB-API while waiting to connect; keep urllib3 quiet unless
+# the user explicitly opts in via enable_extended_logging().
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
 __all__ = ['load', 'connect']
 
 
