@@ -14,6 +14,81 @@ __all__ = ['Step', 'Composition']
 
 log = logging.getLogger(__name__)
 
+# AdsPath (preset XML) -> parID Name (ParaIDs.csv)
+ads_paths_of_interest = {
+    'Global_DTS500.TR_DTS500_Set[0].En_Source': 'DPS_IhcOnOff',
+    'Global_DTS500.TR_DTS500_Set[0].En_Udrift': 'DPS_UdriftOnOff',
+    'Global_DTS500.TR_DTS500_Set[0].En_Uso': 'DPS_UsoOnOff',
+    'Global_DTS500.TR_DTS500_Set[0].En_Us': 'DPS_UsOnOff',
+    'Global_DTS500.TR_DTS500_Set[0].SetI_ISource': 'DPS_Ihc',
+    'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift': 'DPS_Udrift',
+    'Global_DTS500.TR_DTS500_Set[0].SetU_Uso': 'DPS_Uso',
+    'Global_DTS500.TR_DTS500_Set[0].SetU_Us': 'DPS_Us',
+    'Global_MPV.MPV_To_Set[0].Direction': 'MPV_Dir_1',
+    'Global_MPV.MPV_To_Set[0].Value': 'MPV_1',
+    'Global_PC_FC.PC_FC_To_Set[0].SetValue': 'FC_H2O',
+    'Global_PC_FC.PC_FC_To_Set[1].SetValue': 'FC_PC',
+    'Global_PC_FC.PC_FC_To_Set[2].SetValue': 'FC_FC inlet',
+    'Global_PC_FC.PC_FC_To_Set[3].SetValue': 'FC_O2',
+    'Global_PC_FC.PC_FC_To_Set[4].SetValue': 'FC_NO',
+    'Global_PC_FC.PC_FC_To_Set[10].SetValue': 'FC_Dilution',
+    'Global_PC_FC.PC_FC_To_Set[11].SetValue': 'FC_Krypton',
+    'Global_PropValve.PropValveArray_Set[0]': 'ProportionalValve',
+    'Global_System.DriftPressureControlled': 'DPS_Pdrift_Ctrl_OnOff',
+    'Global_System.DriftPressureSet': 'DPS_Pdrift_Ctrl_Val',
+    'Global_Temperatures.TempsSet[0]': 'T-Drift',
+    'Global_Temperatures.TempsSet[1]': 'T-Inlet',
+    'Global_Temperatures.TempsSet[3]': 'T-CAT',
+    'Global_TPS.TR_AO_Cage_Grid.Cage_Val': 'TPS_Cage',
+    'Global_TPS.TR_AO_Cage_Grid.Grid_Val': 'TPS_Grid',
+    'Global_TPS.TR_AO_Lenses.L1_Val': 'TPS_Lens1',
+    'Global_TPS.TR_AO_Lenses.L2_Val': 'TPS_Lens2',
+    'Global_TPS.TR_AO_Lenses.L3_Val': 'TPS_Lens3',
+    'Global_TPS.TR_AO_Lenses.L4_Val': 'TPS_Lens4',
+    'Global_TPS.TR_AO_Lenses.L5_Val': 'TPS_Lens5',
+    'Global_TPS.TR_AO_Lenses.L6_Val': 'TPS_Lens6',
+    'Global_TPS.TR_AO_Lenses.L7_Val': 'TPS_Lens7',
+    'Global_TPS.TR_AO_MCP.MCP_Back': 'TPS_MCP_B',
+    'Global_TPS.TR_AO_MCP.MCP_Front': 'TPS_MCP_F',
+    'Global_TPS.TR_AO_Push_Pull.Pull_High': 'TPS_Pull_H',
+    'Global_TPS.TR_AO_Push_Pull.Pull_Low': 'TPS_Pull_L',
+    'Global_TPS.TR_AO_Push_Pull.Push_High': 'TPS_Push_H',
+    'Global_TPS.TR_AO_Push_Pull.Push_Low': 'TPS_Push_L',
+    'Global_TPS.TR_AO_Reflector.Refl_Back': 'TPS_Refl_Back',
+    'Global_TPS.TR_AO_Reflector.Refl_Grid': 'TPS_Refl_Grid',
+    'Global_TPS.TR_DO_Cage_Grid_OnOff.En_Cage': 'TPS_Cage_En',
+    'Global_TPS.TR_DO_Cage_Grid_OnOff.En_Grid': 'TPS_Grid_En',
+    'Global_TPS.TR_DO_Lenses_OnOff.L1_En': 'TPS_Lens1_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L2_En': 'TPS_Lens2_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L3_En': 'TPS_Lens3_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L4_En': 'TPS_Lens4_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L5_En': 'TPS_Lens5_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L6_En': 'TPS_Lens6_OnOff',
+    'Global_TPS.TR_DO_Lenses_OnOff.L7_En': 'TPS_Lens7_OnOff',
+    'Global_TPS.TR_DO_MCP_OnOff.En_MCP_Back': 'TPS_MCP_B_En',
+    'Global_TPS.TR_DO_MCP_OnOff.En_MCP_Front': 'TPS_MCP_F_En',
+    'Global_TPS.TR_DO_Push_Pull_OnOff.En_Pull_High': 'TPS_Pull_H_En',
+    'Global_TPS.TR_DO_Push_Pull_OnOff.En_Pull_Low': 'TPS_Pull_L_En',
+    'Global_TPS.TR_DO_Push_Pull_OnOff.En_Push_High': 'TPS_Push_H_En',
+    'Global_TPS.TR_DO_Push_Pull_OnOff.En_Push_Low': 'TPS_Push_L_En',
+    'Global_TPS.TR_DO_Reflector_OnOff.En_Refl_Back': 'TPS_Refl_Back_En',
+    'Global_TPS.TR_DO_Reflector_OnOff.En_Refl_Grid': 'TPS_Refl_Grid_En',
+}
+
+# preset XML Name -> parID Name (only where name is unambiguous)
+pre_names_of_interest = {
+    'PrimionIdx': 'PrimionIdx',
+    'TransmissionIdx': 'TransmissionIdx',
+}
+
+reaction_par_ids = (
+    'PrimionIdx',
+    'TransmissionIdx',
+    'DPS_Udrift',
+    'DPS_Pdrift_Ctrl_Val',
+    'T-Drift',
+)
+
 
 def coroutine(func):
     @wraps(func)
@@ -293,16 +368,7 @@ class Composition(Iterable):
         # preset_item(name='T-Drift', ads_path='Global_Temperatures.TempsSet[0]', dtype='FLOAT'): 85.0,
         # preset_item(name='UDrift', ads_path='Global_DTS500.TR_DTS500_Set[0].SetU_Udrift', dtype='FLOAT'): 350.0,
         #
-        pre_names_of_interest = {
-            'PrimionIdx': 'PrimionIdx',
-            'TransmissionIdx': 'TransmissionIdx',
-        }
-        ads_paths_of_interest = {
-            'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift': 'DPS_Udrift',
-            'Global_System.DriftPressureSet': 'DPS_Pdrift_Ctrl_Val',
-            'Global_Temperatures.TempsSet[0]': 'T-Drift',
-        }
-        all_parIDs = list(ads_paths_of_interest.values()) + list(pre_names_of_interest.values())
+        all_parIDs = list(reaction_par_ids)
 
         # make a deep copy of the `set_values`:
         set_values = [dict(step.set_values) for step in self.steps]
@@ -326,12 +392,11 @@ class Composition(Iterable):
 
                 del entry['OP_Mode']
 
-            if carry:
-                # Note: each preset is only an update of set-values over what has already
-                #  been set. thus, when following the sequence of OP_Modes, each one must
-                #  carry with it the set-values of all its predecessors:
-                carry.update(entry)
-                entry.update(carry)
+            # Note: each preset is only an update of set-values over what has already
+            #  been set. thus, when following the sequence of OP_Modes, each one must
+            #  carry with it the set-values of all its predecessors:
+            carry.update(entry)
+            entry.update(carry)
             if check:
                 assert all(key in entry for key in all_parIDs), "reaction-data missing in presets"
 
