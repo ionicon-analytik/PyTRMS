@@ -24,21 +24,22 @@ ads_paths_of_interest = {
     'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift': 'DPS_Udrift',
     'Global_DTS500.TR_DTS500_Set[0].SetU_Uso': 'DPS_Uso',
     'Global_DTS500.TR_DTS500_Set[0].SetU_Us': 'DPS_Us',
-    'Global_MPV.MPV_To_Set[0].Direction': 'MPV_Dir_1',
+    'Global_MPV.MPV_To_Set[0].Direction': 'MPV_Dir_1',  # note: 1st item of array
     'Global_MPV.MPV_To_Set[0].Value': 'MPV_1',
     'Global_PC_FC.PC_FC_To_Set[0].SetValue': 'FC_H2O',
     'Global_PC_FC.PC_FC_To_Set[1].SetValue': 'FC_PC',
     'Global_PC_FC.PC_FC_To_Set[2].SetValue': 'FC_FC inlet',
     'Global_PC_FC.PC_FC_To_Set[3].SetValue': 'FC_O2',
     'Global_PC_FC.PC_FC_To_Set[4].SetValue': 'FC_NO',
-    'Global_PC_FC.PC_FC_To_Set[10].SetValue': 'FC_Dilution',
-    'Global_PC_FC.PC_FC_To_Set[11].SetValue': 'FC_Krypton',
+    'Global_PC_FC.PC_FC_To_Set[10].SetValue': 'FC_Custom_1',  # note: FC-Cal
+    'Global_PC_FC.PC_FC_To_Set[11].SetValue': 'FC_Custom_2',  # note: FC-Dil
+    'Global_PC_FC.PC_FC_To_Set[12].SetValue': 'FC_Custom_3',  # note: FC-Can
     'Global_PropValve.PropValveArray_Set[0]': 'ProportionalValve',
     'Global_System.DriftPressureControlled': 'DPS_Pdrift_Ctrl_OnOff',
     'Global_System.DriftPressureSet': 'DPS_Pdrift_Ctrl_Val',
     'Global_Temperatures.TempsSet[0]': 'T-Drift',
     'Global_Temperatures.TempsSet[1]': 'T-Inlet',
-    'Global_Temperatures.TempsSet[3]': 'T-CAT',
+    # 'Global_Temperatures.TempsSet[3]': 'T-CAT',  # note: Not in ParaIDs.txt !!
     'Global_TPS.TR_AO_Cage_Grid.Cage_Val': 'TPS_Cage',
     'Global_TPS.TR_AO_Cage_Grid.Grid_Val': 'TPS_Grid',
     'Global_TPS.TR_AO_Lenses.L1_Val': 'TPS_Lens1',
