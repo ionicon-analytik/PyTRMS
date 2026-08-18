@@ -342,7 +342,7 @@ class Composition(Iterable):
         }
         json.dump(self, ofstream, indent=2, default=vars)
 
-    def translate_op_modes(self, preset_items, carry_over=True, check=True):
+    def translate_op_modes(self, preset_items, carry=True, check=True):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
 
         >>> presets = {}
@@ -363,7 +363,7 @@ class Composition(Iterable):
         [{'DPS_Pdrift_Ctrl_Val': 2.6}, {'Udrift': 420.0, 'T-Drift': 81.0, 'DPS_Pdrift_Ctrl_Val': 2.6}, {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}]
 
         without carry-over, each step keeps only its own set-values:
-        >>> co.translate_op_modes(presets, carry_over=False, check=False)
+        >>> co.translate_op_modes(presets, carry=False, check=False)
         [{'DPS_Pdrift_Ctrl_Val': 2.6}, {'Udrift': 420.0, 'T-Drift': 81.0}, {'T-Drift': 75.0}]
 
         Since we didn't specify the full set of reaction-parameters, the self-check will fail:
@@ -398,7 +398,7 @@ class Composition(Iterable):
                 _apply_preset_items(entry, items)
                 del entry['OP_Mode']
 
-            if carry_over:
+            if carry:
                 # Note: each preset is only an update of set-values over what has already
                 #  been set. thus, when following the sequence of OP_Modes, each one must
                 #  carry with it the set-values of all its predecessors:
@@ -460,7 +460,7 @@ class Composition(Iterable):
         else:
             preset_items = presets
 
-        translated = self.translate_op_modes(preset_items, carry_over=False, check=False)
+        translated = self.translate_op_modes(preset_items, carry=False, check=False)
         steps = [
             Step(step.name, set_values, step.duration, step.start_delay)
             for step, set_values in zip(self.steps, translated)
