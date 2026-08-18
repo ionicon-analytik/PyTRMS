@@ -91,6 +91,17 @@ reaction_par_ids = (
 )
 
 
+def _apply_preset_items(entry, items):
+    by_path = {t.ads_path: items[t] for t in items}
+    by_name = {t.name: items[t] for t in items}
+
+    for key in (by_path.keys() & ads_paths_of_interest.keys()):
+        entry[ads_paths_of_interest[key]] = by_path[key]
+
+    for key in (by_name.keys() & pre_names_of_interest.keys()):
+        entry[pre_names_of_interest[key]] = by_name[key]
+
+
 def coroutine(func):
     @wraps(func)
     def primer(*args, **kwargs):
@@ -111,13 +122,13 @@ class Step:
     {'DPS_Udrift': 500}
 
     Note, that no Automation-numbers can be defined in the step..
-    >>> Step("H50", {'AUTO_UseMean': 0}, 10, start_delay=2)
+    >>> Step("H50", {'AUTO_UseMean': 0}, 10, start_delay=2)  # doctest: +ELLIPSIS
     Traceback (most recent call last):
       ...
     AssertionError: a Step must not define AME-numbers
 
     ..and neither can a 'OP_Mode' alongside anything else:
-    >>> Step("Odd2", {'DPS_Udrift': 345, 'OP_Mode': 2}, 10, start_delay=2)
+    >>> Step("Odd2", {'DPS_Udrift': 345, 'OP_Mode': 2}, 10, start_delay=2)  # doctest: +ELLIPSIS
     Traceback (most recent call last):
       ...
     AssertionError: if Step defines 'OP_Mode', nothing else can be!
@@ -137,9 +148,10 @@ class Step:
         assert self.start_delay < self.duration
 
         for key in self.set_values:
-            assert key not in Step.protected_keys, "a Step must not define AME-numbers"
-        if 'OP_Mode' in self.set_values:
-            assert len(self.set_values) == 1, "if Step defines 'OP_Mode', nothing else can be!"
+            if key in Step.protected_keys:
+                raise AssertionError("a Step must not define AME-numbers")
+        if 'OP_Mode' in self.set_values and len(self.set_values) != 1:
+            raise AssertionError("if Step defines 'OP_Mode', nothing else can be!")
 
     def __repr__(self):
         return f"{self.name}: ({self.start_delay}/{self.duration}) sec ~> {self.set_values}"
@@ -330,7 +342,7 @@ class Composition(Iterable):
         }
         json.dump(self, ofstream, indent=2, default=vars)
 
-    def translate_op_modes(self, preset_items, carry=True, check=True):
+    def translate_op_modes(self, preset_items, carry_over=True, check=True):
         '''Given the `preset_items` (from a presets-file), compile a list of set_values.
 
         >>> presets = {}
@@ -350,8 +362,12 @@ class Composition(Iterable):
         >>> co.translate_op_modes(presets, check=False)
         [{'DPS_Pdrift_Ctrl_Val': 2.6}, {'Udrift': 420.0, 'T-Drift': 81.0, 'DPS_Pdrift_Ctrl_Val': 2.6}, {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}]
 
+        without carry-over, each step keeps only its own set-values:
+        >>> co.translate_op_modes(presets, carry_over=False, check=False)
+        [{'DPS_Pdrift_Ctrl_Val': 2.6}, {'Udrift': 420.0, 'T-Drift': 81.0}, {'T-Drift': 75.0}]
+
         Since we didn't specify the full set of reaction-parameters, the self-check will fail:
-        >>> co.translate_op_modes(presets, check=True)
+        >>> co.translate_op_modes(presets, check=True)  # doctest: +ELLIPSIS
         Traceback (most recent call last):
             ...
         AssertionError: reaction-data missing in presets
@@ -373,33 +389,23 @@ class Composition(Iterable):
 
         # make a deep copy of the `set_values`:
         set_values = [dict(step.set_values) for step in self.steps]
-        carry = dict()
+        accumulated = dict()
         for entry in set_values:
             # replace OP_Mode with the stuff found in preset_items
             if 'OP_Mode' in entry:
                 index = entry['OP_Mode']
                 preset_name, items = preset_items[index]
-
-                by_path = {t.ads_path: items[t] for t in items}
-                by_name = {t.name: items[t] for t in items}
-
-                for key in (by_path.keys() & ads_paths_of_interest.keys()):
-                    parID = ads_paths_of_interest[key]
-                    entry[parID] = by_path[key]
-
-                for key in (by_name.keys() & pre_names_of_interest.keys()):
-                    parID = pre_names_of_interest[key]
-                    entry[parID] = by_name[key]
-
+                _apply_preset_items(entry, items)
                 del entry['OP_Mode']
 
-            # Note: each preset is only an update of set-values over what has already
-            #  been set. thus, when following the sequence of OP_Modes, each one must
-            #  carry with it the set-values of all its predecessors:
-            carry.update(entry)
-            entry.update(carry)
-            if check:
-                assert all(key in entry for key in all_parIDs), "reaction-data missing in presets"
+            if carry_over:
+                # Note: each preset is only an update of set-values over what has already
+                #  been set. thus, when following the sequence of OP_Modes, each one must
+                #  carry with it the set-values of all its predecessors:
+                accumulated.update(entry)
+                entry.update(accumulated)
+            if check and not all(key in entry for key in all_parIDs):
+                raise AssertionError("reaction-data missing in presets")
 
         return set_values
 
@@ -431,8 +437,22 @@ class Composition(Iterable):
         {'OP_Mode': 0}
         >>> expanded.steps[0].set_values
         {'DPS_Pdrift_Ctrl_Val': 2.6}
+        >>> expanded.steps[1].set_values
+        {'Udrift': 420.0, 'T-Drift': 81.0}
         >>> expanded.steps[2].set_values
-        {'T-Drift': 75.0, 'DPS_Pdrift_Ctrl_Val': 2.6, 'Udrift': 420.0}
+        {'T-Drift': 75.0}
+        >>> 'OP_Mode' not in expanded.steps[2].set_values
+        True
+
+        a preset with several mapped AdsPaths resolves to parID names:
+        >>> presets[1] = ('full', {
+        ...     _key('UDrift', 'Global_DTS500.TR_DTS500_Set[0].SetU_Udrift', 'FLOAT'): 350.0,
+        ...     _key('Lens 3', 'Global_TPS.TR_AO_Lenses.L3_Val', 'FLOAT'): 120.0,
+        ...     _key('FC-Cal', 'Global_PC_FC.PC_FC_To_Set[10].SetValue', 'FLOAT'): 3.5,
+        ... })
+        >>> co = Composition([Step('meas', {'OP_Mode': 1}, 10, 2)])
+        >>> sorted(co.expand_op_modes(presets).steps[0].set_values.items())
+        [('DPS_Udrift', 350.0), ('FC_Custom_1', 3.5), ('TPS_Lens3', 120.0)]
 
         '''
         if isinstance(presets, (str, os.PathLike)):
@@ -440,7 +460,7 @@ class Composition(Iterable):
         else:
             preset_items = presets
 
-        translated = self.translate_op_modes(preset_items, carry=False, check=False)
+        translated = self.translate_op_modes(preset_items, carry_over=False, check=False)
         steps = [
             Step(step.name, set_values, step.duration, step.start_delay)
             for step, set_values in zip(self.steps, translated)
