@@ -1,4 +1,0 @@
-[submodule "testdata"]
-	path = testdata
-	url = https://git.ionicon.local/Moritz.Koenemann/testdata.git
-

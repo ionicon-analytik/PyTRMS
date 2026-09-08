@@ -5,9 +5,12 @@
 ####################################################
 import pytest
 
+import os
 import re
 
 from pytrms import readers
+
+WORKDIR = os.path.dirname(__file__)
 
 
 class TestReaders:
@@ -25,16 +28,19 @@ class TestReaders:
     ])
     def test_read_addtraces_matches_location(self, match_fun):
 
-        SUT = readers.IoniTOFReader('../../Zeiss20/AMEData/2025_12_16__12_42_31/2025_12_16__12_42_31.h5')
+        TESTFILE = os.path.join(WORKDIR, "../examples/data/peter_emmes_2022-03-31_09-10-08.h5")
+
+        SUT = readers.IoniTOFReader(TESTFILE)
 
         assert "AddTraces/PTR-Reaction" in SUT._locate_datainfo()
 
         t = SUT.read_addtraces(match_fun)
-        assert t.shape == (40, 6)
+        assert t.shape == (129, 6)
 
-        assert 'DPS_Udrift_Act' in t.columns
-        assert 'Press_Drift_Act' in t.columns
-        assert 'T-Drift_Act' in t.columns
-        assert 'E_N_Act' in t.columns
+        # note: maybe not the latest exact names, but those are in that file:
+        assert "Udrift_Act" in t.columns
+        assert "p-Drift_Act" in t.columns
+        assert "T-Drift_Act" in t.columns
+        assert "E/N_Act" in t.columns
 
 
