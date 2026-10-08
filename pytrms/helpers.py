@@ -68,3 +68,56 @@ def parse_presets_file(presets_file):
 
     return {index: (preset_names[index], preset_items[index]) for index in preset_names.keys()}
 
+
+def parse_presets_directory(path="C:/ProgramData/Ionicon/CsvPresets"):
+    '''Load indexed CSV presets from *path*.
+
+    Each preset must be named ``<index>_<name>.csv``.  Enabled rows (``Use``
+    equals ``1``) are returned in the same ``{index: (name, values)}`` shape
+    as :func:`parse_presets_file`.
+    '''
+    import csv
+    import re
+    from collections import namedtuple
+    from pathlib import Path
+
+    _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])
+    filename_pattern = re.compile(r'(?P<index>\d+)_(?P<name>.+)\.csv$', re.IGNORECASE)
+
+    def parse_value(value):
+        value = value.strip()
+        if value.lower() == 'true':
+            return True
+        if value.lower() == 'false':
+            return False
+        try:
+            return int(value)
+        except ValueError:
+            try:
+                return float(value)
+            except ValueError:
+                return value
+
+    presets = {}
+    for presets_file in sorted(Path(path).iterdir()):
+        match = filename_pattern.fullmatch(presets_file.name)
+        if not presets_file.is_file() or match is None:
+            continue
+
+        values = {}
+        with presets_file.open(newline='', encoding='utf-8-sig') as csv_file:
+            for row in csv.DictReader(csv_file, delimiter=';'):
+                if row['Use'].strip() != '1':
+                    continue
+                key = _key(
+                    row['ParaIdName'].strip(),
+                    row['ServerName'].strip(),
+                    row['DataType'].strip(),
+                )
+                values[key] = parse_value(row['Value'])
+
+        index = int(match['index'])
+        presets[index] = (match['name'], values)
+
+    return presets
+

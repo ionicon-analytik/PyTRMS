@@ -8,7 +8,7 @@ from collections import namedtuple
 from itertools import tee
 from functools import wraps
 
-from ..helpers import parse_presets_file
+from ..helpers import parse_presets_file, parse_presets_directory
 
 __all__ = ['Step', 'Composition']
 
@@ -93,13 +93,19 @@ reaction_par_ids = (
 
 def _apply_preset_items(entry, items):
     by_path = {t.ads_path: items[t] for t in items}
-    by_name = {t.name: items[t] for t in items}
+    by_name = {t.name:     items[t] for t in items}
 
     for key in (by_path.keys() & ads_paths_of_interest.keys()):
+        # identified by AdsPath (default in XML-file)..
         entry[ads_paths_of_interest[key]] = by_path[key]
 
     for key in (by_name.keys() & pre_names_of_interest.keys()):
+        # identified by Name (special case in XML-file)..
         entry[pre_names_of_interest[key]] = by_name[key]
+
+    for key in (by_name.keys() & pre_names_of_interest.values()):
+        # identified by Name (default in CsvFile)..
+        entry[key] = by_name[key]
 
 
 def coroutine(func):
@@ -409,12 +415,15 @@ class Composition(Iterable):
 
         return set_values
 
-    def expand_op_modes(self, presets):
+    def expand_op_modes(self, presets=None):
         '''Return a new Composition with `OP_Mode` replaced by concrete set-values.
 
         `presets` is either a path to a presets XML file (see
         :func:`pytrms.helpers.parse_presets_file`) or the dict returned by that
-        function. Other composition parameters are copied unchanged.
+        function or `None`, in which case the new-style presets are loaded from
+        `C:/ProgramData/Ionicon/CsvPresets`.
+
+        Other composition parameters are copied unchanged.
 
         >>> presets = {}
         >>> _key = namedtuple('preset_item', ['name', 'ads_path', 'dtype'])
@@ -455,7 +464,9 @@ class Composition(Iterable):
         [('DPS_Udrift', 350.0), ('FC_Custom_1', 3.5), ('TPS_Lens3', 120.0)]
 
         '''
-        if isinstance(presets, (str, os.PathLike)):
+        if presets is None:
+            preset_items = parse_presets_directory()
+        elif isinstance(presets, (str, os.PathLike)):
             preset_items = parse_presets_file(presets)
         else:
             preset_items = presets
