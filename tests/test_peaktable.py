@@ -224,7 +224,7 @@ def test_write_ionipt(pt_with_fitted):
 
 
 def test_read_ionipt_meets_requirements():
-    SUT = peaktable.PeakTable.from_file("./tests/Sony_peak-table_260126_fits.ionipt")
+    SUT = peaktable.PeakTable.from_file("./tests/peaktable_with_fitpeaks.ionipt")
 
     assert len(SUT) == 8
 
@@ -258,7 +258,7 @@ def test_read_ionipt_meets_requirements():
 
 
 def test_reference_peak_can_be_found():
-    SUT = peaktable.PeakTable.from_file("./tests/Sony_peak-table_260126_fits.ionipt")
+    SUT = peaktable.PeakTable.from_file("./tests/peaktable_with_fitpeaks.ionipt")
 
     REF = SUT.find_by_mass(331)
     assert REF == 331.0
